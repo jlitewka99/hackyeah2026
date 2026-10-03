@@ -23,9 +23,17 @@ export PGPORT=55432
 Install dependencies, create and migrate the development database, and build assets:
 
 ```sh
+export AUDIT_FINGERPRINT_KEY="$(openssl rand -base64 32)"
+export AUDIT_FINGERPRINT_KEY_ID=v1
 mix setup
 mix phx.server
 ```
+
+Keep the audit key in your local environment or secret manager and reuse it on
+restart. Generating a new key changes fingerprints. Development and production
+require a separate base64-encoded key with at least 32 random bytes; tests use
+a deterministic key configured only in `config/test.exs`. When rotating the key,
+also change `AUDIT_FINGERPRINT_KEY_ID`. Historical records retain their key IDs.
 
 Open [localhost:4000](http://localhost:4000). The server can also run inside IEx
 with `iex -S mix phx.server`.
@@ -140,7 +148,7 @@ Resending revokes the previous token; failed delivery leaves a revoked
 invitation that can be retried. Delivery uses the configured Swoosh adapter.
 Configure the production adapter and invitation sender in
 `AiControl.Organizations.Invitations` as well as the account notifier. Token
-routes suppress request logs.
+routes appear only as route templates in request logs.
 
 Hammer with ETS applies shared limits to password sign-in and recovery requests:
 5 attempts per normalized email and 20 per actual peer IP, in a 15-minute window
@@ -150,9 +158,104 @@ email attempts also count against the IP limit. Exceeding a limit returns HTTP
 are atomic, cleaned periodically, local to one application instance, and reset
 on restart. Email counter keys contain hashes rather than raw addresses.
 
-Password and token parameters are filtered from logs; request logging is disabled
-for secret-bearing token routes. Theme selection defaults to the system setting
+Request logs contain server-generated UUIDs, methods, route templates, status,
+duration, and fixed error codes. Parameters, raw paths, headers, exception bodies,
+and client-supplied request IDs are excluded. The Phoenix debugger and dashboard
+request logger are disabled; Req retry and redirect messages are disabled by
+default. Downstream adapters use `AiControl.Security.HTTPError.classify/1` for
+content-free failures and must keep request/response objects out of logs.
+Theme selection defaults to the system setting
 and remembers an explicit choice of system, light, or dark appearance.
+
+## Security decisions and audit
+
+Step 4 introduces `AiControl.Security.SecurityContext`, `Detection`, `GuardResult`,
+`SecurityAssessment`, and `Decision`, each in its own module. Constructors reject
+unknown fields and return content-free error atoms. Findings hold detector and
+rule identifiers, categories, confidence, and optional locations. Locations use
+a numeric content-field index and UTF-8 byte offsets, never matched values or
+client-defined field names. Guard signals use the closed numeric catalog
+`risk_score`, `injection_score`, `pii_count`, `secret_count`, and `exploit_count`.
+
+`SecurityContext.from_scope/2` refreshes membership and organization status and
+sets identity on the server. Request and assessment IDs are generated locally.
+`SecurityContext.new/1` is reserved for trusted identity adapters, including
+verified agent identities from step 3. Struct validation complements the
+gateway's authentication and resource authorization; it does not grant AI use.
+Agent and API-key UUIDs currently have no dependency on their future tables.
+
+The minimal policy contract is an immutable `AiControl.Policy.Snapshot`:
+
+```elixir
+alias AiControl.Policy.Snapshot
+alias AiControl.Security.{GuardResult, SecurityAssessment, SecurityContext}
+
+{:ok, policy} = Snapshot.new(%{
+  version: "balanced-v1",
+  required_guards: ["pii"],
+  rules: %{"pii" => %{id: "pii.default", action: :redact, threshold: 0.8}}
+})
+
+{:ok, context} = SecurityContext.from_scope(current_scope, %{
+  stage: :input,
+  policy_version: policy.version,
+  policy_checksum: policy.checksum
+})
+{:ok, result} = GuardResult.new(%{guard: "pii", status: :ok})
+{:ok, assessment} = SecurityAssessment.new(context, [result])
+AiControl.Security.evaluate_and_audit(context, assessment, policy)
+```
+
+The snapshot computes a canonical SHA-256 checksum of its version, required guards,
+and rules. Supplied checksums must match, and modifying a struct without updating
+its checksum fails validation. `AiControl.Policy.Engine.evaluate/3` is pure and
+uses `BLOCK > REDACT > ALLOW` with an inclusive confidence threshold. An absent,
+skipped, or failed required guard blocks. An unmapped finding blocks; redaction
+without a usable location also blocks. Optional failures remain audit evidence.
+The engine produces redaction locations; executing redaction and supplying real
+guards arrive in later steps. Policy persistence, activation, profiles, YAML,
+and cache arrive in step 5.
+
+`AiControl.Security.Fingerprint.content/3` takes an organization UUID, stage,
+and binary content and returns a tenant- and stage-separated HMAC-SHA-256
+fingerprint. Pass it as `fingerprint:` when building a context; a fingerprint
+from another tenant or stage is rejected. The returned struct never retains
+the content. Input and output assessments keep distinct IDs and stages.
+
+`AiControl.Audit.record_decision/3` stores guard statuses, fixed error codes,
+confidence, detector/policy rule IDs, reasons, policy identity, UTC microsecond
+timestamps, guard durations, and optional fingerprints. `duration_us` is the
+sum of guard durations. Evidence also includes evaluated rule actions and
+thresholds, required guards, and redaction locations. A finding below threshold
+can therefore be explained from the audit without retrieving checked content
+or depending on future policy storage. Writes are synchronous: `evaluate_and_audit/3` returns
+`{:ok, decision}` only after persistence. A write failure returns
+`{:error, :audit_unavailable}`; the future gateway maps it to HTTP 503 and starts
+no new downstream call. Retrying the same assessment is idempotent; changed
+evidence returns `{:error, :audit_conflict}`.
+
+Organization creation/status, membership role/access changes, removal,
+superadmin transfers, and invitation issuance/revocation/acceptance/delivery
+failures share transactions with `record_admin/3`. Audit failure rolls back
+the mutation. PubSub publishes after commit. Access evidence preserves roles,
+permissions, selector counts, and keyed grant fingerprints without storing
+emails, resource names, invitation tokens, or passwords. Historical references
+survive membership and invitation removal; organization deletion is restricted
+while audit records exist. There is no audit update/delete API.
+
+Invitation issuance inserts its audit before sending email within the
+transaction. A mail failure commits a revoked invitation and its audit so it can
+be retried. If that audit fails, the new invitation is rolled back. An email sent
+before a failed database commit can contain an inactive link; resend creates
+a new token. Configure bounded mail-adapter timeouts because issuance holds
+the organization lock during delivery.
+
+`Audit.list_events(scope, limit: 50, offset: 0)` and `Audit.get_event(scope, id)`
+refresh `events.read` access and restrict results to the scope's organization.
+The maximum page size is 200. An organizer can inspect suspended organizations;
+ordinary members lose access on suspension or revocation. The serializer uses
+closed fields and rejects raw payloads and exceptions. Dashboard, export,
+and retention are scheduled for later roadmap steps.
 
 ## Tests and quality checks
 

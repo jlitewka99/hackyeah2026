@@ -9,6 +9,7 @@ defmodule AiControl.Application do
   def start(_type, _args) do
     children = [
       AiControlWeb.Telemetry,
+      AiControlWeb.RequestLog,
       AiControl.Repo,
       AiControl.Accounts.LoginLimiter,
       {DNSCluster, query: Application.get_env(:ai_control, :dns_cluster_query) || :ignore},

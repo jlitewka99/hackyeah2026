@@ -3,6 +3,10 @@ import Config
 # Only in tests, remove the complexity from the password hashing algorithm
 config :bcrypt_elixir, :log_rounds, 1
 
+config :ai_control, AiControl.Security.Fingerprint,
+  key: "test-only-audit-fingerprint-key-32-bytes",
+  key_id: "test-v1"
+
 # Configure your database
 #
 # The MIX_TEST_PARTITION environment variable can be used

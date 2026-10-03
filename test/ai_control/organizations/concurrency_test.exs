@@ -26,6 +26,11 @@ defmodule AiControl.Organizations.ConcurrencyTest do
             )
           )
 
+        Repo.delete_all(
+          from(e in AiControl.Audit.Event, where: e.organization_id == ^scope.organization.id),
+          log: false
+        )
+
         Repo.delete!(scope.organization)
 
         Repo.delete_all(from(u in User, where: u.id in ^Enum.uniq([scope.user.id | ids])),
@@ -63,6 +68,15 @@ defmodule AiControl.Organizations.ConcurrencyTest do
                from(m in Membership, where: m.organization_id == ^scope.organization.id),
                :count
              ) == 1
+
+      assert Repo.aggregate(
+               from(e in AiControl.Audit.Event,
+                 where:
+                   e.organization_id == ^scope.organization.id and
+                     e.event_type == "invitation.accepted"
+               ),
+               :count
+             ) == 1
     end)
   end
 
@@ -86,6 +100,15 @@ defmodule AiControl.Organizations.ConcurrencyTest do
       assert Repo.aggregate(
                from(m in Membership,
                  where: m.organization_id == ^scope.organization.id and m.role == :superadmin
+               ),
+               :count
+             ) == 1
+
+      assert Repo.aggregate(
+               from(e in AiControl.Audit.Event,
+                 where:
+                   e.organization_id == ^scope.organization.id and
+                     e.event_type == "superadmin.transferred"
                ),
                :count
              ) == 1
