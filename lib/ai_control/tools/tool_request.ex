@@ -18,8 +18,7 @@ defmodule AiControl.Tools.ToolRequest do
   def new(%Principal{} = identity, params, policy)
       when is_map(params) and not is_struct(params) do
     with true <- MapSet.new(Map.keys(params)) == MapSet.new(~w(tool arguments)),
-         :ok <- Catalog.validate(params["tool"], params["arguments"]),
-         :ok <- size_limit(params) do
+         :ok <- validate_arguments(params["tool"], params["arguments"]) do
       {:ok,
        %__MODULE__{
          request_id: Ecto.UUID.generate(),
@@ -37,6 +36,12 @@ defmodule AiControl.Tools.ToolRequest do
   end
 
   def new(_, _, _), do: {:error, :invalid_tool_request}
+
+  @doc "Revalidate schema and encoded size after any change to prepared arguments."
+  def validate_arguments(tool, arguments) do
+    with :ok <- Catalog.validate(tool, arguments),
+         do: size_limit(%{"tool" => tool, "arguments" => arguments})
+  end
 
   defp size_limit(params) do
     if byte_size(Jason.encode!(params)) <= 65_536,

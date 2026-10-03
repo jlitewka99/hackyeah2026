@@ -630,6 +630,16 @@ frontendu, migracji ani zależności. **12A jest ukończone; 12B i pełny krok 1
 pozostają nieukończone**: endpoint, trwałe liczniki, wymagane guardy, audyt wykonania
 i filtrowanie wyników wymagają osobnej integracji po scaleniu 8–10.
 
+**Ponowny przegląd 12A — 2026-10-04:** odtworzono i poprawiono dwie luki:
+ponowna autoryzacja zmienionych argumentów nie sprawdzała całkowitego limitu JSON,
+a globalne opcje `Req` mogły dołączyć dane uwierzytelniające/parametry lub podmienić
+transport. Limit 64 KiB jest teraz sprawdzany przed efektem; surowe żądanie `Req`
+pomija globalne opcje i middleware. Dodano trzy testy regresji oraz rzeczywisty
+test HTTPS dla przypiętego IP, poprawnego CA/hosta i odmowy obcego CA/błędnego
+hosta. `mix precommit` przeszedł: **388 testów Elixir (w tym 34 testy 12A) i 3
+JavaScript**, bez uwag Credo i ostrzeżeń kompilacji aplikacji; dwa istniejące testy
+modeli/NER pozostają wyłączone. Granica 12B pozostaje bez zmian.
+
 - Dodać `ToolRequest`, katalog narzędzi ze schematami argumentów i `POST /v1/tool_calls`. Organizacja i agent pochodzą wyłącznie ze zweryfikowanej tożsamości; domyślna odmowa jest niezależna od oceny modelu.
 - Dodać tenant-scoped identyfikator wykonania i trwały licznik wywołań narzędzi z kroku 9. Pełna orkiestracja workflowów pozostaje w kroku 15.
 - Sprawdzać uprawnienia agenta, operację, zasób, argumenty i budżet przed wykonaniem.

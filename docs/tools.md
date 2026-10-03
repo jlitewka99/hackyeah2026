@@ -3,7 +3,9 @@
 `AiControl.Tools.prepare/2` binds a tool request to a verified API-key
 `AiControl.ApiKeys.Principal` and one immutable policy snapshot. The only accepted
 request fields are `tool` and `arguments`; identity, policy, and schemas cannot be
-supplied in the body. Requests are limited to 64 KiB of encoded JSON.
+supplied in the body. Requests are limited to 64 KiB of encoded JSON; both the
+schema and this total size bound are rechecked immediately before execution,
+including after changes to prepared arguments.
 `ToolRequest` inspection excludes arguments, API-key IDs, and policy content.
 
 The existing policy v2 `allowed_agents` and `tools.allowed_tools` lists authorize
@@ -86,7 +88,11 @@ Queries, fragments, credentials, ambiguous authorities, encoded paths, and zone
 identifiers are rejected. A literal URL IP must match the pinned IP. The operator
 chooses the destination IP; the request never resolves the supplied hostname.
 Req connects to that IP while preserving the original Host and TLS hostname.
-Redirects, retries, automatic decompression, and proxy configuration are disabled.
+The raw Req request bypasses global `Req.default_options` and middleware, so
+ambient credentials, headers, query parameters, or plug adapters cannot alter the
+validated request. Redirects, retries, automatic decompression, and proxy
+configuration are disabled. HTTPS verifies the certificate chain against the
+system trust store and the certificate hostname against the original URL host.
 HTTP bodies are bounded at 64 KiB while receiving, must be valid UTF-8, and only
 2xx bodies are returned. Other bodies/exceptions never enter the error result.
 Connect, receive, pool, and request timeouts bound network work.
@@ -108,8 +114,8 @@ Sandbox adapters are for trusted local demos and contract tests. **They do not
 perform content filtering, budget accounting, or execution audit.** Step 12B must
 wrap execution with tenant-scoped durable call counters, required input/semantic
 guards, audit, and output filtering before making it available to clients.
-After any argument redaction, revalidate the catalog and resource grants before
-execution. Preserve the original request snapshot at all stages and recheck live
+After any argument redaction, revalidate the catalog, total JSON size, and resource
+grants before execution. Preserve the original request snapshot at all stages and recheck live
 identity at the last point before effects. Host filesystem/SQL/shell adapters
 would require a separate OS isolation design and are outside this demo.
 
@@ -121,6 +127,8 @@ mix precommit
 Tests cover successful operations and denials without effects, tenant/agent
 substitution, policy changes, key revocation/expiration, suspension, schema and
 Unicode bounds, traversal, symlinks, SSRF ranges, database operations, recipients,
-commands, and real local HTTP pinning/redirect/body bounds. No external internet
-service or real model is required for these tests. The full step 12 checkbox stays
+commands, and real local HTTP pinning/redirect/body bounds. Regression tests cover
+mutated prepared requests and ambient Req options. Local HTTPS tests verify
+trusted certificates and deny untrusted CAs or mismatched hostnames. No external
+internet service or real model is required for these tests. The full step 12 checkbox stays
 open until the 12B integration acceptance.

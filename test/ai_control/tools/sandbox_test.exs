@@ -196,6 +196,25 @@ defmodule AiControl.Tools.SandboxTest do
     assert before == Sandbox.inspect_state(context.server)
   end
 
+  test "argument changes are checked against the total JSON limit before effects", context do
+    {:ok, request} =
+      Tools.prepare(context.principal, %{
+        "tool" => "file.write",
+        "arguments" => %{"path" => "documents/draft.txt", "content" => "safe"}
+      })
+
+    changed = %{
+      request
+      | arguments: Map.put(request.arguments, "content", String.duplicate("😀", 20_000))
+    }
+
+    before = Sandbox.inspect_state(context.server)
+
+    assert {:error, :tool_request_too_large} = Tools.authorize(changed)
+    assert {:error, :tool_request_too_large} = GenServer.call(context.server, {:run, changed})
+    assert before == Sandbox.inspect_state(context.server)
+  end
+
   test "HTTP executes after policy and exact endpoint grant; other targets never connect",
        context do
     http =

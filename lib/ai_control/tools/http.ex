@@ -7,24 +7,28 @@ defmodule AiControl.Tools.HTTP do
     pinned = URI.to_string(%{uri | host: address})
     host = host_header(uri)
 
-    case Req.get(pinned,
-           headers: [{"host", host}],
-           finch: [
-             conn_opts: [
-               hostname: uri.host,
-               transport_opts: [timeout: 2_000, inet6: tuple_size(ip) == 8]
-             ],
-             protocols: [:http1],
-             pool_timeout: 2_000,
-             receive_timeout: 2_000,
-             request_timeout: 3_000
-           ],
-           retry: false,
-           redirect: false,
-           raw: true,
-           compressed: false,
-           into: &collect/2
-         ) do
+    # A raw request has no ambient defaults, plugins, auth, params or middleware.
+    # In particular, the transport target cannot change after resource validation.
+    request =
+      Req.Request.new(
+        method: :get,
+        url: pinned,
+        headers: [{"host", host}],
+        options: [
+          finch: [
+            conn_opts: [
+              hostname: uri.host,
+              transport_opts: [timeout: 2_000, inet6: tuple_size(ip) == 8]
+            ],
+            protocols: [:http1],
+            pool_timeout: 2_000,
+            receive_timeout: 2_000,
+            request_timeout: 3_000
+          ]
+        ]
+      )
+
+    case Req.request(%{request | into: &collect/2}) do
       {:ok, %{status: status, body: body}} when status in 200..299 ->
         if is_binary(body) && String.valid?(body),
           do: {:ok, %{"status" => status, "body" => body}},

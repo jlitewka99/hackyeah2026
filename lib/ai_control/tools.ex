@@ -4,7 +4,7 @@ defmodule AiControl.Tools do
   alias AiControl.Policies
   alias AiControl.Policy.Snapshot
   alias AiControl.Security.Validation
-  alias AiControl.Tools.{Catalog, ToolRequest}
+  alias AiControl.Tools.ToolRequest
 
   def prepare(%Principal{} = identity, params) do
     with true <- identity_valid?(identity),
@@ -24,7 +24,7 @@ defmodule AiControl.Tools do
   def authorize(%ToolRequest{} = request) do
     with true <- identifiers?(request) && Snapshot.valid?(request.policy),
          {:ok, _} <- Policies.refresh_identity(ToolRequest.principal(request)),
-         :ok <- Catalog.validate(request.tool, request.arguments) do
+         :ok <- ToolRequest.validate_arguments(request.tool, request.arguments) do
       settings = request.policy.settings || %{}
       agents = Map.get(settings, "allowed_agents", [])
       tools = get_in(settings, ["tools", "allowed_tools"]) || []
