@@ -1,0 +1,26 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} active_page="organizations">
+  <div class="page-content" id="organizer-panel">
+    <h1>Organizations</h1>
+    <p class="page-description">Manage access to AiControl from your organizer workspace.</p>
+    <section
+      id="organizations-unavailable"
+      class="empty-workspace"
+      aria-labelledby="organizations-next-heading"
+    >
+      <div class="flex items-start gap-5">
+        <div class="muted pt-1"><.icon name="hero-building-office-2" class="size-8" /></div>
+        <div class="max-w-lg">
+          <h2 id="organizations-next-heading">Your organizer account is ready</h2>
+          <p class="muted mt-3">
+            Organization creation, memberships, and administrator invitations will be available in the next implementation step.
+          </p>
+          <.link
+            navigate={~p"/users/settings"}
+            id="panel-account-settings"
+            class="text-link inline-flex items-center gap-2 mt-6 text-sm"
+          >Manage your account <.icon name="hero-arrow-right" class="size-4" /></.link>
+        </div>
+      </div>
+    </section>
+  </div>
+</Layouts.app>

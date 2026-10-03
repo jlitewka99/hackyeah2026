@@ -1,0 +1,21 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} auth>
+  <h1>Restore access</h1>
+  <p class="auth-description">
+    Continue as <span class="break-all font-medium">{@user.email}</span>. You can update your password in account settings.
+  </p>
+  <.form for={@form} id="recovery-confirmation-form" action={~p"/users/log-in"} method="post">
+    <.input field={@form[:token]} type="hidden" id="recovery-token" />
+    <.input
+      field={@form[:remember_me]}
+      type="checkbox"
+      id="recovery-remember-me"
+      label="Remember me on this device"
+    />
+    <.button
+      id="restore-access-button"
+      class="button-primary w-full mt-6"
+      phx-disable-with="Restoring…"
+    >Continue to account settings <.icon name="hero-arrow-right" class="size-4" /></.button>
+  </.form>
+  <p class="auth-footer">This link can be used once.</p>
+</Layouts.app>

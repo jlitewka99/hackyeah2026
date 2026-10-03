@@ -1,12 +1,7 @@
 defmodule AiControlWeb.PageControllerTest do
-  use AiControlWeb.ConnCase
+  use AiControlWeb.ConnCase, async: true
 
-  test "GET /", %{conn: conn} do
-    conn = get(conn, ~p"/")
-    assert html_response(conn, 200) =~ "Peace of mind from prototype to production"
-
-    assert get_resp_header(conn, "content-security-policy") == [
-             "base-uri 'self'; frame-ancestors 'self';"
-           ]
+  test "home leads anonymous visitors to sign in", %{conn: conn} do
+    assert conn |> get(~p"/") |> redirected_to() == ~p"/users/log-in"
   end
 end

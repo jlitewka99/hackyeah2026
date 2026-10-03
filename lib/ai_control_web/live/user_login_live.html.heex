@@ -1,0 +1,41 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} auth>
+  <h1>Sign in to AiControl</h1>
+  <p class="auth-description">
+    <%= if @current_scope do %>
+      Sign in again to make changes to your account.
+    <% else %>
+      Your workspace for governed AI interactions.
+    <% end %>
+  </p>
+  <.form for={@form} id="login_form_password" action={~p"/users/log-in"} method="post">
+    <.input
+      field={@form[:email]}
+      id="login-email"
+      type="email"
+      label="Email address"
+      autocomplete="username"
+      readonly={!!@current_scope}
+      required
+    />
+    <.input
+      field={@form[:password]}
+      id="login-password"
+      type="password"
+      label="Password"
+      autocomplete="current-password"
+      required
+    />
+    <div class="flex flex-wrap items-center justify-between gap-3 mt-1 mb-6 text-sm">
+      <.input
+        field={@form[:remember_me]}
+        id="login-remember-me"
+        type="checkbox"
+        label="Remember me"
+      />
+      <.link navigate={~p"/users/recover"} id="recover-access-link" class="text-link">Forgot password?</.link>
+    </div>
+    <.button id="sign-in-button" class="button-primary w-full" phx-disable-with="Signing in…">Sign in
+    <.icon name="hero-arrow-right" class="size-4" /></.button>
+  </.form>
+  <p class="auth-footer">Access is managed by your administrator.</p>
+</Layouts.app>
