@@ -118,6 +118,7 @@ defmodule AiControl.MixProject do
         "compile --warnings-as-errors",
         "deps.unlock --check-unused",
         "credo --strict",
+        "cmd node --test assets/js/workspace_switcher.test.mjs",
         "test --warnings-as-errors"
       ],
       security: ["sobelow --config", "deps.audit"],

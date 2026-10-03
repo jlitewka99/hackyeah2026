@@ -36,12 +36,12 @@ const WorkspaceSearch = {
       }
     }
 
-    this.onFocusOut = () => {
-      queueMicrotask(() => {
-        if (this.el.isConnected && !this.root.contains(document.activeElement)) {
-          this.pushEventTo(this.root, "close", {})
-        }
-      })
+    this.onFocusOut = event => {
+      // Pointer clicks can blur the input without focusing the link before click fires.
+      // Click-away handles outside clicks; close here only for a known focus destination.
+      if (event.relatedTarget && !this.root.contains(event.relatedTarget)) {
+        this.pushEventTo(this.root, "close", {})
+      }
     }
 
     this.root.addEventListener("keydown", this.onKeyDown)

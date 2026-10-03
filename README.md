@@ -270,7 +270,7 @@ and retention are scheduled for later roadmap steps.
 ```sh
 mix test          # Create/migrate the test database and run ExUnit
 mix format        # Format Elixir with Quokka and templates with the HEEx formatter
-mix check         # Check formatting, compilation warnings, lockfile, Credo, and tests
+mix check         # Check formatting, compilation warnings, lockfile, Credo, JS and Elixir tests
 mix precommit     # Format first, then run mix check
 mix dialyzer      # Analyze types; the first run builds PLTs and takes longer
 mix security      # Scan Phoenix with Sobelow and audit dependencies with MixAudit
