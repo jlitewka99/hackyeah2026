@@ -102,7 +102,7 @@ Checkboxy oznaczają potwierdzone zakończenie kroku, a nie samą obecność kod
 - [x] Krok 7 — Deterministyczne guardy, NER i sygnatury
 - [x] Krok 8 — Output filtering
 - [x] Krok 9 — Budżety i rozliczanie użycia
-- [ ] Krok 10 — Semantyczne wykrywanie prompt injection
+- [x] Krok 10 — Semantyczne wykrywanie prompt injection
 - [ ] Krok 11 — Dashboard i zamknięcie wymaganego MVP
 - [ ] Krok 12 — Tool firewall i ograniczenia zasobów
 - [ ] Krok 13 — MCP gateway
@@ -570,6 +570,8 @@ wizualnego; zastanego driftu nie naprawiano w tym rozszerzeniu.
 - Wersjonowany benchmark z sekcji 5.1 i komenda Mix zapisująca wyniki JSONL/CSV po ID przez `Req`. Standardowe testy używają mocków; `:live_models` i smoke kontenera sprawdzają rzeczywiste wagi.
 
 **Gotowe, gdy:** rzeczywisty Qwen uczestniczy w enforcement, benchmark jest zapisany, a testy obejmują polski atak i bezpieczne porównanie, końcówkę i granicę fragmentów, zmianę mapowania, blokadę odpowiedzi, fail-closed, audyt bez treści, stały snapshot oraz zgodność v1/v2. Uruchomić `mix precommit`, `mix assets.build`, Python i odbiór UI. Krok 10 nie wymaga porównania z Meta; końcowa kwalifikacja providera i kryterium jakości MVP pozostają w 11B. Stan i ograniczenia zapisuje `docs/acceptance/step10.md`.
+
+**Odbiór 2026-10-04:** implementacja kroku 10 ukończona. `mix precommit`: 459 testów Elixir i 3 JavaScript; Python: 8 testów; rzeczywisty Qwen: 2 testy `:live_models`; assets, Dialyzer i security przechodzą. Impeccable: desktop/mobile, oba motywy, review `ship`. [CI](https://github.com/jlitewka99/hackyeah2026/actions/runs/37160056347) potwierdza offline Qwen/NER/tokenizer, release transport, awarie wszystkich czterech procesów i SIGTERM. Benchmark 240 przypadków zapisany w `docs/acceptance/step10-qwen`: 230 klasyfikacji, 10 timeoutów długich tekstów; testowy FPR injection 0/50, recall direct 32%, indirect 40% wśród 20 ukończonych przypadków (5 błędów). Te ograniczenia oraz kwalifikacja i porównanie z Prompt Guard pozostają jawne w 11B; ukończenie implementacji nie oznacza odbioru jakości modeli całego MVP.
 
 ### Krok 11. Dashboard i zamknięcie wymaganego MVP
 

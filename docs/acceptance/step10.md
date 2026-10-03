@@ -90,11 +90,18 @@ Documentation comparison preserves DESIGN.md and the explicitly deferred stale
 
 ## Container and remaining scope
 
-Docker smoke checks real Qwen/NER release transport, private loopback listeners,
-health, migrations/bootstrap, all four child failures and SIGTERM. The local
-Docker daemon is unavailable; Linux CI must supply the container evidence.
-Step 10's checkbox remains unchecked until its real-model and container gates
-are recorded. Full output filtering, budget settlement and tool enforcement
+All five jobs passed in [Linux CI](https://github.com/jlitewka99/hackyeah2026/actions/runs/37160056347)
+for runtime revision `3124d7463945492d1273b015079b7badce89e789`.
+Docker smoke confirms real Qwen/NER release transport, pinned offline tokenizer,
+private loopback listeners, non-root execution, health, migrations/bootstrap,
+all four child failures and clean SIGTERM. It also passes the eight semantic,
+four NER and four tokenizer Python tests. The local Docker daemon is unavailable;
+the container evidence comes from Ubuntu 24.04 CI.
+
+Step 10's implementation is accepted after these tests and the actual benchmark.
+The ten deadline errors and limited injection recall remain recorded; model
+quality qualification for the complete MVP is still a separate 11B gate.
+Full output filtering, budget settlement and tool enforcement
 integration remain in 12B/11B. In 11B compare Qwen and Prompt Guard on identical
 data/hardware: require FPR ≤ 5%, then maximize mean direct/indirect recall, then
 prefer lower p95. No qualified candidate leaves MVP acceptance unmet.
