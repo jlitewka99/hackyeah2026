@@ -8,12 +8,14 @@ defmodule AiControlWeb.Endpoint do
     store: :cookie,
     key: "_ai_control_key",
     signing_salt: "YuHwGGCT",
-    same_site: "Lax"
+    same_site: "Lax",
+    http_only: true,
+    secure: Application.compile_env(:ai_control, :secure_cookies, false)
   ]
 
   socket "/live", Phoenix.LiveView.Socket,
-    websocket: [connect_info: [session: @session_options]],
-    longpoll: [connect_info: [session: @session_options]]
+    websocket: [log: false, connect_info: [session: @session_options]],
+    longpoll: [log: false, connect_info: [session: @session_options]]
 
   # Serve at "/" the static files from "priv/static" directory.
   #
@@ -41,7 +43,10 @@ defmodule AiControlWeb.Endpoint do
     cookie_key: "request_logger"
 
   plug Plug.RequestId
-  plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
+
+  plug Plug.Telemetry,
+    event_prefix: [:phoenix, :endpoint],
+    log: {AiControlWeb.RequestLog, :level, []}
 
   plug Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],

@@ -25,50 +25,109 @@ defmodule AiControlWeb.Layouts do
       </Layouts.app>
 
   """
-  attr :flash, :map, required: true, doc: "the map of flash messages"
-
-  attr :current_scope, :map,
-    default: nil,
-    doc: "the current [scope](https://phoenix.hexdocs.pm/scopes.html)"
-
+  attr :flash, :map, required: true
+  attr :current_scope, :map, default: nil
+  attr :auth, :boolean, default: false
+  attr :active_page, :string, default: nil
   slot :inner_block, required: true
 
   def app(assigns) do
     ~H"""
-    <header class="navbar px-4 sm:px-6 lg:px-8">
-      <div class="flex-1">
-        <a href="/" class="flex-1 flex w-fit items-center gap-2">
-          <img src={~p"/images/logo.svg"} width="36" />
-          <span class="text-sm font-semibold">v{Application.spec(:phoenix, :vsn)}</span>
-        </a>
+    <a href="#main-content" class="skip-link">Skip to content</a>
+    <%= if @auth || !@current_scope do %>
+      <header class="auth-header">
+        <.brand />
+        <.theme_toggle id="auth-theme" />
+      </header>
+      <main id="main-content" class="auth-main">{render_slot(@inner_block)}</main>
+    <% else %>
+      <div class="app-shell">
+        <aside class="sidebar" aria-label="Workspace navigation">
+          <div class="px-2 mb-8"><.brand /></div>
+          <.workspace_nav
+            current_scope={@current_scope}
+            active_page={@active_page}
+            id="desktop-navigation"
+          />
+          <div class="mt-auto pt-8 border-t border-[var(--line)]">
+            <div class="account-identity px-2 mb-4">
+              <p class="font-medium truncate" title={@current_scope.user.email}>
+                {@current_scope.user.email}
+              </p>
+              <p class="muted mt-1">
+                {if @current_scope.user.organizer, do: "Organizer", else: "Account"}
+              </p>
+            </div>
+            <div class="flex items-center justify-between gap-2 px-2">
+              <.link
+                href={~p"/users/log-out"}
+                method="delete"
+                id="desktop-log-out"
+                class="text-link text-sm"
+              >Log out</.link>
+              <.theme_toggle id="desktop-theme" />
+            </div>
+          </div>
+        </aside>
+        <header class="mobile-header">
+          <div class="flex items-center justify-between gap-3 mb-4">
+            <.brand />
+            <.theme_toggle id="mobile-theme" />
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <.workspace_nav
+              current_scope={@current_scope}
+              active_page={@active_page}
+              id="mobile-navigation"
+            />
+            <.link
+              href={~p"/users/log-out"}
+              method="delete"
+              id="mobile-log-out"
+              class="text-link text-sm shrink-0"
+            >Log out</.link>
+          </div>
+          <p class="account-identity muted mt-3">{@current_scope.user.email}</p>
+        </header>
+        <main id="main-content" class="app-main">{render_slot(@inner_block)}</main>
       </div>
-      <div class="flex-none">
-        <ul class="flex flex-column px-1 space-x-4 items-center">
-          <li>
-            <a href="https://phoenixframework.org/" class="btn btn-ghost">Website</a>
-          </li>
-          <li>
-            <a href="https://github.com/phoenixframework/phoenix" class="btn btn-ghost">GitHub</a>
-          </li>
-          <li>
-            <.theme_toggle />
-          </li>
-          <li>
-            <a href="https://phoenix.hexdocs.pm/overview.html" class="btn btn-primary">
-              Get Started <span aria-hidden="true">&rarr;</span>
-            </a>
-          </li>
-        </ul>
-      </div>
-    </header>
-
-    <main class="px-4 py-20 sm:px-6 lg:px-8">
-      <div class="mx-auto max-w-2xl space-y-4">
-        {render_slot(@inner_block)}
-      </div>
-    </main>
-
+    <% end %>
     <.flash_group flash={@flash} />
+    """
+  end
+
+  defp brand(assigns) do
+    ~H"""
+    <.link href={~p"/"} class="brand" aria-label="AiControl home">
+      <span class="brand-symbol"><.icon name="hero-shield-check" class="size-4" /></span>
+      <span>AiControl</span>
+    </.link>
+    """
+  end
+
+  attr :current_scope, :map, required: true
+  attr :active_page, :string
+  attr :id, :string, required: true
+
+  defp workspace_nav(assigns) do
+    ~H"""
+    <nav id={@id} class="space-y-1">
+      <.link
+        :if={@current_scope.user.organizer}
+        navigate={~p"/platform/organizations"}
+        class="nav-link"
+        aria-current={@active_page == "organizations" && "page"}
+      >
+        <.icon name="hero-building-office-2" class="size-4 shrink-0" /> Organizations
+      </.link>
+      <.link
+        navigate={~p"/users/settings"}
+        class="nav-link"
+        aria-current={@active_page == "settings" && "page"}
+      >
+        <.icon name="hero-adjustments-horizontal" class="size-4 shrink-0" /> Account settings
+      </.link>
+    </nav>
     """
   end
 
@@ -84,7 +143,7 @@ defmodule AiControlWeb.Layouts do
 
   def flash_group(assigns) do
     ~H"""
-    <div id={@id} aria-live="polite">
+    <div id={@id} aria-live="polite" class="flash-stack">
       <.flash kind={:info} flash={@flash} />
       <.flash kind={:error} flash={@flash} />
 
@@ -121,38 +180,43 @@ defmodule AiControlWeb.Layouts do
     """
   end
 
-  @doc """
-  Provides dark vs light theme toggle based on themes defined in app.css.
+  attr :id, :string, required: true
 
-  See <head> in root.html.heex which applies the theme before page load.
-  """
   def theme_toggle(assigns) do
     ~H"""
-    <div class="card relative flex flex-row items-center border-2 border-base-300 bg-base-300 rounded-full">
-      <div class="absolute w-1/3 h-full rounded-full border-1 border-base-200 bg-base-100 brightness-200 left-0 [[data-theme=light]_&]:left-1/3 [[data-theme=dark]_&]:left-2/3 [[data-theme-source=system]_&]:!left-0 transition-[left]" />
-
+    <div id={@id} class="theme-toggle" role="group" aria-label="Appearance">
       <button
-        class="flex p-2 cursor-pointer w-1/3"
-        phx-click={JS.dispatch("phx:set-theme")}
+        id={"#{@id}-system"}
+        type="button"
+        class="theme-option"
         data-phx-theme="system"
-      >
-        <.icon name="hero-computer-desktop-micro" class="size-4 opacity-75 hover:opacity-100" />
-      </button>
-
-      <button
-        class="flex p-2 cursor-pointer w-1/3"
         phx-click={JS.dispatch("phx:set-theme")}
+        aria-label="Use system appearance"
+        title="System appearance"
+      >
+        <.icon name="hero-computer-desktop-micro" class="size-4" />
+      </button>
+      <button
+        id={"#{@id}-light"}
+        type="button"
+        class="theme-option"
         data-phx-theme="light"
-      >
-        <.icon name="hero-sun-micro" class="size-4 opacity-75 hover:opacity-100" />
-      </button>
-
-      <button
-        class="flex p-2 cursor-pointer w-1/3"
         phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="dark"
+        aria-label="Use light appearance"
+        title="Light appearance"
       >
-        <.icon name="hero-moon-micro" class="size-4 opacity-75 hover:opacity-100" />
+        <.icon name="hero-sun-micro" class="size-4" />
+      </button>
+      <button
+        id={"#{@id}-dark"}
+        type="button"
+        class="theme-option"
+        data-phx-theme="dark"
+        phx-click={JS.dispatch("phx:set-theme")}
+        aria-label="Use dark appearance"
+        title="Dark appearance"
+      >
+        <.icon name="hero-moon-micro" class="size-4" />
       </button>
     </div>
     """

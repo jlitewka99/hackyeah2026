@@ -1,0 +1,68 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} active_page="settings">
+  <div class="page-content">
+    <h1>Account settings</h1>
+    <p class="page-description mb-8">
+      Manage the email and password you use to access AiControl.
+    </p>
+    <section class="settings-section" aria-labelledby="email-settings-heading">
+      <div>
+        <h2 id="email-settings-heading">Email address</h2><p class="muted mt-2 text-sm">
+          We’ll send a confirmation link to your new address before making the change.
+        </p>
+      </div>
+      <.form
+        for={@email_form}
+        id="email_form"
+        phx-submit="update_email"
+        phx-change="validate_email"
+      >
+        <.input
+          field={@email_form[:email]}
+          type="email"
+          label="Email address"
+          autocomplete="username"
+          required
+        />
+        <.button id="change-email-button" phx-disable-with="Sending…">Change Email</.button>
+      </.form>
+    </section>
+    <section class="settings-section" aria-labelledby="password-settings-heading">
+      <div>
+        <h2 id="password-settings-heading">Password</h2><p class="muted mt-2 text-sm">
+          Use at least 12 characters. Updating your password signs out other sessions.
+        </p>
+      </div>
+      <.form
+        for={@password_form}
+        id="password_form"
+        action={~p"/users/update-password"}
+        method="post"
+        phx-change="validate_password"
+        phx-submit="update_password"
+        phx-trigger-action={@trigger_submit}
+      >
+        <.input
+          name={@password_form[:email].name}
+          type="hidden"
+          id="hidden_user_email"
+          value={@current_email}
+        />
+        <.input
+          field={@password_form[:password]}
+          type="password"
+          label="New password"
+          autocomplete="new-password"
+          required
+        />
+        <.input
+          field={@password_form[:password_confirmation]}
+          type="password"
+          label="Confirm new password"
+          autocomplete="new-password"
+          required
+        />
+        <.button id="save-password-button" phx-disable-with="Saving…">Save Password</.button>
+      </.form>
+    </section>
+  </div>
+</Layouts.app>

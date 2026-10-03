@@ -10,6 +10,7 @@ defmodule AiControl.Application do
     children = [
       AiControlWeb.Telemetry,
       AiControl.Repo,
+      AiControl.Accounts.LoginLimiter,
       {DNSCluster, query: Application.get_env(:ai_control, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: AiControl.PubSub},
       # Start a worker by calling: AiControl.Worker.start_link(arg)

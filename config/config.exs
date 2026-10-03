@@ -7,6 +7,19 @@
 # General application configuration
 import Config
 
+config :ai_control, :scopes,
+  user: [
+    default: true,
+    module: AiControl.Accounts.Scope,
+    assign_key: :current_scope,
+    access_path: [:user, :id],
+    schema_key: :user_id,
+    schema_type: :binary_id,
+    schema_table: :users,
+    test_data_fixture: AiControl.AccountsFixtures,
+    test_setup_helper: :register_and_log_in_user
+  ]
+
 config :ai_control,
   ecto_repos: [AiControl.Repo],
   generators: [timestamp_type: :utc_datetime]
@@ -65,6 +78,7 @@ config :logger, :default_formatter,
 
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
+config :phoenix, :filter_parameters, ["password", "password_confirmation", "token", "secret"]
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.

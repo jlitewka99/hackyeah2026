@@ -1,0 +1,9 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} auth>
+  <div id="login-rate-limited" role="alert">
+    <h1>Too many attempts</h1>
+    <p class="auth-description">
+      Please wait {ceil(@retry_after / 60)} minute(s) before trying again. This keeps your account protected.
+    </p>
+    <.link href={~p"/users/log-in"} id="retry-sign-in" class="button-secondary">Back to sign in</.link>
+  </div>
+</Layouts.app>

@@ -25,6 +25,36 @@ import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/ai_control"
 import topbar from "../vendor/topbar"
 
+// Appearance belongs to the application bundle, including cross-tab updates.
+const systemAppearance = window.matchMedia("(prefers-color-scheme: dark)")
+let appearance = "system"
+try { appearance = localStorage.getItem("phx:theme") || "system" } catch (_) {}
+
+const setAppearance = (value, persist = false) => {
+  appearance = ["system", "light", "dark"].includes(value) ? value : "system"
+  const resolved = appearance === "system" ? (systemAppearance.matches ? "dark" : "light") : appearance
+  document.documentElement.dataset.theme = resolved
+  document.documentElement.dataset.themeSource = appearance
+  document.querySelectorAll("[data-phx-theme]").forEach(button => {
+    button.setAttribute("aria-pressed", String(button.dataset.phxTheme === appearance))
+  })
+  if (persist) {
+    try {
+      if (appearance === "system") localStorage.removeItem("phx:theme")
+      else localStorage.setItem("phx:theme", appearance)
+    } catch (_) {}
+  }
+}
+setAppearance(appearance)
+window.addEventListener("phx:set-theme", event => setAppearance(event.target.closest("[data-phx-theme]").dataset.phxTheme, true))
+window.addEventListener("storage", event => {
+  if (event.key === "phx:theme") setAppearance(event.newValue || "system")
+})
+systemAppearance.addEventListener("change", () => {
+  if (appearance === "system") setAppearance("system")
+})
+window.addEventListener("phx:page-loading-stop", () => setAppearance(appearance))
+
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
@@ -33,9 +63,40 @@ const liveSocket = new LiveSocket("/live", Socket, {
 })
 
 // Show progress bar on live navigation and form submits
-topbar.config({barColors: {0: "#29d"}, shadowColor: "rgba(0, 0, 0, .3)"})
+topbar.config({barColors: {0: "#62646e"}, shadowColor: "rgba(0, 0, 0, .3)"})
 window.addEventListener("phx:page-loading-start", _info => topbar.show(300))
 window.addEventListener("phx:page-loading-stop", _info => topbar.hide())
+
+// Native POST forms keep credentials out of LiveView events. Give their
+// submit buttons the same busy feedback as LiveView-managed forms.
+const nativeSubmissions = new Map()
+window.addEventListener("submit", event => {
+  const form = event.target
+  if (!(form instanceof HTMLFormElement) || form.hasAttribute("phx-submit")) return
+  if (nativeSubmissions.has(form)) {
+    event.preventDefault()
+    return
+  }
+  const buttons = [...form.querySelectorAll("button[phx-disable-with]")]
+  nativeSubmissions.set(form, buttons.map(button => ({button, html: button.innerHTML})))
+  form.setAttribute("aria-busy", "true")
+  buttons.forEach(button => {
+    button.textContent = button.getAttribute("phx-disable-with")
+    button.disabled = true
+  })
+  topbar.show(0)
+})
+window.addEventListener("pageshow", () => {
+  nativeSubmissions.forEach((buttons, form) => {
+    form.removeAttribute("aria-busy")
+    buttons.forEach(({button, html}) => {
+      button.innerHTML = html
+      button.disabled = false
+    })
+  })
+  nativeSubmissions.clear()
+  topbar.hide()
+})
 
 // connect if there are any LiveViews on the page
 liveSocket.connect()
@@ -80,4 +141,3 @@ if (process.env.NODE_ENV === "development") {
     window.liveReloader = reloader
   })
 }
-

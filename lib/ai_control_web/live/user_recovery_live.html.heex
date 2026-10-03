@@ -1,0 +1,23 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} auth>
+  <.link
+    navigate={~p"/users/log-in"}
+    id="recovery-back-link"
+    class="text-link inline-flex items-center gap-2 mb-8 text-sm"
+  ><.icon name="hero-arrow-left" class="size-4" /> Back to sign in</.link>
+  <h1>Recover access</h1>
+  <p class="auth-description">
+    Enter your account email. We’ll send a one-time link so you can sign in and set a new password.
+  </p>
+  <.form for={@form} id="recovery-form" action={~p"/users/recover"} method="post">
+    <.input
+      field={@form[:email]}
+      id="recovery-email"
+      type="email"
+      label="Email address"
+      autocomplete="username"
+      required
+    />
+    <.button id="send-recovery-link" class="button-primary w-full" phx-disable-with="Sending…">Send recovery link</.button>
+  </.form>
+  <p class="auth-footer">Recovery links expire after 15 minutes.</p>
+</Layouts.app>
