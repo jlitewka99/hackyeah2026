@@ -112,20 +112,11 @@ defmodule AiControlWeb.Layouts do
   defp workspace_nav(assigns) do
     ~H"""
     <nav id={@id} class="space-y-1">
-      <.link
-        navigate={~p"/organizations"}
-        class="nav-link"
-        aria-current={@active_page == "organization-picker" && "page"}
-      >
-        <.icon name="hero-squares-2x2" class="size-4 shrink-0" /> Workspaces
-      </.link>
-      <div
-        :if={@current_scope.organization}
-        class="workspace-label"
-        title={@current_scope.organization.name}
-      >
-        {@current_scope.organization.name}
-      </div>
+      <.live_component
+        module={AiControlWeb.WorkspaceSwitcherComponent}
+        id={"#{@id}-workspace-switcher"}
+        current_scope={@current_scope}
+      />
       <.link
         :if={@current_scope.organization}
         navigate={~p"/organizations/#{@current_scope.organization.id}"}

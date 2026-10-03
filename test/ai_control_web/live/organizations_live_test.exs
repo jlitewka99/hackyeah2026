@@ -40,6 +40,23 @@ defmodule AiControlWeb.OrganizationsLiveTest do
            )
   end
 
+  test "duplicate organization names show a field error instead of crashing", %{conn: conn} do
+    organization = organization_fixture(%{name: "Existing workspace"})
+    {:ok, view, _} = live(log_in_user(conn, organization.user), ~p"/platform/organizations")
+
+    view
+    |> form("#organization-create-form", organization: %{name: "  EXISTING WORKSPACE  "})
+    |> render_submit()
+
+    assert has_element?(view, "#organization-create-form input[aria-invalid=true]")
+
+    assert has_element?(
+             view,
+             "#organization-create-form [role=alert]",
+             "An organization with this name already exists."
+           )
+  end
+
   test "forged member IDs and role submissions cannot cross a boundary", %{conn: conn} do
     first = organization_fixture()
     second = organization_fixture()

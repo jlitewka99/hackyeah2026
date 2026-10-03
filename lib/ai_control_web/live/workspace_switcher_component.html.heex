@@ -1,0 +1,95 @@
+<div
+  id={@id}
+  class="workspace-switcher"
+  data-workspace-switcher
+  phx-click-away="close"
+  phx-target={@myself}
+>
+  <button
+    id={"#{@id}-trigger"}
+    type="button"
+    class="workspace-trigger"
+    phx-click="toggle"
+    phx-target={@myself}
+    data-workspace-trigger
+    data-open={JS.push("open", target: @myself)}
+    aria-label={
+      if @current_scope.organization,
+        do: "Switch workspace: #{@current_scope.organization.name}",
+        else: "Choose workspace"
+    }
+    aria-haspopup="dialog"
+    aria-expanded={to_string(@open?)}
+    aria-controls={"#{@id}-panel"}
+    title={@current_scope.organization && @current_scope.organization.name}
+  >
+    <.icon name="hero-squares-2x2" class="size-4 shrink-0 muted" />
+    <span class="min-w-0 truncate flex-1 text-left">
+      {if @current_scope.organization,
+        do: @current_scope.organization.name,
+        else: "Choose workspace"}
+    </span>
+    <.icon name="hero-chevron-up-down" class="size-4 shrink-0 muted" />
+  </button>
+  <div
+    :if={@open?}
+    id={"#{@id}-panel"}
+    class="workspace-panel"
+    role="dialog"
+    aria-label="Choose workspace"
+  >
+    <.form
+      for={@form}
+      id={"#{@id}-search-form"}
+      phx-change="search"
+      phx-submit="search"
+      phx-target={@myself}
+      class="workspace-search"
+    >
+      <.input
+        field={@form[:query]}
+        id={"#{@id}-search"}
+        type="search"
+        placeholder="Search workspaces…"
+        aria-label="Search workspaces"
+        autocomplete="off"
+        phx-debounce="100"
+        phx-hook="WorkspaceSearch"
+        phx-update="ignore"
+        aria-controls={"#{@id}-options"}
+      />
+    </.form>
+    <p id={"#{@id}-result-count"} class="sr-only" role="status">
+      {@result_count} {if @result_count == 1, do: "workspace", else: "workspaces"} found
+    </p>
+    <ul id={"#{@id}-options"} class="workspace-options" phx-update="stream">
+      <li id={"#{@id}-empty"} class="workspace-empty hidden only:block">
+        <%= if @has_workspaces? do %>
+          No workspaces found. Try another name.
+        <% else %>
+          No workspaces available.
+        <% end %>
+      </li>
+      <li :for={{dom_id, workspace} <- @streams.workspaces} id={dom_id}>
+        <.link
+          id={"#{dom_id}-link"}
+          navigate={~p"/organizations/#{workspace.id}"}
+          class="workspace-option"
+          data-workspace-option
+          aria-current={
+            @current_scope.organization && @current_scope.organization.id == workspace.id &&
+              "true"
+          }
+        >
+          <span class="min-w-0 flex-1 break-words">{workspace.name}</span>
+          <span :if={workspace.status == :suspended} class="muted text-xs shrink-0">Suspended</span>
+          <.icon
+            :if={@current_scope.organization && @current_scope.organization.id == workspace.id}
+            name="hero-check"
+            class="size-4 shrink-0"
+          />
+        </.link>
+      </li>
+    </ul>
+  </div>
+</div>

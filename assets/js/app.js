@@ -24,6 +24,7 @@ import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/ai_control"
 import topbar from "../vendor/topbar"
+import WorkspaceSearch from "./workspace_switcher"
 
 // Appearance belongs to the application bundle, including cross-tab updates.
 const systemAppearance = window.matchMedia("(prefers-color-scheme: dark)")
@@ -59,7 +60,18 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks},
+  hooks: {...colocatedHooks, WorkspaceSearch},
+})
+
+window.addEventListener("keydown", event => {
+  const trigger = event.target.closest("[data-workspace-trigger]")
+  if (trigger && ["ArrowDown", "ArrowUp"].includes(event.key)) {
+    event.preventDefault()
+    liveSocket.execJS(trigger, trigger.dataset.open)
+  }
+})
+window.addEventListener("phx:workspace-focus-trigger", event => {
+  document.getElementById(event.detail.id)?.focus()
 })
 
 // Show progress bar on live navigation and form submits

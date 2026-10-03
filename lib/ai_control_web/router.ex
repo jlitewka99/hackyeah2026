@@ -45,7 +45,10 @@ defmodule AiControlWeb.Router do
     pipe_through [:browser, :require_authenticated_user]
 
     live_session :authenticated,
-      on_mount: [{AiControlWeb.UserAuth, :require_authenticated}] do
+      on_mount: [
+        {AiControlWeb.UserAuth, :require_authenticated},
+        {AiControlWeb.WorkspaceNavigation, :default}
+      ] do
       live "/users/settings", UserSettingsLive, :edit
       live "/organizations", OrganizationsLive, :index
 
@@ -60,7 +63,10 @@ defmodule AiControlWeb.Router do
     pipe_through [:browser, :require_authenticated_user, :require_organization]
 
     live_session :organization,
-      on_mount: [{AiControlWeb.OrganizationAuth, :require_organization}] do
+      on_mount: [
+        {AiControlWeb.OrganizationAuth, :require_organization},
+        {AiControlWeb.WorkspaceNavigation, :default}
+      ] do
       live "/", OrganizationOverviewLive, :show
     end
   end
@@ -69,7 +75,10 @@ defmodule AiControlWeb.Router do
     pipe_through [:browser, :require_authenticated_user, :require_organization, :require_manager]
 
     live_session :organization_management,
-      on_mount: [{AiControlWeb.OrganizationAuth, :require_organization}] do
+      on_mount: [
+        {AiControlWeb.OrganizationAuth, :require_organization},
+        {AiControlWeb.WorkspaceNavigation, :default}
+      ] do
       live "/members", OrganizationMembersLive, :index
       live "/members/:membership_id/access", OrganizationMemberAccessLive, :edit
     end
@@ -79,7 +88,10 @@ defmodule AiControlWeb.Router do
     pipe_through [:browser, :require_authenticated_user, :require_organizer]
 
     live_session :organizer,
-      on_mount: [{AiControlWeb.UserAuth, :require_organizer}] do
+      on_mount: [
+        {AiControlWeb.UserAuth, :require_organizer},
+        {AiControlWeb.WorkspaceNavigation, :default}
+      ] do
       live "/organizations", PlatformOrganizationsLive, :index
     end
   end
