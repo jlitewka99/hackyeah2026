@@ -122,16 +122,16 @@ Function grants are independent: `ai.use`, `agents.read`, `agents.manage`,
 `signatures.read`, and `signatures.manage`. An empty grant denies access.
 Resource grants contain specific agent IDs or model names, or the explicit
 `["*"]` selector for all organization resources of that type. Invitation and member
-forms offer concrete organization agents and all-resource selectors. Admin edits preserve grants they
+forms offer concrete organization agents, operator-registered models and all-resource selectors. Admin edits preserve grants they
 do not have permission to manage.
 
 `AiControl.Organizations.Access.authorize/3` refreshes database access before
 checking capabilities and resources. The default
 `AiControl.Organizations.ResourceResolver` verifies agents against the organization
 registry. An adapter can still be configured under
-`:ai_control, :organization_resource_resolver`. Concrete model assignments fail
-closed until the model registry arrives in step 6. Policy restrictions and runtime
-enforcement follow in later roadmap steps.
+`:ai_control, :organization_resource_resolver`. Concrete model assignments are
+verified against the operator catalog. The gateway intersects resource access with
+the effective organization policy before downstream requests.
 
 Members choose a workspace at `/organizations`; a single available organization
 opens automatically after sign-in. Active organization context comes from the
@@ -294,8 +294,8 @@ checksum includes all resolved rules, guards/stages, resource restrictions and
 budgets. PubSub refreshes the panel without discarding unsaved edits.
 
 Human AI access intersects current `ai.use`, owned agent/model grants and policy
-restrictions. The model resolver continues to deny unverified human model access
-until the registry in step 6. API principals keep their key-bound agent identity;
+restrictions. The model resolver denies names outside the operator catalog.
+API principals keep their key-bound agent identity;
 credential revocation, expiration and agent/organization status are rechecked.
 Concrete policy agents must belong to the organization. Model names can be
 configured ahead of the registry; a model wildcard requires a verified catalog.
@@ -390,6 +390,110 @@ The maximum page size is 200. An organizer can inspect suspended organizations;
 ordinary members lose access on suspension or revocation. The serializer uses
 closed fields and rejects raw payloads and exceptions. Dashboard, export,
 and retention are scheduled for later roadmap steps.
+
+## LLM gateway
+
+The gateway provides authenticated `POST /v1/chat/completions` and `GET /v1/models`.
+Bearer API keys are bound to an organization and agent. Trusted application callers
+can use `AiControl.Gateway.chat(scope, params, agent_id: agent_id)`; current `ai.use`
+and both resource grants are required. Client identity fields are rejected.
+
+The operator catalog is empty by default. Configure exact model names and full
+Ollama manifest digests. Registering a model makes it selectable in invitation and
+member access forms; grants and effective organization/agent policies still apply.
+The public catalog exposes no backend URL or digest.
+
+```sh
+ollama serve
+ollama pull qwen3.5:4b
+# Verify /api/tags against this checked-in manifest before enabling access.
+export GATEWAY_MODELS="$(cat priv/models/ollama-demo.json)"
+export OLLAMA_BASE_URL=http://127.0.0.1:11434
+mix phx.server
+```
+
+The recorded demo digest is
+`2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd`
+(Ollama 0.35.1, qwen3.5:4b, Q4_K_M). A different installed manifest is rejected;
+updating the catalog is an explicit operator action.
+
+Supported requests contain text `messages`, function `tools`, assistant
+`tool_calls` history and tool results. Optional controls are `tool_choice`,
+`temperature`, `top_p`, `max_tokens` (1–32768), `seed`, `stop`, `n: 1` and
+`stream: false`. Images, audio, streaming, unknown fields and unsupported formats
+return `400`. The gateway returns one assistant choice and validated token usage.
+It passes tool proposals through security assessment; it does not execute tools.
+Provider reasoning and unknown response fields are discarded. Ollama reasoning
+is disabled by default (`OLLAMA_REASONING_EFFORT=none`); `default`, `low`, `medium`
+and `high` are operator choices. See [Ollama's reasoning mapping](https://github.com/ollama/ollama/blob/v0.35.1/openai/openai.go).
+
+```sh
+curl http://localhost:4000/v1/chat/completions \
+  -H "Authorization: Bearer $AI_CONTROL_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"qwen3.5:4b","messages":[{"role":"user","content":"Describe Kraków in one sentence."}],"stream":false,"max_tokens":128}'
+```
+
+Each request retains one immutable policy snapshot. Input is synchronously audited
+before even querying backend model metadata; output is assessed and audited before
+returning any content. When both deterministic and semantic adapters are enabled,
+the deterministic phase is audited and redacted first, then semantic assessment
+uses fresh fields for that text version. Audit stores only typed findings, byte
+ranges, policy evidence and fixed terminal codes. Telemetry events
+`[:ai_control, :gateway, :stage]` and `[:ai_control, :gateway, :request]` contain
+microsecond durations and fixed stage/result codes, without content or identities
+as metric labels.
+
+**The existing balanced policy still requires its guards.** Step 6 supplies the
+adapter contracts, enforcement and redaction plumbing; actual deterministic,
+NER and semantic detectors arrive in later steps. Missing required adapters return
+`503` and never call the LLM. A bare Ollama installation is not a ready protected
+service. Optional adapters may fail only under an explicit policy; their failure
+is retained in the assessment evidence.
+
+| Operator variable | Default |
+| --- | --- |
+| `GATEWAY_INPUT_BYTES` | 1048576 (1 MiB, raw JSON before buffering) |
+| `GATEWAY_RESPONSE_BYTES` | 4194304 (4 MiB, including error bodies) |
+| `GATEWAY_CONNECT_TIMEOUT_MS` | 2000 |
+| `GATEWAY_LLM_TIMEOUT_MS` | 120000 (metadata and generation together) |
+| `GATEWAY_LLM_SLOTS` | 1 |
+| `GATEWAY_GUARD_SLOTS` | 2 |
+| `GATEWAY_REQUESTS_PER_MINUTE` | 60 per actor in an organization |
+
+The ingress counter is local Hammer/ETS and is shared by all keys of one agent;
+restart resets it. Authenticated rejected requests count too. Saturated slots return
+`429` immediately with `Retry-After`; timeout, cancellation and owner death stop the
+supervised worker and free the lease. Generation has no retries or redirects, and
+response reception stops at its size cap. Durable budgets are step 9.
+`400/413` indicate invalid/oversized input, `403` policy denial, `429` overload,
+`502` unusable backend responses, `503` unavailable security/audit/model services
+and `504` backend timeout. Error responses use fixed text and a server request ID.
+
+`GET /health` is liveness. `GET /ready` is bounded readiness of the database,
+effective active policies, pinned backend models and required guard adapters,
+returning only `200 {"status":"ready"}` or `503 {"status":"not_ready"}`. Readiness
+includes the platform default and every active organization's effective policy.
+
+Run the real-model acceptance separately from ordinary mock-based CI:
+
+```sh
+# Use an isolated PostgreSQL instance/database partition.
+PGPORT=55438 MIX_TEST_PARTITION=step6live mix test \
+  test/ai_control/gateway/live_ollama_test.exs --include live_models
+```
+
+The acceptance test creates a dedicated organization, activates an explicit local
+policy with unavailable guards disabled, and rolls its data back. It checks the
+pinned real model, authenticated catalog, a Polish response and both stage audits.
+It never changes the platform balanced policy. Ordinary `mix test` excludes the
+`:live_models` tag.
+
+The remaining MVP execution order is **7 with NER → 8 → 9 → 10 → full 12 → 11**.
+Presidio with Stanza PL/NKJP, versioned NER/tool policy settings, the Polish semantic
+benchmark and the complete tool ACL each retain their own acceptance criteria in
+[the implementation roadmap](AI_CONTROL_LAYER_IMPLEMENTATION_PLAN.md). Granite
+remains step 14; RAG, memory and further PII work remain step 18.
 
 ## Tests and quality checks
 

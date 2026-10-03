@@ -1,5 +1,11 @@
 import Config
 
+config :ai_control, AiControl.Gateway.Config,
+  models: %{
+    "qwen3.5:4b" => String.duplicate("a", 64),
+    "catalog-model" => String.duplicate("b", 64)
+  }
+
 # Only in tests, remove the complexity from the password hashing algorithm
 config :bcrypt_elixir, :log_rounds, 1
 

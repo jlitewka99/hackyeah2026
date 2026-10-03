@@ -41,6 +41,14 @@ defmodule AiControlWeb.Router do
   scope "/v1", AiControlWeb do
     pipe_through [:api, :agent_api]
     get "/auth", ApiAuthController, :show, log: false
+    get "/models", GatewayController, :models, log: false
+    post "/chat/completions", GatewayController, :chat, log: false
+  end
+
+  scope "/", AiControlWeb do
+    pipe_through :api
+    get "/health", HealthController, :health, log: false
+    get "/ready", HealthController, :ready, log: false
   end
 
   scope "/", AiControlWeb do

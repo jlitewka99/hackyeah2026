@@ -5,6 +5,7 @@ defmodule AiControl.Audit do
   alias AiControl.Audit.Event
   alias AiControl.Organizations
   alias AiControl.Organizations.{Access, Grants}
+  alias AiControl.Policies.Configuration
   alias AiControl.Policy.Snapshot
   alias AiControl.Repo
 
@@ -20,6 +21,71 @@ defmodule AiControl.Audit do
   @admin_events ~w(organization.created organization.status_changed member.access_changed member.removed superadmin.transferred invitation.issued invitation.revoked invitation.accepted invitation.delivery_failed) ++
                   @policy_events
   @snapshot_fields ~w(status role permissions agent_count model_count grants_fingerprint grants_fingerprint_key_id user_id previous_superadmin_id next_superadmin_id membership_id invitation_id policy_version_id policy_checksum policy_profile policy_source)a
+
+  @gateway_codes ~w(completed invalid_request input_too_large forbidden agent_not_allowed model_not_allowed policy_unavailable rate_limited capacity_exceeded guard_unavailable policy_blocked redaction_unavailable audit_unavailable upstream_timeout upstream_unavailable upstream_rejected upstream_invalid_response response_too_large model_unavailable model_digest_mismatch)
+  def gateway_codes, do: @gateway_codes
+
+  @doc "Content-free terminal evidence from the gateway's verified identity adapter."
+  def record_gateway(identity, request_id, code, duration_us, policy \\ nil) do
+    with true <-
+           Validation.uuid?(request_id) && code in @gateway_codes &&
+             Validation.duration?(duration_us),
+         true <- is_nil(policy) || Snapshot.valid?(policy),
+         {:ok, attrs} <- gateway_identity(identity) do
+      event =
+        struct!(
+          Event,
+          Map.merge(attrs, %{
+            request_id: request_id,
+            kind: :gateway,
+            event_type: gateway_event_type(code),
+            target_id: request_id,
+            stage: :input,
+            policy_version: if(policy, do: policy.version),
+            policy_checksum: if(policy, do: policy.checksum),
+            reason_codes: [code],
+            occurred_at: DateTime.utc_now(),
+            duration_us: duration_us
+          })
+        )
+
+      persist(event)
+    else
+      _ -> {:error, :invalid_audit_data}
+    end
+  end
+
+  defp gateway_event_type("completed"), do: "gateway.completed"
+
+  defp gateway_event_type(code)
+       when code in ~w(policy_unavailable guard_unavailable audit_unavailable upstream_timeout upstream_unavailable upstream_rejected upstream_invalid_response response_too_large model_unavailable model_digest_mismatch),
+       do: "gateway.failed"
+
+  defp gateway_event_type(_), do: "gateway.rejected"
+
+  defp gateway_identity(%AiControl.ApiKeys.Principal{} = identity) do
+    if Enum.all?(
+         [identity.organization_id, identity.agent_id, identity.api_key_id],
+         &Validation.uuid?/1
+       ),
+       do:
+         {:ok,
+          %{
+            organization_id: identity.organization_id,
+            actor_type: :agent,
+            agent_id: identity.agent_id,
+            api_key_id: identity.api_key_id
+          }},
+       else: {:error, :invalid_audit_data}
+  end
+
+  defp gateway_identity(%AiControl.Accounts.Scope{organization: %{id: org}, user: %{id: user}}) do
+    if Validation.uuid?(org) && Validation.uuid?(user),
+      do: {:ok, %{organization_id: org, actor_type: :user, user_id: user}},
+      else: {:error, :invalid_audit_data}
+  end
+
+  defp gateway_identity(_), do: {:error, :invalid_audit_data}
 
   def record_platform(%AiControl.Accounts.Scope{user: %{id: id}}, event_type, attrs) do
     with true <- event_type in (@policy_events -- ["policy.inheritance_restored"]),
@@ -64,7 +130,17 @@ defmodule AiControl.Audit do
 
   def list_platform_events(_), do: {:error, :forbidden}
 
-  def record_decision(context, assessment, decision) do
+  def record_decision(context, assessment, decision),
+    do: decision_event(context, assessment, decision, nil)
+
+  def record_phase_decision(context, assessment, decision, guards) do
+    if is_list(guards) && guards != [] &&
+         Enum.all?(guards, &(&1 in Configuration.guards())),
+       do: decision_event(context, assessment, decision, guards),
+       else: {:error, :invalid_audit_data}
+  end
+
+  defp decision_event(context, assessment, decision, guards) do
     if valid_decision?(context, assessment, decision) do
       event = %Event{
         id: assessment.id,
@@ -85,7 +161,7 @@ defmodule AiControl.Audit do
         reason_codes: decision.reason_codes,
         occurred_at: context.occurred_at,
         duration_us: assessment.duration_us,
-        data: assessment_data(assessment, decision)
+        data: phase_evidence(assessment_data(assessment, decision), guards)
       }
 
       persist(with_fingerprint(event, context.fingerprint))
@@ -215,6 +291,9 @@ defmodule AiControl.Audit do
       }
     }
   end
+
+  defp phase_evidence(data, nil), do: data
+  defp phase_evidence(data, guards), do: Map.put(data, :evaluated_guards, guards)
 
   defp with_fingerprint(event, nil), do: event
 

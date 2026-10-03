@@ -48,13 +48,15 @@ defmodule AiControlWeb.OrganizationUI do
 
     %{
       "permissions" => permissions,
-      "agents" => if(params["all_agents"] == "true", do: ["*"], else: selected_agents(params)),
-      "models" => if(params["all_models"] == "true", do: ["*"], else: [])
+      "agents" =>
+        if(params["all_agents"] == "true", do: ["*"], else: selected_resources(params, "agents")),
+      "models" =>
+        if(params["all_models"] == "true", do: ["*"], else: selected_resources(params, "models"))
     }
   end
 
-  defp selected_agents(params) do
-    case Map.get(params, "agents", []) do
+  defp selected_resources(params, key) do
+    case Map.get(params, key, []) do
       values when is_list(values) -> Enum.reject(values, &(&1 in ["", "false"]))
       invalid -> invalid
     end
@@ -72,10 +74,25 @@ defmodule AiControlWeb.OrganizationUI do
     |> to_form(as: :access)
   end
 
+  def submitted_access_form(params) do
+    %Grants{}
+    |> Grants.changeset(grant_params(params))
+    |> Ecto.Changeset.cast(params, [:all_agents, :all_models, :role])
+    |> to_form(as: :access)
+  end
+
+  defp selected_values(form, key) do
+    case form[key].value do
+      values when is_list(values) -> values
+      _ -> []
+    end
+  end
+
   attr :form, :any, required: true
   attr :allowed, :any, required: true
   attr :id, :string, required: true
   attr :agent_options, :list, default: []
+  attr :model_options, :list, default: []
 
   def grant_fields(assigns) do
     assigns = assign(assigns, :permissions, Grants.permissions())
@@ -93,7 +110,7 @@ defmodule AiControlWeb.OrganizationUI do
           name="access[permissions][]"
           id={"#{@id}-#{String.replace(permission, ".", "-")}"}
           checkbox_value={permission}
-          checked={permission in (@form[:permissions].value || [])}
+          checked={permission in selected_values(@form, :permissions)}
           disabled={permission not in @allowed.permissions}
           label={permission_name(permission)}
         />
@@ -102,7 +119,7 @@ defmodule AiControlWeb.OrganizationUI do
     <fieldset class="access-fieldset">
       <legend>Resource access</legend>
       <p class="muted text-sm mb-4">
-        No resources are allowed by default. Choose specific agents or allow all organization agents, including agents registered later. The model registry is not available yet.
+        No resources are allowed by default. Choose specific agents and models, or allow all current and future resources.
       </p>
       <div class="permission-grid">
         <.input
@@ -128,11 +145,30 @@ defmodule AiControlWeb.OrganizationUI do
           name="access[agents][]"
           id={"#{@id}-agent-#{id}"}
           checkbox_value={id}
-          checked={id in (@form[:agents].value || [])}
+          checked={id in selected_values(@form, :agents)}
           label={name}
         />
         <p class="muted text-sm">
           Choose any number of agents. The all-agents option takes precedence.
+        </p>
+      </fieldset>
+      <fieldset class="specific-agent-options mt-4" id={"#{@id}-specific-models"}>
+        <legend>Specific models</legend>
+        <.input
+          :for={{name, index} <- Enum.with_index(@model_options)}
+          type="checkbox"
+          name="access[models][]"
+          id={"#{@id}-model-#{index}"}
+          checkbox_value={name}
+          checked={name in selected_values(@form, :models)}
+          label={name}
+        />
+        <p class="muted text-sm">
+          <%= if @model_options == [] do %>
+            No models are available within your access. Ask an administrator to configure model access.
+          <% else %>
+            Choose any number of models. The all-models option takes precedence.
+          <% end %>
         </p>
       </fieldset>
     </fieldset>

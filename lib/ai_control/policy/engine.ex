@@ -1,14 +1,41 @@
 defmodule AiControl.Policy.Engine do
   @moduledoc "Pure deterministic enforcement: BLOCK takes precedence over REDACT, then ALLOW."
+  alias AiControl.Policies.Configuration
   alias AiControl.Policy.Snapshot
   alias AiControl.Security.{Decision, Detection, SecurityAssessment, SecurityContext}
 
   @spec evaluate(SecurityContext.t(), SecurityAssessment.t(), Snapshot.t()) ::
           {:ok, Decision.t()} | {:error, :invalid_security_data}
   def evaluate(context, assessment, policy) do
+    if valid_inputs?(context, assessment, policy),
+      do:
+        evaluate_required(
+          context,
+          assessment,
+          policy,
+          Snapshot.required_guards(policy, context.stage)
+        ),
+      else: {:error, :invalid_security_data}
+  end
+
+  @doc "Intermediate phase only; the gateway must complete every phase before downstream."
+  def evaluate_phase(context, assessment, policy, guards) do
+    catalog = Configuration.guards()
+
+    if valid_inputs?(context, assessment, policy) && is_list(guards) && guards != [] &&
+         Enum.all?(guards, &(&1 in catalog)) &&
+         Enum.all?(assessment.results, &(&1.guard in guards)) do
+      required = Enum.filter(Snapshot.required_guards(policy, context.stage), &(&1 in guards))
+      evaluate_required(context, assessment, policy, required)
+    else
+      {:error, :invalid_security_data}
+    end
+  end
+
+  defp evaluate_required(context, assessment, policy, required) do
     if valid_inputs?(context, assessment, policy) do
       unavailable =
-        Snapshot.required_guards(policy, context.stage) --
+        required --
           (assessment.results |> Enum.filter(&(&1.status == :ok)) |> Enum.map(& &1.guard))
 
       initial =

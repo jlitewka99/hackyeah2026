@@ -44,6 +44,8 @@ defmodule AiControlWeb.Endpoint do
     event_prefix: [:phoenix, :endpoint],
     log: {AiControlWeb.RequestLog, :level, []}
 
+  plug AiControlWeb.GatewayBody
+
   plug Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],

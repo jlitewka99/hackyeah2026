@@ -7,6 +7,7 @@ defmodule AiControl.Policies do
   alias AiControl.ApiKeys.{ApiKey, Principal}
   alias AiControl.{Audit, Repo}
   alias AiControl.Organizations.{Access, Organization, ResourceResolver}
+  alias AiControl.Organizations.Grants
   alias AiControl.Policies.{Activation, Cache, Configuration, Set, Version, YAML}
   alias AiControl.Policy.Snapshot
 
@@ -278,37 +279,106 @@ defmodule AiControl.Policies do
   defp event_type("inherit"), do: "policy.inheritance_restored"
   defp event_type(_), do: "policy.activated"
 
-  @doc "Acquire once per request after current identity/grants checks; retain this snapshot at all stages."
+  @doc "Acquire once per request and retain this immutable snapshot at every stage."
   def snapshot_for_request(identity, resources) do
-    with {:ok, organization_id, agent, model} <- request_identity(identity, resources),
-         %Set{} = set <- Repo.get_by(Set, [organization_id: organization_id], log: false),
-         {:ok, version, _} <- effective_version(set),
-         {:ok, policy} <- snapshot(version),
-         :ok <- restrictions(policy.settings, organization_id, agent, model) do
+    with {:ok, current} <- request_authorization(identity, resources),
+         {:ok, policy, current} <- snapshot_for_models(current, Map.get(resources, :agent_id)),
+         :ok <- model_access(current, policy, Map.get(resources, :agent_id), resources[:model]) do
       {:ok, policy}
-    else
-      {:error, reason} -> {:error, reason}
-      _ -> {:error, :policy_unavailable}
     end
   end
 
-  defp request_identity(%Scope{} = scope, %{agent_id: agent, model: model}) do
-    with {:ok, scope} <- Access.authorize(scope, "ai.use", %{agent: agent, model: model}),
-         true <- active_agent?(scope.organization.id, agent) do
-      {:ok, scope.organization.id, agent, model}
+  defp request_authorization(%Scope{} = scope, %{agent_id: agent, model: model}),
+    do: Access.authorize(scope, "ai.use", %{agent: agent, model: model})
+
+  defp request_authorization(%Principal{} = principal, resources) when is_map(resources),
+    do: refresh_identity(principal)
+
+  defp request_authorization(_, _), do: {:error, :forbidden}
+
+  def refresh_identity(%Principal{} = principal) do
+    if principal_valid?(principal), do: {:ok, principal}, else: {:error, :forbidden}
+  end
+
+  def refresh_identity(%Scope{} = scope) do
+    with {:ok, current} <- AiControl.Organizations.refresh_scope(scope),
+         true <- current.organization.status == :active && "ai.use" in current.grants.permissions do
+      {:ok, current}
     else
       _ -> {:error, :forbidden}
     end
   end
 
-  defp request_identity(%Principal{} = principal, %{model: model} = resources) do
-    if principal_valid?(principal) && is_binary(model) &&
-         Map.get(resources, :agent_id, principal.agent_id) == principal.agent_id,
-       do: {:ok, principal.organization_id, principal.agent_id, model},
+  def refresh_identity(_), do: {:error, :forbidden}
+
+  @doc "One snapshot for a filtered catalog, without loading a new policy for each candidate."
+  def snapshot_for_models(identity, agent_id) do
+    with {:ok, current} <- refresh_identity(identity),
+         {:ok, organization_id, agent} <- catalog_identity(current, agent_id),
+         %Set{} = set <- Repo.get_by(Set, [organization_id: organization_id], log: false),
+         {:ok, version, _} <- effective_version(set),
+         {:ok, policy} <- snapshot(version),
+         true <- selected?(policy.settings["allowed_agents"], agent) do
+      {:ok, policy, current}
+    else
+      false -> {:error, :agent_not_allowed}
+      {:error, reason} -> {:error, reason}
+      _ -> {:error, :policy_unavailable}
+    end
+  end
+
+  def model_access(identity, policy, agent_id, model) do
+    {organization_id, agent} = identity_resources(identity, agent_id)
+
+    granted? =
+      case identity do
+        %Scope{} -> Grants.includes?(identity.grants.models, model)
+        %Principal{} -> true
+      end
+
+    if granted? && is_binary(model) && ResourceResolver.owned?(organization_id, :model, model),
+      do: restrictions(policy.settings, organization_id, agent, model),
+      else: {:error, :model_not_allowed}
+  end
+
+  defp identity_resources(%Principal{} = principal, _),
+    do: {principal.organization_id, principal.agent_id}
+
+  defp identity_resources(%Scope{} = scope, agent), do: {scope.organization.id, agent}
+
+  defp catalog_identity(%Principal{} = principal, agent) do
+    if agent in [nil, principal.agent_id],
+      do: {:ok, principal.organization_id, principal.agent_id},
+      else: {:error, :forbidden}
+  end
+
+  defp catalog_identity(%Scope{} = scope, agent) do
+    if is_binary(agent) && Grants.includes?(scope.grants.agents, agent) &&
+         active_agent?(scope.organization.id, agent),
+       do: {:ok, scope.organization.id, agent},
        else: {:error, :forbidden}
   end
 
-  defp request_identity(_, _), do: {:error, :forbidden}
+  @doc "Effective snapshots for active organizations plus the platform default, for readiness."
+  def readiness_snapshots do
+    sets =
+      Repo.all(
+        from(s in Set,
+          left_join: o in Organization,
+          on: o.id == s.organization_id,
+          where: is_nil(s.organization_id) or o.status == :active
+        ),
+        log: false
+      )
+
+    Enum.reduce_while(sets, {:ok, []}, fn set, {:ok, snapshots} ->
+      with {:ok, version, _} <- effective_version(set), {:ok, policy} <- snapshot(version) do
+        {:cont, {:ok, [policy | snapshots]}}
+      else
+        _ -> {:halt, {:error, :policy_unavailable}}
+      end
+    end)
+  end
 
   defp principal_valid?(principal) do
     Repo.exists?(
@@ -357,5 +427,6 @@ defmodule AiControl.Policies do
   defp model_selected?(["*"], organization_id, model),
     do: ResourceResolver.owned?(organization_id, :model, model)
 
-  defp model_selected?(values, _organization_id, model), do: model in values
+  defp model_selected?(values, organization_id, model),
+    do: model in values && ResourceResolver.owned?(organization_id, :model, model)
 end
