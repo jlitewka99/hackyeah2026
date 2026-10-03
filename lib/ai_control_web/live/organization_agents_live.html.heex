@@ -1,0 +1,86 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} active_page="agents">
+  <div class="page-content" id="organization-agents">
+    <h1>Agents</h1>
+    <p class="page-description">
+      Register the agents that connect to {@current_scope.organization.name}. Suspending an agent pauses access for all of its API keys.
+    </p>
+    <section :if={@create?} class="list-section" aria-labelledby="create-agent-heading">
+      <h2 id="create-agent-heading">Register an agent</h2>
+      <.form for={@form} id="agent-create-form" phx-submit="create" class="inline-task-form mt-6">
+        <.input
+          field={@form[:name]}
+          label="Agent name"
+          placeholder="e.g. Support assistant"
+          required
+          maxlength="120"
+        />
+        <.button id="create-agent" class="button-primary" phx-disable-with="Creating…">Create agent
+        <.icon name="hero-plus" class="size-4" /></.button>
+      </.form>
+    </section>
+    <section class="list-section" aria-labelledby="agents-heading">
+      <h2 id="agents-heading">Registered agents</h2>
+      <div id="agent-list" phx-update="stream">
+        <p id="agents-empty" class="hidden only:block muted py-8">
+          No agents are available with your current access. Register an agent or ask your administrator for access.
+        </p>
+        <div :for={{id, agent} <- @streams.agents} id={id} class="resource-row agent-row">
+          <div class="min-w-0 flex-1">
+            <%= if @editing_id == agent.id do %>
+              <.form for={@edit_form} id={"agent-edit-form-#{agent.id}"} phx-submit="save">
+                <.input
+                  field={@edit_form[:name]}
+                  id={"agent-edit-name-#{agent.id}"}
+                  label="Agent name"
+                  required
+                  maxlength="120"
+                />
+                <div class="row-actions">
+                  <.button
+                    id={"save-agent-#{agent.id}"}
+                    class="button-primary"
+                    phx-disable-with="Saving…"
+                  >Save name</.button><button
+                    id={"cancel-agent-#{agent.id}"}
+                    type="button"
+                    class="button-secondary"
+                    phx-click="cancel_edit"
+                  >Cancel</button>
+                </div>
+              </.form>
+            <% else %>
+              <p class="font-medium break-words">{agent.name}</p>
+              <p class="resource-identifier muted mt-1">{agent.id}</p>
+            <% end %>
+            <p class="resource-status mt-2" data-status={agent.status}>
+              {if agent.status == :active, do: "Active", else: "Suspended"}
+            </p>
+          </div>
+          <div :if={@manage? && @editing_id != agent.id} class="row-actions">
+            <button
+              id={"edit-agent-#{agent.id}"}
+              type="button"
+              phx-click="edit"
+              phx-value-id={agent.id}
+              phx-disable-with="Opening…"
+              class="button-secondary"
+            >Rename</button>
+            <button
+              id={"status-agent-#{agent.id}"}
+              type="button"
+              phx-click="status"
+              phx-value-id={agent.id}
+              phx-value-status={if agent.status == :active, do: "suspended", else: "active"}
+              phx-disable-with="Updating…"
+              data-confirm={
+                agent.status == :active &&
+                  "Suspend this agent? All of its API keys will stop working until it is restored."
+              }
+              class="button-secondary"
+            >{if agent.status == :active, do: "Suspend", else: "Restore"}</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</Layouts.app>

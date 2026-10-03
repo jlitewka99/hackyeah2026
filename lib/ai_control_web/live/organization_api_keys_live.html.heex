@@ -1,0 +1,180 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} active_page="api-keys">
+  <div class="page-content" id="organization-api-keys">
+    <h1>API keys</h1>
+    <p class="page-description">
+      Connect an application to one agent in {@current_scope.organization.name}. Secrets are shown once; store them securely before leaving this page.
+    </p>
+    <section
+      :if={@revealed_key}
+      id={"revealed-key-#{@revealed_key.id}"}
+      phx-hook="OneTimeSecret"
+      phx-update="ignore"
+      class="secret-reveal list-section"
+      aria-labelledby="secret-heading"
+    >
+      <h2 id="secret-heading">Copy your new API key</h2>
+      <p class="muted text-sm mt-2">
+        This secret cannot be retrieved again. Refreshing or reconnecting hides it.
+      </p>
+      <div class="mt-6">
+        <.input
+          id="api-key-secret"
+          name="secret"
+          label="API key secret"
+          value={@secret}
+          readonly
+          autocomplete="off"
+          spellcheck="false"
+          class="field-input secret-input"
+        />
+      </div>
+      <div class="row-actions">
+        <button id="copy-api-key" type="button" class="button-primary" data-copy-secret>Copy key
+        <.icon name="hero-clipboard-document" class="size-4" /></button><button
+          id="dismiss-api-key-secret"
+          type="button"
+          class="button-secondary"
+          phx-click="dismiss_secret"
+        >I have saved it</button><span
+          id="copy-key-status"
+          class="muted text-sm"
+          aria-live="polite"
+        ></span>
+      </div>
+    </section>
+    <section
+      :if={@manage? && @current_scope.organization.status == :active}
+      class="list-section"
+      aria-labelledby="create-key-heading"
+    >
+      <h2 id="create-key-heading">
+        {if @rotating_id, do: "Rotate API key", else: "Create an API key"}
+      </h2>
+      <p :if={@rotating_id} id="rotation-warning" class="muted text-sm mt-2">
+        Creating the replacement immediately revokes the old key. Update your application's configuration with the new secret.
+      </p>
+      <p :if={@active_agent_options == []} id="key-agents-empty" class="muted text-sm mt-2">
+        An active agent is required. Register or restore an agent, or ask your administrator for access.
+      </p>
+      <.form
+        :if={@active_agent_options != []}
+        for={@form}
+        id="api-key-create-form"
+        class="mt-6"
+        phx-change="validate"
+        phx-submit="create"
+      >
+        <div class="permission-grid">
+          <.input
+            field={@form[:label]}
+            label="Key label"
+            placeholder="e.g. Production integration"
+            required
+            maxlength="120"
+          /><.input
+            id="api-key-agent"
+            name="api_key[agent_id]"
+            type="select"
+            label="Agent"
+            value={@selected_agent}
+            options={@active_agent_options}
+            prompt="Choose an agent"
+            disabled={!!@rotating_id}
+            required
+          />
+        </div>
+        <div class="permission-grid">
+          <.input
+            field={@form[:expiry_mode]}
+            label="Expiration"
+            type="select"
+            options={[
+              {"90 days", :ninety_days},
+              {"Custom date (UTC)", :custom},
+              {"No expiration", :never}
+            ]}
+          /><.input
+            :if={@form[:expiry_mode].value in [:custom, "custom"]}
+            field={@form[:expiry_at]}
+            label="Expires at (UTC)"
+            type="datetime-local"
+            required
+          />
+        </div>
+        <div class="row-actions">
+          <.button id="create-api-key" class="button-primary" phx-disable-with="Creating…">{if @rotating_id,
+            do: "Create replacement",
+            else: "Create key"}<.icon name="hero-key" class="size-4" /></.button><button
+            :if={@rotating_id}
+            id="cancel-key-rotation"
+            type="button"
+            class="button-secondary"
+            phx-click="cancel_rotation"
+          >Cancel</button>
+        </div>
+      </.form>
+    </section>
+    <section class="list-section" aria-labelledby="keys-heading">
+      <div class="list-heading">
+        <h2 id="keys-heading">Issued keys</h2><.form
+          for={@filter_form}
+          id="api-key-filter-form"
+          phx-change="filter"
+        >
+          <.input
+            field={@filter_form[:agent_id]}
+            id="key-agent-filter"
+            label="Filter by agent"
+            type="select"
+            options={@agent_options}
+            prompt="All accessible agents"
+          />
+        </.form>
+      </div>
+      <div id="api-key-list" phx-update="stream">
+        <p id="api-keys-empty" class="hidden only:block muted py-8">
+          No keys match your current access and filter. Create a key for an active agent to connect your application.
+        </p>
+        <div :for={{id, key} <- @streams.keys} id={id} class="resource-row key-row">
+          <div class="min-w-0">
+            <p class="font-medium break-words">{key.label}</p><p class="muted text-sm mt-1 break-words">
+              {key.agent_name}
+            </p><p class="resource-identifier muted mt-1">{key.prefix}…</p><p class="muted text-sm mt-2">
+              {if key.expires_at,
+                do: "Expires #{Calendar.strftime(key.expires_at, "%d %b %Y, %H:%M")} UTC",
+                else: "No expiration"}
+            </p><p class="resource-status mt-2" data-status={ApiKeys.status(key)}>
+              {String.capitalize(to_string(ApiKeys.status(key)))}<span
+                :if={key.agent_status == :suspended}
+                class="muted"
+              > · Agent suspended</span><span
+                :if={@current_scope.organization.status == :suspended}
+                class="muted"
+              > · Organization suspended</span>
+            </p>
+          </div>
+          <div :if={@manage? && ApiKeys.status(key) == :active} class="row-actions">
+            <button
+              :if={key.agent_status == :active && @current_scope.organization.status == :active}
+              id={"rotate-key-#{key.id}"}
+              type="button"
+              class="button-secondary"
+              phx-click="rotate"
+              phx-value-id={key.id}
+              phx-disable-with="Opening…"
+            >Rotate</button>
+            <button
+              id={"revoke-key-#{key.id}"}
+              type="button"
+              class="button-secondary"
+              phx-click="revoke"
+              phx-value-id={key.id}
+              phx-disable-with="Revoking…"
+              data-confirm="Revoke this key? Applications using it will lose access immediately."
+            >Revoke</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</Layouts.app>

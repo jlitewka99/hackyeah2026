@@ -8,6 +8,7 @@ defmodule AiControlWeb.OrganizationAuth do
   import Plug.Conn, except: [assign: 3]
 
   alias AiControl.Organizations
+  alias AiControl.Organizations.Access, as: OrganizationAccess
   alias AiControlWeb.UserAuth
 
   def require_organization(conn, _) do
@@ -36,6 +37,20 @@ defmodule AiControlWeb.OrganizationAuth do
       |> put_view(html: AiControlWeb.ErrorHTML)
       |> render(:"403")
       |> halt()
+    end
+  end
+
+  def require_permission(conn, permission) do
+    case OrganizationAccess.authorize(conn.assigns.current_scope, permission) do
+      {:ok, scope} ->
+        Plug.Conn.assign(conn, :current_scope, scope)
+
+      _ ->
+        conn
+        |> put_status(:forbidden)
+        |> put_view(html: AiControlWeb.ErrorHTML)
+        |> render(:"403")
+        |> halt()
     end
   end
 
@@ -85,13 +100,23 @@ defmodule AiControlWeb.OrganizationAuth do
         AiControlWeb.OrganizationMemberAccessLive
       ]
 
-    if manager_page? && !Organizations.managers?(socket.assigns.current_scope) do
+    permission = page_permission(socket.view)
+
+    denied? =
+      permission &&
+        !match?({:ok, _}, OrganizationAccess.authorize(socket.assigns.current_scope, permission))
+
+    if (manager_page? && !Organizations.managers?(socket.assigns.current_scope)) || denied? do
       {:halt,
        socket
-       |> put_flash(:error, "Member management access is required.")
+       |> put_flash(:error, "Access to this page is no longer available.")
        |> redirect(to: ~p"/organizations/#{socket.assigns.current_scope.organization.id}")}
     else
       {:cont, socket}
     end
   end
+
+  defp page_permission(AiControlWeb.OrganizationAgentsLive), do: "agents.read"
+  defp page_permission(AiControlWeb.OrganizationApiKeysLive), do: "api_keys.read"
+  defp page_permission(_), do: nil
 end

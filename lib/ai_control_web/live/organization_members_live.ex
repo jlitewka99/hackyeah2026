@@ -20,13 +20,14 @@ defmodule AiControlWeb.OrganizationMembersLive do
     attrs = Map.put(invitation, "grants", OrganizationUI.grant_params(params["access"] || %{}))
 
     case Invitations.issue(socket.assigns.current_scope, attrs, &url(~p"/invitations/#{&1}")) do
-      {:ok, _} ->
+      {:ok, issued} ->
         {:noreply,
          socket
          |> assign(
            :invitation_form,
            to_form(Invitations.change_invitation(attrs), as: :invitation)
          )
+         |> assign(:access_form, OrganizationUI.access_form(issued.grants, issued.role))
          |> put_flash(:info, "Invitation sent. It expires in 24 hours.")
          |> refresh()}
 
@@ -78,8 +79,10 @@ defmodule AiControlWeb.OrganizationMembersLive do
     scope = socket.assigns.current_scope
     {:ok, members} = Organizations.list_members(scope)
     {:ok, invitations} = Organizations.list_invitations(scope)
+    {:ok, agents} = AiControl.Agents.list_assignable_agents(scope)
 
     socket
+    |> assign(:agent_options, Enum.map(agents, &{&1.name, &1.id}))
     |> assign(
       :role_options,
       if(Organizations.privileged?(scope),

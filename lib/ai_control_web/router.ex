@@ -22,6 +22,23 @@ defmodule AiControlWeb.Router do
     plug :accepts, ["json"]
   end
 
+  pipeline :agent_api do
+    plug AiControlWeb.ApiKeyAuth
+  end
+
+  pipeline :agents_read do
+    plug :require_permission, "agents.read"
+  end
+
+  pipeline :api_keys_read do
+    plug :require_permission, "api_keys.read"
+  end
+
+  scope "/v1", AiControlWeb do
+    pipe_through [:api, :agent_api]
+    get "/auth", ApiAuthController, :show, log: false
+  end
+
   scope "/", AiControlWeb do
     pipe_through :browser
     get "/", PageController, :home
@@ -68,6 +85,30 @@ defmodule AiControlWeb.Router do
         {AiControlWeb.WorkspaceNavigation, :default}
       ] do
       live "/", OrganizationOverviewLive, :show
+    end
+  end
+
+  scope "/organizations/:organization_id", AiControlWeb do
+    pipe_through [:browser, :require_authenticated_user, :require_organization, :agents_read]
+
+    live_session :agents,
+      on_mount: [
+        {AiControlWeb.OrganizationAuth, :require_organization},
+        {AiControlWeb.WorkspaceNavigation, :default}
+      ] do
+      live "/agents", OrganizationAgentsLive, :index
+    end
+  end
+
+  scope "/organizations/:organization_id", AiControlWeb do
+    pipe_through [:browser, :require_authenticated_user, :require_organization, :api_keys_read]
+
+    live_session :api_keys,
+      on_mount: [
+        {AiControlWeb.OrganizationAuth, :require_organization},
+        {AiControlWeb.WorkspaceNavigation, :default}
+      ] do
+      live "/api-keys", OrganizationApiKeysLive, :index
     end
   end
 

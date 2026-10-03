@@ -34,7 +34,10 @@ defmodule AiControlWeb.OrganizationMemberAccessLive do
   defp load(socket, id) do
     case Organizations.get_member(socket.assigns.current_scope, id) do
       {:ok, member} ->
+        {:ok, agents} = AiControl.Agents.list_assignable_agents(socket.assigns.current_scope)
+
         assign(socket,
+          agent_options: Enum.map(agents, &{&1.name, &1.id}),
           member: member,
           form: OrganizationUI.access_form(member.grants, member.role)
         )

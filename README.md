@@ -121,17 +121,17 @@ Function grants are independent: `ai.use`, `agents.read`, `agents.manage`,
 `events.read`, `events.export`, `budgets.read`, `budgets.manage`,
 `signatures.read`, and `signatures.manage`. An empty grant denies access.
 Resource grants contain specific agent IDs or model names, or the explicit
-`["*"]` selector for all organization resources of that type. The member editor
-currently offers the all-resource selectors. Admin edits preserve grants they
+`["*"]` selector for all organization resources of that type. Invitation and member
+forms offer concrete organization agents and all-resource selectors. Admin edits preserve grants they
 do not have permission to manage.
 
 `AiControl.Organizations.Access.authorize/3` refreshes database access before
-checking capabilities and resources. Concrete selectors require an ownership
-adapter implementing `AiControl.Organizations.ResourceResolver`, configured
-under `:ai_control, :organization_resource_resolver`. Without that adapter,
-specific assignments and AI resource checks fail closed. Agent/model registries,
-policy restrictions, and runtime enforcement connect in roadmap steps 3, 5,
-and 6; this step supplies their access model and authorization boundary.
+checking capabilities and resources. The default
+`AiControl.Organizations.ResourceResolver` verifies agents against the organization
+registry. An adapter can still be configured under
+`:ai_control, :organization_resource_resolver`. Concrete model assignments fail
+closed until the model registry arrives in step 6. Policy restrictions and runtime
+enforcement follow in later roadmap steps.
 
 Members choose a workspace at `/organizations`; a single available organization
 opens automatically after sign-in. Active organization context comes from the
@@ -175,6 +175,58 @@ content-free failures and must keep request/response objects out of logs.
 Theme selection defaults to the system setting
 and remembers an explicit choice of system, light, or dark appearance.
 
+## Agents and API keys
+
+Upgrade an existing installation with `mix ecto.migrate`. Migration
+`20261003161802_create_agents_and_api_keys` adds both tables and a composite foreign
+key that prevents a key from referencing another organization's agent. There is
+no data backfill. Restart the application and rebuild assets after upgrading.
+
+Open `/organizations/:organization_id/agents` to register, rename, suspend, or
+restore agents. Reading requires `agents.read`; mutations require `agents.manage`
+and access to the target agent. Creating an agent also requires the explicit
+all-agents selector `["*"]`. Lists show only currently assigned agents.
+
+Open `/organizations/:organization_id/api-keys` to issue, filter, rotate, or revoke
+keys. Reading and mutations require `api_keys.read` and `api_keys.manage`
+respectively, with the target agent selected in the member's grants. These
+permissions are independent of agent-registry access: a key administrator does
+not need `agents.read`. Grant editors only offer agents the editor may delegate.
+
+Keys represent agents independently of the human creator's membership or session.
+They contain 32 cryptographically random bytes, encoded as
+`aic_<uuid>_<base64url-secret>`. Only the SHA-256 hash of the complete token is
+stored; list prefixes derive solely from the public UUID. The secret is returned
+once on creation or rotation. Copy it to your secret manager before dismissing the
+reveal. Navigation, refresh, reconnect, or loss of management access clears it;
+the application never saves it in browser storage, the URL, or the session.
+
+Expiration defaults to 90 days from issuance or rotation. The form also accepts
+a future UTC date or no expiration. Rotation creates one successor and revokes
+the old key in a single transaction. Validation failure rolls back both changes;
+concurrent rotations permit exactly one successor. Revocation is permanent.
+Suspending an organization or agent blocks all its keys. Restoration re-enables
+only keys that have neither expired nor been revoked.
+
+`GET /v1/auth` checks the database on every request and returns only
+`organization_id`, `agent_id`, and `api_key_id`. The organization and agent always
+come from the key. A missing, malformed, expired, revoked, or suspended credential
+returns the same `401` with `WWW-Authenticate: Bearer`. Responses use
+`Cache-Control: no-store`. Phoenix's request logger is disabled; shared request
+telemetry records only the route template, status and timing, without headers or
+credentials.
+
+```sh
+# Load AI_CONTROL_API_KEY from your secret manager; do not commit its value.
+curl --fail-with-body http://localhost:4000/v1/auth \
+  -H "Authorization: Bearer ${AI_CONTROL_API_KEY}"
+```
+
+This step provides identity and credential administration. LLM gateway endpoints,
+policy enforcement and the model registry remain subsequent work. The existing
+security and audit contracts remain available; auditing agent/key administration
+is outside this change.
+
 ## Security decisions and audit
 
 Step 4 introduces `AiControl.Security.SecurityContext`, `Detection`, `GuardResult`,
@@ -190,7 +242,8 @@ sets identity on the server. Request and assessment IDs are generated locally.
 `SecurityContext.new/1` is reserved for trusted identity adapters, including
 verified agent identities from step 3. Struct validation complements the
 gateway's authentication and resource authorization; it does not grant AI use.
-Agent and API-key UUIDs currently have no dependency on their future tables.
+Security contexts accept agent and API-key UUIDs from the verified Bearer principal.
+The security contracts remain independent of the registry schemas.
 
 The minimal policy contract is an immutable `AiControl.Policy.Snapshot`:
 
