@@ -126,7 +126,7 @@ defmodule AiControl.Gateway.LiveBudgetTokenizerTest do
     activate_gateway_policy(scope, %{
       "schema_version" => 2,
       "guards" => guards,
-      "budgets" => %{"organization" => %{"tokens_per_hour" => 10000}}
+      "budgets" => %{"organization" => %{"tokens_per_hour" => 10_000}}
     })
 
     id = Ecto.UUID.generate()
