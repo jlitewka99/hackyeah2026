@@ -112,4 +112,20 @@ defmodule AiControlWeb.WorkspaceSwitcherTest do
     assert has_element?(view, "##{@desktop}-empty", "No workspaces available")
     assert has_element?(view, "#email_form")
   end
+
+  test "new workspaces update the open agents and API keys panels", %{conn: conn} do
+    scope = organization_fixture()
+    conn = log_in_user(conn, scope.user)
+
+    for page <- ["agents", "api-keys"] do
+      {:ok, view, _} = live(conn, "/organizations/#{scope.organization.id}/#{page}")
+      view |> element("##{@desktop}-trigger") |> render_click()
+
+      assert {:ok, organization} =
+               Organizations.create_organization(scope, %{name: "New workspace from #{page}"})
+
+      _ = :sys.get_state(view.pid)
+      assert has_element?(view, "##{@desktop}-option-#{organization.id}-link")
+    end
+  end
 end

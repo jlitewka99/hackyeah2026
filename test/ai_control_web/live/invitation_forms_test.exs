@@ -2,6 +2,7 @@ defmodule AiControlWeb.InvitationFormsTest do
   use AiControlWeb.ConnCase, async: false
 
   import AiControl.AccountsFixtures
+  import AiControl.AgentsFixtures
   import AiControl.OrganizationsFixtures
   import Phoenix.LiveViewTest
   import Swoosh.TestAssertions, only: [set_swoosh_global: 1]
@@ -9,6 +10,33 @@ defmodule AiControlWeb.InvitationFormsTest do
   alias AiControl.Organizations
 
   setup :set_swoosh_global
+
+  test "invitation form delegates multiple concrete agents", %{conn: conn} do
+    scope = organization_fixture()
+    agent = agent_fixture(scope)
+    other = agent_fixture(scope)
+
+    {:ok, view, _} =
+      live(log_in_user(conn, scope.user), ~p"/organizations/#{scope.organization.id}/members")
+
+    assert has_element?(view, "#invite-access-agent-#{agent.id}[type=checkbox]")
+
+    view
+    |> form("#member-invitation-form",
+      invitation: %{email: "agents@example.test", role: "user"},
+      access: %{
+        permissions: ["agents.read"],
+        agents: ["false", agent.id, "false", other.id],
+        all_agents: "false"
+      }
+    )
+    |> render_submit()
+
+    assert {:ok, [invitation]} = Organizations.list_invitations(scope)
+    assert Enum.sort(invitation.grants.agents) == Enum.sort([agent.id, other.id])
+    assert has_element?(view, "#invite-access-agent-#{agent.id}[checked]")
+    assert has_element?(view, "#invite-access-agent-#{other.id}[checked]")
+  end
 
   test "member invitation shows email errors and clears them after successful submission", %{
     conn: conn

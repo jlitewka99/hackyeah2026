@@ -52,7 +52,7 @@ Checkboxy oznaczają potwierdzone zakończenie kroku, a nie samą obecność kod
 
 - [x] Krok 1 — Logowanie i konto organizatora
 - [x] Krok 2 — Organizacje, członkostwa i zaproszenia
-- [ ] Krok 3 — Agenci i klucze API
+- [x] Krok 3 — Agenci i klucze API
 - [x] Krok 4 — Wspólna domena decyzji i podstawowy audyt
 - [ ] Krok 5 — Centralny Policy Engine
 - [ ] Krok 6 — Gateway LLM i konfiguracja środowiska
@@ -219,6 +219,54 @@ sidecara pozostaje osobnym zadaniem.
 
 **Gotowe, gdy:** poprawny klucz identyfikuje agenta; klucz odwołany lub przypisany do zawieszonej organizacji nie działa.
 
+**Odbiór 2026-10-03:** zaimplementowano na gałęzi
+`JL/step-3-agents-api-keys`, opartej na aktualnym `main` wraz ze scalonymi
+poprawkami kroku 2, przełącznikiem organizacji i infrastrukturą audytu kroku 4
+(`main` na commicie `c29b07f`). Rejestr obsługuje utworzenie, zmianę nazwy, zawieszenie
+i przywrócenie. Klucze mają sekret z 32 losowych bajtów, hash SHA-256 całego
+tokenu i prefiks z publicznego UUID. Domyślna ważność wynosi 90 dni;
+dostępne są przyszła data UTC i brak wygaśnięcia. Rotacja w jednej transakcji
+tworzy następcę i odwołuje poprzedni klucz. Zgodność organizacji klucza
+i agenta wymusza złożony klucz obcy.
+
+`GET /v1/auth` zwraca wyłącznie trzy identyfikatory principalu. Wszystkie
+błędy poświadczenia dają jednakowe 401, `WWW-Authenticate: Bearer`
+i `Cache-Control: no-store`. Każde żądanie sprawdza aktualny stan bazy;
+klucz pozostaje tożsamością agenta po usunięciu członkostwa autora.
+Operacje panelu sprawdzają aktualne uprawnienia i selektory. Domyślny
+resolver weryfikuje rzeczywistych agentów; przydziały konkretnych modeli
+pozostają zamknięte do kroku 6. Formularze zaproszeń i dostępu pozwalają
+wybrać kilku agentów w granicach delegacji.
+
+**Weryfikacja po integracji z najnowszym `main`:** `mix precommit` przeszedł
+z 259 testami, bez ostrzeżeń
+kompilacji i uwag Credo; `mix assets.build`, Dialyzer, Sobelow oraz audyt
+zależności przeszły. Testy użyły wydzielonej instancji PostgreSQL
+na porcie 54883 i bazy `ai_control_teststep3`. Obejmują izolację,
+uprawnienia, wildcard i konkretne selektory, delegację, złożony klucz obcy,
+Bearer, granicę wygaśnięcia, odwołanie, zawieszenie/przywrócenie,
+rollback oraz konkurujące rotacje na osobnych połączeniach, bez usypiania.
+Sprawdzono też usuwanie sekretu po zmianie dostępu i jego brak w logach,
+powiadomieniach oraz późniejszych odpowiedziach; zachowano regresje
+sesji i formularzy zaproszeń kroku 2. Dodatkowy test sprawdza aktualizację
+przełącznika organizacji w otwartych panelach agentów i kluczy.
+
+Odbiór w przeglądarce objął desktop 1440×1000 i mobile 390×844,
+oba motywy, listy, filtrowanie, walidację, widoczny fokus klawiatury,
+kopiowanie, zamknięcie oraz utratę połączenia. Po rozłączeniu wartość
+sekretu i atrybut `value` znikały z DOM; ponowne połączenie nie odtwarzało
+sekretu. Zapisano 21 końcowych zrzutów na syntetycznych danych
+w oddzielnej bazie podglądu; nie było poziomego overflow. Recenzent
+impeccable wskazał ucinanie nazw w selektorze przydziałów; po zamianie
+na zawijane checkboxy ocenił tę poprawkę jako rozwiązaną z werdyktem
+`ship` dla ocenianych poprawek. Fizyczne urządzenia mobilne nie były
+testowane. Przegląd dokumentacyjny impeccable zachował istniejący
+system wizualny; zastanego driftu sidecara nie naprawiano w tym rozszerzeniu.
+Gateway, pełne zarządzanie politykami i rejestr modeli pozostają
+w kolejnych krokach. Istniejące kontrakty decyzji, minimalnego silnika polityk
+i audytu kroku 4 są zachowane; audyt administracji agentów i kluczy
+pozostaje poza zakresem tej zmiany.
+
 ### Krok 4. Wspólna domena decyzji i podstawowy audyt
 
 - Utworzyć `SecurityContext`, `GuardResult`, `Detection`, `SecurityAssessment` i `Decision`.
@@ -247,8 +295,9 @@ i kluczy są opcjonalnymi UUID bez zależności od schematów kroku 3.
 
 Zastąpiono surowe logi HTTP bezpiecznymi metadanymi i serwerowymi UUID,
 wyłączono debugger oraz RequestLogger, logi wyjątków Bandita i domyślne logi
-ponowień/przekierowań Req. Rozwojowe i produkcyjne uruchomienie wymaga osobnego
-`AUDIT_FINGERPRINT_KEY`; konfigurację i kontrakty opisano w README.
+ponowień/przekierowań Req. Produkcyjne uruchomienie wymaga osobnego
+`AUDIT_FINGERPRINT_KEY`; środowisko rozwojowe używa lokalnego klucza z
+`config/dev.exs`. Konfigurację i kontrakty opisano w README.
 
 `mix precommit` przeszedł: 203 testy po dołączeniu poprawek kroku 2 z `main`,
 brak ostrzeżeń kompilacji aplikacji i uwag
