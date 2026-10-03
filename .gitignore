@@ -49,3 +49,6 @@ npm-debug.log
 
 # Local screenshots used for design verification.
 /.impeccable/review/
+
+# Expert language server logs.
+**/.expert/expert.log
