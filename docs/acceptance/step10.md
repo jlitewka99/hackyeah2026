@@ -1,15 +1,17 @@
 # Step 10 acceptance
 
 Implementation covers the Qwen provider, optional response moderation, policy v3,
-content-free evidence, Polish benchmark and three-process container. Synthetic
+content-free evidence, Polish benchmark and supervised container. After merging
+Step 9, Phoenix, NER, its budget tokenizer and Qwen are four supervised processes.
+Synthetic
 fixtures only; this is not a production safety or throughput guarantee. Final
 model selection and every Prompt Guard implementation/access task belong to 11B.
 
 ## Local verification — 2026-10-04
 
 - `mix precommit`: strict compilation, formatting, lockfile, Credo, ExUnit and
-  JavaScript regressions pass after integrating Steps 8 and 12A from main:
-  **430 ExUnit tests**, five opt-in tests excluded,
+  JavaScript regressions pass after integrating Steps 8, 9 and 12A from main:
+  **459 ExUnit tests**, seven opt-in tests excluded,
   and **three JavaScript tests**.
 - `mix assets.build`: Tailwind/esbuild pass.
 - `mix dialyzer`: zero errors. Production compilation passes.
@@ -89,7 +91,7 @@ Documentation comparison preserves DESIGN.md and the explicitly deferred stale
 ## Container and remaining scope
 
 Docker smoke checks real Qwen/NER release transport, private loopback listeners,
-health, migrations/bootstrap, all three child failures and SIGTERM. The local
+health, migrations/bootstrap, all four child failures and SIGTERM. The local
 Docker daemon is unavailable; Linux CI must supply the container evidence.
 Step 10's checkbox remains unchecked until its real-model and container gates
 are recorded. Full output filtering, budget settlement and tool enforcement

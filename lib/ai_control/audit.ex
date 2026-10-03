@@ -3,6 +3,7 @@ defmodule AiControl.Audit do
   import Ecto.Query
 
   alias AiControl.Audit.Event
+  alias AiControl.Budgets.Usage
   alias AiControl.Organizations
   alias AiControl.Organizations.{Access, Grants}
   alias AiControl.Policies.Configuration
@@ -22,15 +23,24 @@ defmodule AiControl.Audit do
                   @policy_events
   @snapshot_fields ~w(status role permissions agent_count model_count grants_fingerprint grants_fingerprint_key_id user_id previous_superadmin_id next_superadmin_id membership_id invitation_id policy_version_id policy_checksum policy_profile policy_source)a
 
-  @gateway_codes ~w(completed invalid_request input_too_large forbidden agent_not_allowed model_not_allowed policy_unavailable rate_limited capacity_exceeded guard_unavailable policy_blocked redaction_unavailable audit_unavailable upstream_timeout upstream_unavailable upstream_rejected upstream_invalid_response response_too_large model_unavailable model_digest_mismatch)
+  @gateway_codes ~w(completed invalid_request input_too_large forbidden agent_not_allowed model_not_allowed policy_unavailable rate_limited capacity_exceeded guard_unavailable policy_blocked redaction_unavailable audit_unavailable upstream_timeout upstream_unavailable upstream_rejected upstream_invalid_response response_too_large model_unavailable model_digest_mismatch request_budget_exceeded token_budget_exceeded budget_unavailable budget_conflict tokenizer_unavailable)
   def gateway_codes, do: @gateway_codes
 
   @doc "Content-free terminal evidence from the gateway's verified identity adapter."
-  def record_gateway(identity, request_id, code, duration_us, policy \\ nil, stage \\ :input) do
+  def record_gateway(
+        identity,
+        request_id,
+        code,
+        duration_us,
+        policy \\ nil,
+        stage \\ :input,
+        budget \\ nil
+      ) do
     with true <-
            Validation.uuid?(request_id) && code in @gateway_codes &&
              Validation.duration?(duration_us) && stage in [:input, :output],
          true <- is_nil(policy) || Snapshot.valid?(policy),
+         true <- budget_evidence?(budget),
          {:ok, attrs} <- gateway_identity(identity) do
       event =
         struct!(
@@ -45,13 +55,72 @@ defmodule AiControl.Audit do
             policy_checksum: if(policy, do: policy.checksum),
             reason_codes: [code],
             occurred_at: DateTime.utc_now(),
-            duration_us: duration_us
+            duration_us: duration_us,
+            data: if(budget, do: %{budget: budget}, else: %{})
           })
         )
 
       persist(event)
     else
       _ -> {:error, :invalid_audit_data}
+    end
+  end
+
+  defp budget_evidence?(nil), do: true
+
+  defp budget_evidence?(
+         %{
+           reservation_id: id,
+           window: window,
+           status: status,
+           reserved_tokens: tokens,
+           usage: usage,
+           overrun: overrun,
+           cost: cost,
+           currency: currency
+         } = data
+       ) do
+    map_size(data) == 8 && budget_identity?(id, window, status) &&
+      budget_values?(tokens, usage, overrun) && budget_cost?(cost) && budget_currency?(currency)
+  end
+
+  defp budget_evidence?(_), do: false
+
+  defp budget_identity?(id, window, status) do
+    Validation.uuid?(id) && is_binary(window) &&
+      match?({:ok, _, _}, DateTime.from_iso8601(window)) &&
+      status in ~w(admitted reserved dispatching uncertain settled released)
+  end
+
+  defp budget_values?(tokens, usage, overrun) do
+    is_integer(tokens) && tokens >= 0 && is_boolean(overrun) &&
+      (is_nil(usage) || match?({:ok, ^usage}, Usage.normalize(usage)))
+  end
+
+  defp budget_cost?(cost) when cost in ["not configured", "unavailable"], do: true
+  defp budget_cost?(cost) when is_binary(cost), do: Regex.match?(~r/\A\d+(\.\d+)?\z/, cost)
+  defp budget_cost?(_), do: false
+  defp budget_currency?(nil), do: true
+
+  defp budget_currency?(currency) when is_binary(currency),
+    do: Regex.match?(~r/\A[A-Z]{3}\z/, currency)
+
+  defp budget_currency?(_), do: false
+
+  def record_budget_reconciliation(scope, id, status) when status in ~w(settled released) do
+    with {:ok, current} <- Access.authorize(scope, "budgets.manage") do
+      persist(%Event{
+        organization_id: current.organization.id,
+        actor_type: :user,
+        user_id: current.user.id,
+        request_id: Ecto.UUID.generate(),
+        kind: :administrative,
+        event_type: "budget.reconciled",
+        target_id: id,
+        stage: :administrative,
+        occurred_at: DateTime.utc_now(),
+        data: %{status: status}
+      })
     end
   end
 
@@ -271,7 +340,15 @@ defmodule AiControl.Audit do
     %{
       guards:
         Enum.map(assessment.results, fn result ->
-          Map.take(result, [:guard, :status, :signals, :duration_us, :error_code, :evidence])
+          Map.take(result, [
+            :guard,
+            :status,
+            :signals,
+            :duration_us,
+            :error_code,
+            :usage,
+            :evidence
+          ])
         end),
       detections:
         Enum.map(

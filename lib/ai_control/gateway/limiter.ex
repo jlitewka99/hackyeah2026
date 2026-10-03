@@ -4,6 +4,13 @@ defmodule AiControl.Gateway.Limiter do
 
   alias AiControl.Gateway.Config
 
+  def check_ip(ip) do
+    case hit({:ingress_ip, ip}, 60_000, Config.get(:ip_requests_per_minute)) do
+      {:allow, _} -> :ok
+      {:deny, ms} -> {:error, {:rate_limited, max(1, div(ms + 999, 1000))}}
+    end
+  end
+
   def check(identity) do
     key =
       case identity do

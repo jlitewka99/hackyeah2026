@@ -74,7 +74,7 @@
       Version {short(@current.version.id)} · SHA-256 {@current.version.checksum}
     </p>
     <p class="muted mt-3">
-      Deterministic detection follows these settings. Budget accounting is configured for a later stage.
+      Deterministic detection and hourly request and token limits follow this active policy.
     </p>
     <details
       class="mt-4"
@@ -533,8 +533,8 @@
         open={MapSet.member?(@open_sections, "budgets")}
       >
         <summary phx-click="toggle_section" phx-value-section="budgets">Budget limits</summary>
-        <p class="muted mt-3">
-          Configuration only; accounting is not connected yet. Leave a limit empty for not configured. Zero denies usage once accounting is connected. Hourly windows use UTC.
+        <p id="policy-budget-help" class="muted mt-3">
+          Request and token limits are enforced per UTC hour. An empty limit (null in YAML) is not configured; zero denies new requests or token reservations. Activating a policy does not reset usage or existing reservations. Workflow tool limits will apply when tool execution is connected.
         </p>
         <fieldset :for={{scope, fields} <- @budget_fields} class="mt-4">
           <legend class="font-medium">{label(scope)}</legend>

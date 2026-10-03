@@ -101,7 +101,7 @@ Checkboxy oznaczają potwierdzone zakończenie kroku, a nie samą obecność kod
 - [x] Krok 6 — Gateway LLM i konfiguracja środowiska
 - [x] Krok 7 — Deterministyczne guardy, NER i sygnatury
 - [x] Krok 8 — Output filtering
-- [ ] Krok 9 — Budżety i rozliczanie użycia
+- [x] Krok 9 — Budżety i rozliczanie użycia
 - [ ] Krok 10 — Semantyczne wykrywanie prompt injection
 - [ ] Krok 11 — Dashboard i zamknięcie wymaganego MVP
 - [ ] Krok 12 — Tool firewall i ograniczenia zasobów
@@ -536,6 +536,8 @@ wizualnego; zastanego driftu nie naprawiano w tym rozszerzeniu.
 
 ### Krok 9. Budżety i rozliczanie użycia
 
+**Stan implementacji (2026-10-04):** trwałe liczniki, rezerwacje, rozliczanie usage/kosztów, tokenizer i integracja gatewaya są zaimplementowane na `JL/step-9-budgets`. `mix precommit`: 441 testów po integracji aktualnego `main` (8/12A); sidecar: 4 testy; rzeczywisty Ollama 0.35.1: zgodność czterech promptów (23/60/273/328 tokenów). Odbiór Policies obejmuje desktop/mobile, oba motywy i klawiaturę. [Wyniki odbioru](docs/acceptance/step9.md). [CI](https://github.com/jlitewka99/hackyeah2026/actions/runs/37158859316) potwierdziło kontener, testy, analizę typów, jakość i bezpieczeństwo; krok 9 spełnia kryteria odbioru. Wspólny test rzeczywistego Ollama i NER wyjścia z kroku 8 potwierdza rozliczenie przed redakcją (34 tokeny wejścia, 15 wyjścia). Integracja semantyki pozostaje do odbioru po scaleniu kroku 10; narzędzia/workflowy podłączają kroki 12 i 15.
+
 **Praca równoległa:** po ukończeniu 7 realizować równolegle z 8, 10 i 12A. Nie wymaga ukończenia 8 do budowy liczników i integracji z istniejącym gatewayem; wspólne scenariusze blokady wyjścia są sprawdzane po scaleniu.
 
 - Wprowadzić limity żądań i tokenów na godzinę dla organizacji i agentów oraz wywołań narzędzi na workflow. Pełne rozliczanie narzędzi i workflowów zostaje podłączone w krokach 12 i 15.
@@ -559,7 +561,7 @@ wizualnego; zastanego driftu nie naprawiano w tym rozszerzeniu.
 **Praca równoległa:** po 7, równolegle z 8, 9 i 12A. Cały adapter Prompt Guard, dostęp do wag oraz porównanie modeli należą do **11B**; nie blokują pierwszej fali. Testy semantyki z pełnym output filtering, rozliczeniami i wykonywaniem narzędzi kończą 12B i 11B.
 
 - Wymienny provider, adapter HTTP `Qwen3Guard-Gen-0.6B` przez `Req` oraz mocki. Zachować `Guard.assess/4`, `ready?/1` i fazy po redakcji deterministycznej oraz NER. Ograniczyć odpowiedź HTTP; bez ponowień i przekierowań.
-- Wewnętrzne `/analyze` i `/ready`, loopback, trzeci proces kontenera Phoenix + NER. Transformers na CPU FP32 bez quantization; manifest przypina rewizję wag, tokenizer, template i SHA-256. Pobieranie przy buildzie, weryfikacja i ładowanie offline przy starcie. Healthcheck, SIGTERM i awaria dowolnego procesu obejmują wszystkie trzy procesy.
+- Wewnętrzne `/analyze` i `/ready`, loopback, dodatkowy proces kontenera Phoenix + NER. Po scaleniu kroku 9 kontener obejmuje też tokenizer rozliczeń: NER na 8001, tokenizer na 8002, Qwen na 8003. Transformers na CPU FP32 bez quantization; manifest przypina rewizję wag, tokenizer, template i SHA-256. Pobieranie przy buildzie, weryfikacja i ładowanie offline przy starcie. Healthcheck, SIGTERM i awaria dowolnego procesu obejmują wszystkie cztery procesy.
 - Skanować wszystkie pola tokenizerem: fragmenty do 2048 tokenów, zakładka 256, miejsce na template i 128 tokenów generacji, jeden aktywny skan, maksymalnie 128 fragmentów i 30 sekund na wywołanie. Niepełne pokrycie, błędne zakresy UTF-8, timeout, nieznane etykiety, uszkodzony wynik i limit pracy oznaczają błąd; wymagany guard blokuje.
 - Injection mapuje tylko kategorię `Jailbreak`; relaxed/balanced reagują na `Unsafe`, strict także na `Controversial`. Schema v3 pozwala wybierać severity oraz `allow/block`, bez progów pewności. Zachować ustawienia i checksumy v1/v2; upgrade zmienia wyłącznie draft.
 - Osobny guard `moderation`, domyślnie wyłączony, oraz kategoria `content_safety`. Wybierać severity i kategorie Qwen. Korzystać z bieżących pól odpowiedzi oraz zaakceptowanego wejścia po redakcji, przekazanego tylko w opcjach wywołania. Gdy cały kontekst z fragmentem odpowiedzi, template i generacją nie mieści się w oknie modelu, zwrócić błąd zamiast ucięcia.

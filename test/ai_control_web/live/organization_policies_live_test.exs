@@ -12,6 +12,45 @@ defmodule AiControlWeb.OrganizationPoliciesLiveTest do
     %{scope: scope, conn: log_in_user(conn, scope.user)}
   end
 
+  test "budget form preserves unlimited, zero and hourly values through activation", %{
+    conn: conn,
+    scope: scope
+  } do
+    {:ok, view, _} = live(conn, ~p"/organizations/#{scope.organization.id}/policies")
+    view |> element("#policy-new") |> render_click()
+    view |> element("#policy-budgets > summary") |> render_click()
+    assert has_element?(view, "#policy-budget-help", "UTC hour")
+    assert has_element?(view, "#policy-budget-help", "does not reset")
+
+    view
+    |> form("#policy-form",
+      policy: %{
+        budgets: %{
+          organization: %{requests_per_hour: "0", tokens_per_hour: "5000"},
+          agent: %{requests_per_hour: "", tokens_per_hour: "2000"},
+          workflow: %{tool_calls: "3"}
+        }
+      }
+    )
+    |> render_submit()
+
+    assert has_element?(view, "#policy-activate")
+    view |> element("#policy-activate") |> render_click()
+    {:ok, current} = Policies.current(scope)
+
+    assert current.snapshot.settings["budgets"]["organization"] == %{
+             "requests_per_hour" => 0,
+             "tokens_per_hour" => 5000
+           }
+
+    assert current.snapshot.settings["budgets"]["agent"] == %{
+             "requests_per_hour" => nil,
+             "tokens_per_hour" => 2000
+           }
+
+    assert current.snapshot.settings["budgets"]["workflow"]["tool_calls"] == 3
+  end
+
   test "v3 upgrade keeps the active v1 policy until deliberate activation", %{
     conn: conn,
     scope: scope
