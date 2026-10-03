@@ -519,7 +519,8 @@ formats require a new catalog. Checksum validity does not prove ownership or
 that an identifier exists.
 
 Credential signatures cover private-key PEM (including incomplete keys),
-three-segment JWT/JWS with decoded header/base64url validation, AWS/GitHub/Google
+three-segment JWT/JWS with decoded header/base64url validation (including optional
+types and detached payloads per [RFC 7515](https://www.rfc-editor.org/rfc/rfc7515)), AWS/GitHub/Google
 formats, Bearer values, credential assignments and connection-string passwords.
 Contextual entropy excludes generic UUID/hash values and does not scan every
 random string. Known credential labels still classify literal hashes as possible

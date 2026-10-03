@@ -45,4 +45,28 @@ defmodule AiControl.Guards.SecretTest do
       assert result.detections == []
     end
   end
+
+  test "JWS supports arbitrary types and detached payloads but validates all segments" do
+    signed = Base.url_encode64(~s({"alg":"HS256","typ":"JOSE"}), padding: false)
+    unsigned = Base.url_encode64(~s({"alg":"none"}), padding: false)
+    bad_type = Base.url_encode64(~s({"alg":"HS256","typ":123}), padding: false)
+    signature = Base.url_encode64("synthetic-signature", padding: false)
+
+    for value <- ["#{signed}.YQ.#{signature}", "#{signed}..#{signature}", "#{unsigned}.."] do
+      {:ok, result} = Secret.assess(["Token: #{value}."], nil, nil, [])
+      assert Enum.any?(result.detections, &(&1.rule_id == "secret.jwt.v1"))
+    end
+
+    for value <- [
+          "#{signed}.YQ.",
+          "#{signed}.YQ.#{signature}.extra",
+          "prefix.#{signed}.YQ.#{signature}",
+          "#{bad_type}.YQ.#{signature}",
+          "#{signed}.a.#{signature}",
+          "#{signed}.YQ.a"
+        ] do
+      {:ok, result} = Secret.assess([value], nil, nil, [])
+      assert result.detections == []
+    end
+  end
 end

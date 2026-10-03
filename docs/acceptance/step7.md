@@ -6,7 +6,7 @@ quality benchmark or a throughput guarantee.
 ## Local evidence — 2026-10-03
 
 - `mix precommit`: formatting, strict compilation/Credo, lockfile, JavaScript and
-  ExUnit pass: **353 Elixir tests**, 2 opt-in tests excluded, and **3 JavaScript tests**.
+  ExUnit pass: **354 Elixir tests**, 2 opt-in tests excluded, and **3 JavaScript tests**.
 - `mix check.all`: Dialyzer passes with zero errors; Sobelow and dependency audit
   pass. Existing low-confidence upload-path finding remains unchanged.
 - `mix assets.build`: Tailwind/esbuild pass.
@@ -30,11 +30,19 @@ measurements. Default scores are recognizer scores, not model probabilities.
 
 ## Linux container evidence
 
-Pending the PR's **Phoenix and Polish NER container** CI job. The local Docker
-daemon is unavailable. Do not mark Step 7 complete before a successful Linux
-image build, real-model smoke and both child-failure/SIGTERM checks. CI executes
-`docker/smoke`, then preserves `/tmp/step7-ner-benchmark.json` as an artifact.
-Record its run URL, commit and measured values here after success.
+[Linux CI run 37155097455](https://github.com/jlitewka99/hackyeah2026/actions/runs/37155097455)
+passes on commit `46d50c3`. All five jobs pass, including **Phoenix and Polish NER
+container**: image build, health/readiness separation, non-root execution,
+loopback-only sidecar, real offline models, Elixir release HTTP transport and
+UTF-8 redaction, four Python tests, migrations, idempotent organizer bootstrap,
+both child-failure exits and clean SIGTERM. The local Docker daemon remains
+unavailable; these are actual Linux CI results.
+
+The preserved [benchmark JSON](step7-linux-ner-benchmark.json) measures 40 short
+synthetic analyses on Linux x86_64/glibc 2.36, Python 3.11.17, CPU threads 2:
+load **7856.8 ms**, p50 **105.4 ms**, p95 **155.5 ms**, peak RSS
+**1,049,505,792 bytes** (about 1001 MiB). This is single-process model smoke
+coverage, without gateway/network overhead or a production throughput claim.
 
 ## UI evidence
 
@@ -43,7 +51,9 @@ and YAML are covered by LiveView regressions. Browser evidence at 1440×1000 and
 390×844 in light/dark themes is stored locally under `.impeccable/review/step7-*`.
 Keyboard upgrade, native multi-select traversal and visible focus are exercised;
 both viewport widths have no horizontal overflow. Impeccable's single detector
-pass returned `[]`; final independent finish disposition is recorded after review.
+pass returned `[]`; the independent finish reviewer returned **ship**, with no
+material fixes. The required documentation comparison confirmed the incumbent
+design system and recorded the extension in the policy surface brief.
 The existing stale `.impeccable/design.json` is not repaired by this extension.
 
 ## Scope retained for later steps

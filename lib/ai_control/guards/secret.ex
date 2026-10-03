@@ -26,7 +26,7 @@ defmodule AiControl.Guards.Secret do
        ~r/(?<![A-Za-z0-9_])(?:AIza[A-Za-z0-9_-]{35}|ya29\.[A-Za-z0-9_-]{20,255})(?![A-Za-z0-9_-])/,
        always},
       {"secret.jwt.v1",
-       ~r/(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{2,2048}\.[A-Za-z0-9_-]{2,8192}\.[A-Za-z0-9_-]{0,2048}(?![A-Za-z0-9_.-])/,
+       ~r/(?<![A-Za-z0-9_.-])[A-Za-z0-9_-]{2,2048}\.[A-Za-z0-9_-]{0,8192}\.[A-Za-z0-9_-]{0,2048}(?![A-Za-z0-9_-]|\.[A-Za-z0-9_-])/,
        fn value, _, _ -> jwt?(value) end},
       {"secret.bearer.v1", ~r/\bBearer[ \t]+([A-Za-z0-9._~+\/-]{8,4096}=*)/i, always},
       {"secret.password.v1",
@@ -64,7 +64,7 @@ defmodule AiControl.Guards.Secret do
         with {:ok, decoded} <- Base.url_decode64(header, padding: false),
              {:ok, %{"alg" => algorithm} = object} <- Jason.decode(decoded),
              true <- is_binary(algorithm) && algorithm != "",
-             true <- Map.get(object, "typ", "JWT") in ["JWT", "jwt"],
+             true <- !Map.has_key?(object, "typ") || is_binary(object["typ"]),
              {:ok, _} <- Base.url_decode64(payload, padding: false),
              {:ok, _} <- Base.url_decode64(signature, padding: false) do
           signature != "" || algorithm == "none"

@@ -4,7 +4,7 @@
 
 Plan opiera się na [AI_CONTROL_LAYER_REQUIREMENTS.md](AI_CONTROL_LAYER_REQUIREMENTS.md), przesłanej propozycji architektury i decyzjach ustalonych w rozmowie. Zachowujemy namespace `AiControl` i rozwijamy istniejącą aplikację Phoenix etapami.
 
-**Aktualizacja 2026-10-03:** uwzględniono przesłany research „Executive Summary — Elixir-based AI Safety Gateway”. Kroki **1–6 są ukończone**, zgodnie z zapisanymi odbiorami; wyniki odbioru gatewaya zapisano przy kroku 6. Następny etap to **krok 7 wraz z NER**. Uzgodniona kolejność realizacji MVP to **6 → 7 wraz z NER → 8 → 9 → 10 → pełny 12 → 11 (odbiór MVP)**. Numeracja i historia odbiorów pozostają zachowane; podstawowy NER i pełny tool firewall wchodzą do MVP. Doprecyzowanie przyszłych etapów nie oznacza ich wykonania.
+**Aktualizacja 2026-10-03:** uwzględniono przesłany research „Executive Summary — Elixir-based AI Safety Gateway”. Kroki **1–7 są ukończone**, zgodnie z zapisanymi odbiorami; wyniki odbioru gatewaya zapisano przy kroku 6, a guardów, NER i kontenera przy kroku 7. Następny etap to **krok 8 — output filtering**. Uzgodniona kolejność realizacji MVP to **6 → 7 wraz z NER → 8 → 9 → 10 → pełny 12 → 11 (odbiór MVP)**. Numeracja i historia odbiorów pozostają zachowane; podstawowy NER i pełny tool firewall wchodzą do MVP. Doprecyzowanie przyszłych etapów nie oznacza ich wykonania.
 
 Przykładowe zlecenie:
 
@@ -96,7 +96,7 @@ Checkboxy oznaczają potwierdzone zakończenie kroku, a nie samą obecność kod
 - [x] Krok 4 — Wspólna domena decyzji i podstawowy audyt
 - [x] Krok 5 — Centralny Policy Engine
 - [x] Krok 6 — Gateway LLM i konfiguracja środowiska
-- [ ] Krok 7 — Deterministyczne guardy, NER i sygnatury
+- [x] Krok 7 — Deterministyczne guardy, NER i sygnatury
 - [ ] Krok 8 — Output filtering
 - [ ] Krok 9 — Budżety i rozliczanie użycia
 - [ ] Krok 10 — Semantyczne wykrywanie prompt injection
@@ -463,9 +463,9 @@ wizualnego; zastanego driftu nie naprawiano w tym rozszerzeniu.
 
 **Gotowe, gdy:** każdy obsługiwany typ ma poprawny przykład i bezpieczny przypadek porównawczy; poprawny PESEL zostaje wykryty, błędna data lub checksum nie wywołuje wykrycia PESEL, a sekret nie pojawia się w logach. Podstawowy NER działa z rzeczywistym sidecarem na polskich odmianach i rozróżnia osoby, miejsca oraz organizacje; reguły uzupełniają adresy. Testy sprawdzają separatory, granice kandydatów, nakładające się zakresy, Unicode, treść faktycznie przesłaną po redakcji i zatrzymanie po awarii wymaganej warstwy. Nowa wersja polityki jest jawnie aktywowana; historyczne checksumy wersji 1 pozostają poprawne. Inne detektory mogą niezależnie zaklasyfikować ten sam tekst.
 
-**Implementacja i lokalny odbiór — 2026-10-03:** guardy `AiControl.Guards`, trzy fazy ze wspólnym snapshotem, walidacja zakresów i redakcja, lokalny Presidio/Stanza PL/NKJP, schemat v2 i rozszerzenie edytorów, katalogi offline z checksumami i licencjami oraz wieloetapowy kontener Phoenix + NER są zaimplementowane. PostgreSQL/Ollama pozostają zewnętrzne. `mix precommit`: 353 testy Elixir i 3 JavaScript; `mix check.all`, build assetów, 4 testy Python z rzeczywistymi modelami i osobny test gatewaya z rzeczywistym HTTP NER przechodzą. Pomiar 40 krótkich syntetycznych analiz na Mac ARM64: ładowanie 5142,5 ms, mediana 40,7 ms, p95 62,9 ms, szczyt RSS 1 031 028 736 B. Szczegóły: [odbiór kroku 7](docs/acceptance/step7.md).
+**Odbiór — 2026-10-03:** guardy `AiControl.Guards`, trzy fazy ze wspólnym snapshotem, walidacja zakresów i redakcja, lokalny Presidio/Stanza PL/NKJP, schemat v2 i rozszerzenie edytorów, katalogi offline z checksumami i licencjami oraz wieloetapowy kontener Phoenix + NER są zaimplementowane. PostgreSQL/Ollama pozostają zewnętrzne. `mix precommit`: 354 testy Elixir i 3 JavaScript; `mix check.all`, build assetów, 4 testy Python z rzeczywistymi modelami i osobny test gatewaya z rzeczywistym HTTP NER przechodzą. Pomiar 40 krótkich syntetycznych analiz na Mac ARM64: ładowanie 5142,5 ms, mediana 40,7 ms, p95 62,9 ms, szczyt RSS 1 031 028 736 B. Szczegóły: [odbiór kroku 7](docs/acceptance/step7.md).
 
-**Status odbioru kontenera:** oczekuje na Linux CI (build obrazu, rzeczywisty smoke NER, awarie obu procesów i SIGTERM). Lokalny daemon Docker jest niedostępny; krok pozostaje nieodhaczony do uzyskania tych wyników. Pełny output filtering, semantyczny guard, panel Signatures i wykonywanie narzędzi pozostają w krokach 8, 10, 11 i 12. Odświeżenie istniejącego `.impeccable/design.json` komendą `document` jest osobnym zadaniem.
+**Odbiór kontenera i UI:** [Linux CI 37155097455](https://github.com/jlitewka99/hackyeah2026/actions/runs/37155097455) na `46d50c3` zakończył wszystkie pięć jobów sukcesem, w tym build obrazu, rzeczywisty NER i transport release, bootstrap, awarie obu procesów oraz SIGTERM. Pomiar Linux x86_64: ładowanie 7856,8 ms, mediana 105,4 ms, p95 155,5 ms, szczyt RSS 1 049 505 792 B. Lokalny daemon Docker pozostaje niedostępny. Impeccable zwrócił `ship` po odbiorze desktop/mobile, obu motywów i klawiatury; przegląd dokumentacyjny potwierdził zachowanie istniejącego systemu. Pełny output filtering, semantyczny guard, panel Signatures i wykonywanie narzędzi pozostają w krokach 8, 10, 11 i 12. Odświeżenie istniejącego `.impeccable/design.json` komendą `document` jest osobnym zadaniem. Coolify nie wdrażano.
 
 ### Krok 8. Output filtering
 
