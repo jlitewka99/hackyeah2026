@@ -2,7 +2,8 @@ defmodule AiControl.Gateway do
   @moduledoc "Verified identity → one policy → audited input → pinned backend → audited output."
   alias AiControl.Accounts.Scope
   alias AiControl.ApiKeys.Principal
-  alias AiControl.{Audit, Policies}
+  alias AiControl.{Audit, Budgets, Policies}
+  alias AiControl.Budgets.Usage
   alias AiControl.Gateway.{Config, Limiter, Models, Request, Response, Slots, Stages, ToolSchemas}
   alias AiControl.Security.SecurityContext
 
@@ -21,11 +22,29 @@ defmodule AiControl.Gateway do
 
   defp process_chat(current, params, policy, request_id, opts) do
     with :ok <- Policies.model_access(current, policy, opts[:agent_id], params["model"]),
-         {:ok, safe} <- Stages.evaluate(params, current, policy, request_id, :input),
+         {:ok, receipt} <-
+           measure(:budget_admission, fn ->
+             Budgets.admit(current, opts[:agent_id], params["model"], policy, request_id)
+           end) do
+      {result, stage} =
+        try do
+          run_chat(current, params, policy, request_id, opts, receipt)
+        after
+          Budgets.abandon(receipt)
+        end
+
+      {{:accounted, result, receipt}, stage}
+    else
+      error -> {error, :input}
+    end
+  end
+
+  defp run_chat(current, params, policy, request_id, opts, receipt) do
+    with {:ok, safe} <- Stages.evaluate(params, current, policy, request_id, :input),
          {:ok, safe} <- Request.validate(safe),
          {:ok, contract} <- ToolSchemas.prepare(safe),
          :ok <- authorize_again(current, policy, opts[:agent_id], params["model"]) do
-      case generate(safe) do
+      case generate(safe, receipt, current, policy, opts) do
         {:ok, response} ->
           {filter_output(response, current, policy, request_id, safe["model"], contract), :output}
 
@@ -95,6 +114,12 @@ defmodule AiControl.Gateway do
   end
 
   defp finish(identity, request_id, result, policy, started, stage \\ :input) do
+    {result, evidence} =
+      case result do
+        {:accounted, outcome, receipt} -> {outcome, Budgets.evidence(receipt)}
+        outcome -> {outcome, nil}
+      end
+
     code =
       case result do
         {:ok, _} -> "completed"
@@ -109,7 +134,7 @@ defmodule AiControl.Gateway do
       stage: stage
     })
 
-    case Audit.record_gateway(identity, request_id, code, duration, policy, stage) do
+    case Audit.record_gateway(identity, request_id, code, duration, policy, stage, evidence) do
       {:ok, _} -> result
       _ -> {:error, :audit_unavailable}
     end
@@ -134,20 +159,57 @@ defmodule AiControl.Gateway do
 
   defp identity_access(%Principal{}, _, _), do: :ok
 
-  defp generate(params) do
+  defp generate(params, receipt, identity, policy, opts) do
     measure(:generation, fn ->
-      Slots.run(:llm, Config.get(:llm_timeout), fn -> provider_chat(params) end)
+      Slots.run(:llm, Config.get(:llm_timeout), fn ->
+        provider_chat(params, receipt, identity, policy, opts)
+      end)
     end)
   end
 
-  defp provider_chat(params) do
+  defp provider_chat(params, receipt, identity, policy, opts) do
     config = Config.get()
     provider = config[:provider]
 
     with {:ok, models} <- provider.models(config),
          {:ok, digest} <- Models.digest(params["model"]),
-         :ok <- pinned(models, params["model"], digest) do
-      provider.chat(params, config)
+         :ok <- pinned(models, params["model"], digest),
+         {:ok, params, receipt} <- prepare_budget(params, receipt, policy, provider, config),
+         :ok <- authorize_again(identity, policy, opts[:agent_id], params["model"]),
+         {:ok, receipt} <- Budgets.dispatch(receipt),
+         {:ok, response} <-
+           provider.chat(params, Keyword.put(config, :budget_reservation_id, receipt.id)),
+         {:ok, usage} <- response_usage(response),
+         {:ok, _} <- measure(:budget_settlement, fn -> Budgets.settle(receipt, usage) end) do
+      {:ok, response}
+    end
+  end
+
+  defp prepare_budget(params, receipt, policy, provider, config) do
+    if Budgets.hard_limit?(policy) do
+      params = Map.put_new(params, "max_tokens", config[:default_max_tokens])
+      tokenizer = config[:tokenizer]
+
+      measure(:budget_reservation, fn ->
+        reserve_tokens(params, receipt, provider, tokenizer, config)
+      end)
+    else
+      {:ok, params, receipt}
+    end
+  end
+
+  defp reserve_tokens(params, receipt, provider, tokenizer, config) do
+    with {:ok, prompt} <- provider.prepare(params, config),
+         {:ok, input} <- tokenizer.count(params["model"], prompt, config),
+         {:ok, receipt} <- Budgets.reserve(receipt, input, params["max_tokens"]) do
+      {:ok, params, receipt}
+    end
+  end
+
+  defp response_usage(response) do
+    case Usage.normalize(response["usage"]) do
+      {:ok, usage} -> {:ok, usage}
+      _ -> {:error, :upstream_invalid_response}
     end
   end
 

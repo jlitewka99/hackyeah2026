@@ -1,5 +1,6 @@
 defmodule AiControl.Gateway.Config do
   @moduledoc "Operator-owned gateway configuration; never populated from API parameters."
+  alias AiControl.Budgets.Pricing
   alias AiControl.Policies.Configuration
 
   @defaults [
@@ -22,7 +23,13 @@ defmodule AiControl.Gateway.Config do
     readiness_timeout: 5_000,
     llm_slots: 1,
     guard_slots: 2,
-    requests_per_minute: 60
+    requests_per_minute: 60,
+    ip_requests_per_minute: 300,
+    default_max_tokens: 1024,
+    tokenizer_url: "http://127.0.0.1:8002",
+    tokenizer_timeout: 5_000,
+    tokenizer: AiControl.Budgets.Tokenizer,
+    prices: %{}
   ]
 
   def get, do: Keyword.merge(@defaults, Application.get_env(:ai_control, __MODULE__, []))
@@ -40,6 +47,15 @@ defmodule AiControl.Gateway.Config do
     if !origin?(config[:ner_url]), do: raise(ArgumentError, "ner_url must be an HTTP origin")
 
     validate_limits!(config)
+
+    if !origin?(config[:tokenizer_url]),
+      do: raise(ArgumentError, "tokenizer_url must be an HTTP origin")
+
+    if !Pricing.valid?(config[:prices]),
+      do: raise(ArgumentError, "invalid token pricing")
+
+    if config[:default_max_tokens] > 32_768,
+      do: raise(ArgumentError, "default_max_tokens exceeds supported maximum")
 
     if !guards?(config[:guards]),
       do: raise(ArgumentError, "gateway guards must use the policy guard catalog")
@@ -77,7 +93,7 @@ defmodule AiControl.Gateway.Config do
 
   defp validate_limits!(config) do
     for key <-
-          ~w(input_bytes response_bytes connect_timeout llm_timeout guard_timeout readiness_timeout llm_slots guard_slots requests_per_minute)a do
+          ~w(input_bytes response_bytes connect_timeout llm_timeout guard_timeout readiness_timeout llm_slots guard_slots requests_per_minute ip_requests_per_minute default_max_tokens tokenizer_timeout)a do
       if !(is_integer(config[key]) && config[key] > 0),
         do: raise(ArgumentError, "gateway limits must be positive integers")
     end

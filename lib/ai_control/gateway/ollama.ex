@@ -17,14 +17,28 @@ defmodule AiControl.Gateway.Ollama do
   end
 
   @impl true
-  def chat(params, config) do
-    params =
-      case config[:ollama_reasoning_effort] do
-        nil -> params
-        effort -> Map.put(params, "reasoning_effort", effort)
-      end
+  def prepare(params, config) do
+    params = reasoning(params, config) |> Map.put("_debug_render_only", true)
 
-    request(:post, "/v1/chat/completions", params, config)
+    with {:ok, %{"version" => "0.35.1"}} <- request(:get, "/api/version", nil, config),
+         {:ok, %{"_debug_info" => %{"rendered_template" => prompt}}} when is_binary(prompt) <-
+           request(:post, "/v1/chat/completions", params, config) do
+      {:ok, prompt}
+    else
+      _ -> {:error, :tokenizer_unavailable}
+    end
+  end
+
+  @impl true
+  def chat(params, config) do
+    request(:post, "/v1/chat/completions", reasoning(params, config), config)
+  end
+
+  defp reasoning(params, config) do
+    case config[:ollama_reasoning_effort] do
+      nil -> params
+      effort -> Map.put(params, "reasoning_effort", effort)
+    end
   end
 
   defp model?(%{"name" => name, "digest" => digest}),

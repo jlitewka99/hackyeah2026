@@ -15,5 +15,6 @@ priv/static/cache_manifest.json
 **/__pycache__
 **/.venv
 sidecar/ner/models
+sidecar/tokenizer/models
 *.log
 erl_crash.dump

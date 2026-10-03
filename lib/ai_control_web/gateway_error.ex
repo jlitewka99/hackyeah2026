@@ -38,6 +38,9 @@ defmodule AiControlWeb.GatewayError do
               :redaction_unavailable
             ], do: {403, "Request is not allowed."}
 
+  defp classify(:request_budget_exceeded), do: {429, "Hourly request budget exceeded."}
+  defp classify(:token_budget_exceeded), do: {429, "Hourly token budget exceeded."}
+
   defp classify(code) when code in [:rate_limited, :capacity_exceeded],
     do: {429, "Gateway is busy. Try again later."}
 
