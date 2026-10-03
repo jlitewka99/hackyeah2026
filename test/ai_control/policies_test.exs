@@ -140,14 +140,14 @@ defmodule AiControl.PoliciesTest do
     assert {:error, :forbidden} = Policies.snapshot_for_request(principal, %{model: "qwen3.5:4b"})
   end
 
-  test "individual model grants fail closed without the model registry", %{
+  test "individual model grants use the operator model registry", %{
     scope: scope,
     agent: agent
   } do
     member =
       member_fixture(scope, :user, %{permissions: ["ai.use"], agents: [agent.id], models: ["*"]})
 
-    assert {:error, :forbidden} =
+    assert {:ok, _snapshot} =
              Policies.snapshot_for_request(member.scope, %{
                agent_id: agent.id,
                model: "qwen3.5:4b"

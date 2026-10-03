@@ -1,6 +1,7 @@
 defmodule AiControlWeb.OrganizationMembersLive do
   use AiControlWeb, :live_view
 
+  alias AiControl.Gateway.Models
   alias AiControl.Organizations
   alias AiControl.Organizations.{Grants, Invitations}
   alias AiControlWeb.OrganizationUI
@@ -17,7 +18,9 @@ defmodule AiControlWeb.OrganizationMembersLive do
   end
 
   def handle_event("invite", %{"invitation" => invitation} = params, socket) do
-    attrs = Map.put(invitation, "grants", OrganizationUI.grant_params(params["access"] || %{}))
+    access = params["access"] || %{}
+    attrs = Map.put(invitation, "grants", OrganizationUI.grant_params(access))
+    socket = assign(socket, :access_form, OrganizationUI.submitted_access_form(access))
 
     case Invitations.issue(socket.assigns.current_scope, attrs, &url(~p"/invitations/#{&1}")) do
       {:ok, issued} ->
@@ -80,8 +83,10 @@ defmodule AiControlWeb.OrganizationMembersLive do
     {:ok, members} = Organizations.list_members(scope)
     {:ok, invitations} = Organizations.list_invitations(scope)
     {:ok, agents} = AiControl.Agents.list_assignable_agents(scope)
+    {:ok, models} = Models.list_assignable(scope)
 
     socket
+    |> assign(:model_options, models)
     |> assign(:agent_options, Enum.map(agents, &{&1.name, &1.id}))
     |> assign(
       :role_options,

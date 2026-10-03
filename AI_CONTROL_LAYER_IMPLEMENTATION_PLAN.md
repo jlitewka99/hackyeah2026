@@ -4,7 +4,7 @@
 
 Plan opiera się na [AI_CONTROL_LAYER_REQUIREMENTS.md](AI_CONTROL_LAYER_REQUIREMENTS.md), przesłanej propozycji architektury i decyzjach ustalonych w rozmowie. Zachowujemy namespace `AiControl` i rozwijamy istniejącą aplikację Phoenix etapami.
 
-**Aktualizacja 2026-10-03:** uwzględniono przesłany research „Executive Summary — Elixir-based AI Safety Gateway”. Kroki **1–5 są ukończone**, zgodnie z potwierdzeniem użytkownika i zapisanymi odbiorami. Następne zadanie to **krok 6**. Numeracja i historia odbiorów pozostają zachowane; research doprecyzowuje przyszłą implementację, nie oznacza wykonania nowych funkcji.
+**Aktualizacja 2026-10-03:** uwzględniono przesłany research „Executive Summary — Elixir-based AI Safety Gateway”. Kroki **1–6 są ukończone**, zgodnie z zapisanymi odbiorami; wyniki odbioru gatewaya zapisano przy kroku 6. Następny etap to **krok 7 wraz z NER**. Uzgodniona kolejność realizacji MVP to **6 → 7 wraz z NER → 8 → 9 → 10 → pełny 12 → 11 (odbiór MVP)**. Numeracja i historia odbiorów pozostają zachowane; podstawowy NER i pełny tool firewall wchodzą do MVP. Doprecyzowanie przyszłych etapów nie oznacza ich wykonania.
 
 Przykładowe zlecenie:
 
@@ -27,7 +27,7 @@ Zasady dla agenta implementującego:
 - **Konta firm:** użytkownicy logują się emailem i hasłem; aplikacje oraz agenci używają kluczy API.
 - **Polityki:** PostgreSQL jako źródło prawdy, edycja w dashboardzie, import i eksport YAML.
 - **Modele lokalne:** Ollama oraz lokalny sidecar klasyfikatora.
-- **Pełna roadmapa:** najpierw wymagane MVP, następnie narzędzia, MCP, ochrona workflowów i rozszerzenia.
+- **Pełna roadmapa:** MVP obejmuje podstawowy NER i pełny tool firewall; później MCP, ochrona workflowów i dalsze rozszerzenia.
 - Interfejs aplikacji, dokumentacja projektu dla użytkowników i komunikaty API pozostają po angielsku. Ten plan roboczy zachowuje język ustalony w rozmowie.
 - Pierwsze demo działa na jednej instancji aplikacji. Skalowanie do klastra nie jest warunkiem ukończenia planu.
 
@@ -57,7 +57,7 @@ Gateway ma dwa obszary: **data plane** pośredniczy w komunikacji klient → LLM
 | Regex + checksum dla polskich identyfikatorów | Walidacja struktury i sum kontrolnych; dla PESEL również daty. Redakcja według polityki, bez gwarancji zerowego FPR | 7–8 |
 | Regex + entropia + kontekst dla sekretów | Skaner w Elixirze, wzorce znanych dostawców oraz kontrolowane heurystyki; audyt bez dopasowanych wartości | 7–8 |
 | Llama Prompt Guard 2 kontra Qwen3Guard | Porównanie na polskim zbiorze; wybór na podstawie jakości, lokalnej latencji, pamięci i dostępności | 10 |
-| NER dla nazw i adresów | Opcjonalny lokalny Stanza/spaCy; rozpoznanie encji nie oznacza jeszcze wykrycia pełnego adresu. Pełne rozszerzenie po MVP | 18; próba modelu może użyć benchmarku z 10 |
+| NER dla nazw i adresów | Lokalny Presidio + Stanza PL/NKJP w MVP, jawne mapowanie etykiet i reguły adresów; dalsze rozszerzenia przy RAG | 7–8; rozszerzenia w 18 |
 | Rezerwacja i zwrot niewykorzystanych tokenów | Atomowe rezerwacje organizacji i agenta w PostgreSQL; ETS dla szybkich odczytów i limitera żądań | 6, 9 |
 | Fail-closed i profile | Zachować `relaxed`, `balanced`, `strict` oraz obowiązkowość guardów z kroku 5; awaria wymaganej kontroli blokuje | 6–11 |
 | Hot reload polityki | Zachować wersjonowanie i aktywację w PostgreSQL, cache ETS i PubSub z kroku 5; YAML jest formatem importu/eksportu | 5 ukończony; integracja runtime w 6 |
@@ -66,9 +66,9 @@ Gateway ma dwa obszary: **data plane** pośredniczy w komunikacji klient → LLM
 
 Priorytety researchu odnosimy do **pozostałej pracy**, bez rozpoczynania projektu od nowa:
 
-- **P0 — kroki 6–9:** gateway, deterministyczne kontrole wejścia/wyjścia, limity i rezerwacje. To działający etap pośredni; wymagane MVP nadal potrzebuje semantycznego enforcement.
-- **P1 — kroki 10–11:** rzeczywista kontrola AI, polski benchmark, dashboard, eksport i komplet testów. **Wymagane MVP kończy się po kroku 11.**
-- **P2 — kroki 12–20:** narzędzia/MCP, Granite, workflowy, Oban, streaming, RAG/NER i zatwierdzanie działań. Minimalne scenariusze demo i instrukcje uruchomienia powstają już wraz z P0/P1; krok 20 scala pełną roadmapę.
+- **P0 — kroki 6–9:** gateway, deterministyczne kontrole wejścia/wyjścia, NER, limity i rezerwacje. To działający etap pośredni; wymagane MVP nadal potrzebuje semantycznego enforcement.
+- **P1 — kroki 10 → 12 → 11:** rzeczywista kontrola AI, polski benchmark, pełny tool firewall, dashboard, eksport i komplet testów. **Wymagane MVP kończy się po kroku 11.**
+- **P2 — kroki 13–20:** MCP, Granite, workflowy, Oban, streaming, RAG i dalsze rozszerzenia PII oraz zatwierdzanie działań. Minimalne scenariusze demo i instrukcje uruchomienia powstają już wraz z P0/P1; krok 20 scala pełną roadmapę.
 
 Nie przenosimy wprost siedmiodniowego harmonogramu z researchu: auth, organizacje, klucze, audyt i polityki są już gotowe, a terminów pozostałych etapów nie potwierdzono.
 
@@ -80,7 +80,7 @@ Nie przenosimy wprost siedmiodniowego harmonogramu z researchu: auth, organizacj
 | Qwen3Guard-Gen-0.6B | Moderacja promptów i odpowiedzi, 119 języków/dialektów, Apache-2.0; generuje etykiety `Safe/Controversial/Unsafe` i kategorie | Pierwszy kandydat do próby dla polskiego; wybór po benchmarku, bez zakładania skalibrowanego score. [Model card](https://huggingface.co/Qwen/Qwen3Guard-Gen-0.6B) |
 | Qwen3Guard-Stream-0.6B | Wariant ze specjalną głowicą do klasyfikacji podczas generacji | Osobna próba w kroku 17; adapter wariantu Gen nie zapewnia obsługi Stream. [Repozytorium producenta](https://github.com/QwenLM/Qwen3Guard) |
 | Granite Guardian 4.1 8B | Kryteria BYOC, RAG i function calling; Apache-2.0; trening i testy na danych angielskich | P2, selektywnie dla operacji wysokiego ryzyka; polski i koszt lokalny do zmierzenia. [Model card](https://huggingface.co/ibm-granite/granite-guardian-4.1-8b) |
-| Stanza / spaCy PL | NER w kontekście; Stanza publikuje model NKJP z etykietami m.in. `persName`, `placeName`, `geogName`, spaCy oferuje `pl_core_news_*` | Porównać dostępne modele, mapować etykiety i sprawdzić zakresy przed redakcją. [Stanza](https://stanfordnlp.github.io/stanza/ner_models.html), [spaCy PL](https://spacy.io/models/pl) |
+| Presidio + Stanza PL/NKJP | NER w kontekście z polskimi etykietami m.in. `persName`, `placeName`, `geogName`, `orgName`; adresy wymagają dodatkowego kontekstu | Lokalny sidecar w krokach 7–8; jawne mapowanie etykiet i walidacja zakresów przed redakcją. Jakość zmierzyć na danych aplikacji. [Stanza](https://stanfordnlp.github.io/stanza/ner_models.html) |
 
 Wyniki z A100 i szacunki z researchu nie są wynikami naszego Maca M4. Wersję modelu, tokenizer, quantization, runtime, pamięć oraz opóźnienia p50/p95 trzeba zapisać z rzeczywistego pomiaru. MIT dla bazowego mDeBERTa nie określa licencji wag Prompt Guard. Sama deklarowana wielojęzyczność nie potwierdza skuteczności na polskich promptach ani indirect injection.
 
@@ -95,8 +95,8 @@ Checkboxy oznaczają potwierdzone zakończenie kroku, a nie samą obecność kod
 - [x] Krok 3 — Agenci i klucze API
 - [x] Krok 4 — Wspólna domena decyzji i podstawowy audyt
 - [x] Krok 5 — Centralny Policy Engine
-- [ ] Krok 6 — Gateway LLM i konfiguracja środowiska
-- [ ] Krok 7 — Deterministyczne guardy i sygnatury
+- [x] Krok 6 — Gateway LLM i konfiguracja środowiska
+- [ ] Krok 7 — Deterministyczne guardy, NER i sygnatury
 - [ ] Krok 8 — Output filtering
 - [ ] Krok 9 — Budżety i rozliczanie użycia
 - [ ] Krok 10 — Semantyczne wykrywanie prompt injection
@@ -407,12 +407,52 @@ system wizualny i opisuje uwagi detektora bez rozszerzania jego zasad.
 
 **Gotowe, gdy:** klient z kluczem API otrzymuje odpowiedź lokalnego modelu przy jawnej polityce testowej, niedozwolony model nie zostaje wywołany, a błędy upstream/guardów/audytu mają kontrolowane odpowiedzi. Do ukończenia wymaganych guardów test proxy używa wydzielonej organizacji z jawną konfiguracją nieobowiązkowych, wyłączonych kontroli. Nie osłabia domyślnej polityki `balanced` ani nie udaje gotowego enforcement; brak obowiązkowej kontroli nadal blokuje. Testy obejmują timeout, limit rozmiaru i współbieżności, izolację katalogu oraz brak wywołania backendu po odmowie lub błędzie audytu.
 
-### Krok 7. Deterministyczne guardy i sygnatury
+**Odbiór 2026-10-03:** ukończono na gałęzi `JL/step-6-llm-gateway`, po
+pobraniu aktualnego `main`. `AiControl.Gateway` łączy wymienny provider,
+adapter Ollama oparty na `Req`, katalog operatora i filtrowane API.
+Autoryzacja odświeża tożsamość, `ai.use` i oba przydziały zasobów; klucz
+pozostaje przypisany do własnego agenta i organizacji. Każde żądanie zachowuje
+jeden snapshot. Audyt wejścia poprzedza wszystkie wywołania backendu, a ocena
+i audyt wyjścia poprzedzają odpowiedź. Kontrakty etapów i redakcja UTF-8
+umożliwiają analizę semantyczną aktualnej treści po redakcji deterministycznej.
+
+Dodano terminalny audyt odrzucenia, błędu i zakończenia, bezpieczną telemetry,
+limiter Hammer/ETS 60/min na aktora w organizacji oraz nadzorowane sloty
+1 LLM / 2 guardy, z natychmiastowym `429` i sprzątaniem po timeout/anulowaniu.
+Transport ogranicza wejście do 1 MiB i odpowiedź do 4 MiB, nie ponawia generacji
+ani nie podąża za przekierowaniami. Konfiguracja obejmuje timeouty i pojemność.
+`/health` oraz `/ready` zwracają bezpieczne wyniki żywotności i gotowości.
+Formularze zaproszeń i dostępu pokazują konkretne modele z katalogu,
+zachowując wildcard, delegację, stan błędu i przydziały poza zakresem admina.
+
+Pobrano i uruchomiono `qwen3.5:4b` w Ollama 0.35.1; pełny digest manifestu:
+`2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd`.
+Rzeczywisty test Bearer/API z polską odpowiedzią i audytem obu etapów przeszedł
+na wydzielonej bazie oraz organizacji z jawną polityką wyłączonych guardów.
+Domyślna `balanced` pozostała bez zmian i odmawia przez `503`, gdy brakuje
+wymaganej kontroli. Nie zaimplementowano detektorów ani wykonania narzędzi.
+
+`mix precommit`: **330 testów ExUnit, 3 testy JavaScript**, brak uwag Credo
+i ostrzeżeń kompilacji aplikacji; 1 test rzeczywistego modelu wyłączony z CI.
+Ten test uruchomiony osobno przeszedł. Przeszły `mix assets.build`, Dialyzer,
+Sobelow i audyt zależności oraz rollback/up migracji na osobnej bazie testowej.
+Testy obejmują aktualne przydziały i izolację, allowlist oraz digest, snapshot
+podczas aktywacji, brak downstream po odmowie/błędzie audytu, redakcję przed
+semantyką, blokadę wyjścia, limity i sprzątanie slotów. Przegląd `impeccable`
+desktop 1440 px / mobile 390 px i obu motywów zakończył się `ship` dla
+selektorów modeli. Przegląd dokumentacyjny zachował istniejące pliki systemu
+wizualnego; zastanego driftu nie naprawiano w tym rozszerzeniu.
+
+### Krok 7. Deterministyczne guardy, NER i sygnatury
 
 - Implementować kolejno: PESEL, NIP, REGON, NRB/IBAN, karty płatnicze i email.
 - Rozpoznawanie numerów oprzeć na ograniczonych wzorcach kandydatów, walidacji struktury i sumach kontrolnych. Obsłużyć udokumentowane separatory, zachowując mapowanie do oryginalnego tekstu; nie łączyć dowolnych cyfr z odległych fragmentów.
 - PESEL: 11 cyfr, wagi `1,3,7,9,1,3,7,9,1,3`, dekodowanie stulecia i rzeczywistej daty, również lat przestępnych. NIP: 10 cyfr i checksum; REGON: jawnie obsługiwane warianty 9 i 14 cyfr. [Opis PESEL](https://www.gov.pl/web/gov/czym-jest-numer-pesel).
 - NRB/IBAN: polski NRB 26 cyfr, IBAN `PL` + 26 cyfr, kontrola mod-97; zagraniczny IBAN wymaga jawnego katalogu długości krajowych. [Rejestr IBAN](https://www.swift.com/standards/data-standards/iban-international-bank-account-number). Karty: Luhn, dozwolona długość i kontekst; sam Luhn nie odróżnia karty od przypadkowego numeru.
+- W MVP uruchomić lokalny sidecar Presidio + Stanza PL/NKJP i osobny guard `ner`. Mapować `persName` na osobę, `placeName` i `geogName` na typy miejsc oraz `orgName` na organizację; pełne adresy wymagają dodatkowych reguł kontekstowych.
+- Sidecar zwraca typ i zakres encji; Elixir waliduje zakresy UTF-8 dla bieżącej wersji tekstu i egzekwuje decyzję. Redakcja deterministyczna poprzedza NER i injection; wymagane awarie kończą przetwarzanie.
+- Wprowadzić nową wersję schematu polityki dla NER i narzędzi, zachowując walidację i checksumy wersji 1. Nowe kontrole wymagają utworzenia i jawnej aktywacji nowej wersji.
+- Testować polskie odmiany, Unicode, osoby/miejsca/organizacje, adresy i awarie sidecara; nie przenosić F1 NKJP na jakość PII w aplikacji.
 - Dodać detektory kluczy prywatnych, JWT, tokenów, credentials AWS/GitHub/Google, haseł i connection strings. Wzorce dostawców przypiąć do wersjonowanego zestawu; skanować także nagłówki PEM i wartości po etykietach `password`, `secret`, `api_key`.
 - JWT w wariancie JWS compact rozpoznawać jako trzy segmenty rozdzielone **dwoma** kropkami, z walidacją formatu base64url/header; nie logować payloadu. Format JWT lub identyfikator klucza jest wykryciem według polityki, nie dowodem aktywnego poświadczenia.
 - Heurystyka entropii uwzględnia długość, alfabet i kontekst. Dodać bezpieczne przypadki dla hashy, UUID, kodu i danych technicznych; nie blokować każdej losowej wartości. Wzorce można adaptować z [detect-secrets](https://github.com/Yelp/detect-secrets), zachowując licencję i pochodzenie; bez wysyłania znalezionych sekretów do usług weryfikujących.
@@ -421,12 +461,12 @@ system wizualny i opisuje uwagi detektora bez rozszerzania jego zasad.
 - Dodać wersjonowane sygnatury dla obsługiwanych wzorców exploitów, np. niebezpiecznej deserializacji i wykonania kodu. Każdej sygnaturze przypisać regułę oraz bezpieczny przypadek porównawczy.
 - Redagować treść przed przekazaniem do backendu, w tym przed semantycznymi kontrolami, które nie potrzebują surowej wartości.
 
-**Gotowe, gdy:** każdy obsługiwany typ ma poprawny przykład i bezpieczny przypadek porównawczy; poprawny PESEL zostaje wykryty, błędna data lub checksum nie wywołuje wykrycia PESEL, a sekret nie pojawia się w logach. Testy sprawdzają separatory, granice kandydatów, nakładające się zakresy, Unicode i treść faktycznie przesłaną przez `Req.Test` po redakcji. Inne detektory mogą niezależnie zaklasyfikować ten sam tekst.
+**Gotowe, gdy:** każdy obsługiwany typ ma poprawny przykład i bezpieczny przypadek porównawczy; poprawny PESEL zostaje wykryty, błędna data lub checksum nie wywołuje wykrycia PESEL, a sekret nie pojawia się w logach. Podstawowy NER działa z rzeczywistym sidecarem na polskich odmianach i rozróżnia osoby, miejsca oraz organizacje; reguły uzupełniają adresy. Testy sprawdzają separatory, granice kandydatów, nakładające się zakresy, Unicode, treść faktycznie przesłaną po redakcji i zatrzymanie po awarii wymaganej warstwy. Nowa wersja polityki jest jawnie aktywowana; historyczne checksumy wersji 1 pozostają poprawne. Inne detektory mogą niezależnie zaklasyfikować ten sam tekst.
 
 ### Krok 8. Output filtering
 
 - Przeskanować wszystkie pola odpowiedzi mogące zawierać treść: odpowiedzi tekstowe i argumenty proponowanych wywołań narzędzi.
-- Ponownie zastosować PII, secret detection i sygnatury.
+- Ponownie zastosować PII, secret detection, sygnatury i osobny `ner`, konfigurowany również dla wyjścia.
 - Wykonać decyzję polityki przed zwróceniem odpowiedzi klientowi.
 - Zachować informację, czy naruszenie wystąpiło na wejściu, czy na wyjściu.
 - Buforować całą odpowiedź dla `stream: false`; żadna treść ani argumenty narzędzia nie trafiają do klienta przed oceną i wymaganym audytem. Redakcja argumentów musi zachować poprawny JSON i schemat; gdy nie może, blokować propozycję wywołania.
@@ -448,6 +488,7 @@ system wizualny i opisuje uwagi detektora bez rozszerzania jego zasad.
 - Przykład: przy limicie 5000 i rezerwacji 4000 równoczesne żądanie wymagające kolejnych 4000 dostaje 429; po usage 2200 zwrócić 1800. Rozliczenie jest idempotentne i zwalnia tylko niewykorzystaną część. Żądanie odrzucone przed generacją nie zużywa tokenów, ale nadal podlega limiterowi wejściowemu.
 - Na potwierdzonym braku wysłania żądania zwalniać rezerwację; przy timeout/anulowaniu po wysłaniu lub braku usage utrzymać bezpieczne obciążenie do uzgodnienia. Restart/TTL nie zwraca automatycznie tokenów za potencjalnie wykonaną generację. Jeśli usage przekroczy rezerwację, zapisać całe użycie i zatrzymać kolejne żądania; nie ukrywać przekroczenia.
 - Rezerwacja należy do okna rozpoczęcia także po zmianie godziny. Obniżenie limitu poniżej zużycia blokuje nowe rezerwacje, nie zeruje liczników. Rozdzielić liczniki żądań, tokenów i aktywnych wywołań; 429 zawiera `Retry-After` zgodny z przyczyną odmowy.
+- Podłączyć również NER dla wyjścia, z walidacją zakresów i reguł adresowych z kroku 7.
 - Dodać rozliczanie kosztów według skonfigurowanego cennika. Bez cennika pokazywać „not configured”.
 
 **Gotowe, gdy:** równoczesne rezerwacje nie przekraczają limitu organizacji ani agenta, a restart aplikacji nie odnawia wykorzystanego budżetu. Testy obejmują podwójne rozliczenie, timeout przed/po wysłaniu, brak usage, blokadę outputu, zmianę okna i obniżenie limitu. Wynik estymacji i warunki twardego limitu są opisane, a zużycie guardów AI mierzone oddzielnie od usage modelu docelowego.
@@ -468,6 +509,8 @@ system wizualny i opisuje uwagi detektora bez rozszerzania jego zasad.
 
 ### Krok 11. Dashboard i zamknięcie wymaganego MVP
 
+**Zależności odbioru:** kroki 6–10, podstawowy NER z 7–8 i pełny krok 12 muszą być ukończone. Krok 12 wykonujemy przed tym odbiorem.
+
 - Zbudować strony: Overview, Events, Policies, Budgets, Agents i Signatures.
 - Pokazywać rzeczywiste decyzje, aktywne kontrole, wersję polityki, zużycie i zmierzone opóźnienia.
 - Rozdzielić opóźnienia guardów, rezerwacji, upstream i całego żądania; pokazywać p50/p95, wykrycia według guardu/etapu, odmowy budżetowe i błędy usług. Nie tworzyć nieuzasadnionego „security score”.
@@ -478,16 +521,18 @@ system wizualny i opisuje uwagi detektora bez rozszerzania jego zasad.
 - Zakończyć wymagane testy pozytywne i negatywne oraz mapowanie do FR-01–FR-22.
 - Dostarczyć minimalne demo: safe allow, PESEL redact/block, secret block na wejściu i wyjściu, injection z bezpiecznym porównaniem, exploit i 429 przy limicie; pokazać zmianę aktywnej polityki bez restartu. Scenariusze narzędzi/RAG dołączają dopiero odpowiednie kroki.
 
-**Kamień milowy MVP:** działają auth, izolacja organizacji, proxy LLM, centralne polityki, kontrole deterministyczne i AI, input/output filtering, budżety, audyt, dashboard i testy.
+**Kamień milowy MVP:** działają auth, izolacja organizacji, proxy LLM, centralne polityki, kontrole deterministyczne, NER i AI, input/output filtering, budżety, pełny tool ACL, audyt, dashboard i testy.
 
 ### Krok 12. Tool firewall i ograniczenia zasobów
 
-- Dodać `ToolRequest` oraz katalog narzędzi ze schematami argumentów.
+- Dodać `ToolRequest`, katalog narzędzi ze schematami argumentów i `POST /v1/tool_calls`. Organizacja i agent pochodzą wyłącznie ze zweryfikowanej tożsamości; domyślna odmowa jest niezależna od oceny modelu.
+- Dodać tenant-scoped identyfikator wykonania i trwały licznik wywołań narzędzi z kroku 9. Pełna orkiestracja workflowów pozostaje w kroku 15.
 - Sprawdzać uprawnienia agenta, operację, zasób, argumenty i budżet przed wykonaniem.
 - Dodać walidatory ścieżek, domen/IP, operacji bazodanowych, odbiorców email i dozwolonych komend.
 - Uwzględnić traversal, symlinki, przekierowania HTTP i prywatne adresy IP. Lokalne usługi demo mają jawne wyjątki operatora.
 - Wyniki narzędzi również filtrować.
-- Przygotować sandboxowe narzędzia demo i scenariusz indirect injection z próbą odczytu `~/.ssh/id_rsa`.
+- Przygotować sandboxowe narzędzia demo: pliki, HTTP, baza demo, lokalna skrzynka email i zamknięta lista komend. Scenariusz indirect injection próbuje odczytać `~/.ssh/id_rsa` lub wyprowadzić dane; ACL zatrzymuje akcję przed wykonaniem.
+- Testować podmianę organizacji/agenta, traversal, symlinki, SSRF, przekierowania, operacje bazy, odbiorców email, komendy i filtrowanie wyników.
 
 **Gotowe, gdy:** agent może użyć dozwolonego narzędzia na dozwolonym zasobie, a zabroniony zasób zostaje zatrzymany przed wykonaniem.
 
@@ -552,7 +597,7 @@ system wizualny i opisuje uwagi detektora bez rozszerzania jego zasad.
 - Zachować pochodzenie, właściciela i poziom zaufania zasobu.
 - Egzekwować izolację organizacji przy odczycie i zapisie pamięci.
 - Skanować treść przed dołączeniem do kontekstu i przed utrwaleniem.
-- Dodać `NerGuard` i lokalny sidecar Stanza/spaCy; Presidio jest opcjonalną warstwą integracji recognizerów, nie gotowym potwierdzeniem pełnej ochrony polskiego PII. Wywołania HTTP używają `Req`, timeoutów i kontrolowanej współbieżności.
+- Rozszerzyć istniejący `NerGuard` i sidecar Presidio + Stanza PL/NKJP z kroków 7–8 o potrzeby RAG i pamięci. Podstawowy NER jest już częścią MVP; dalsza jakość PII wymaga pomiarów. Wywołania HTTP używają `Req`, timeoutów i kontrolowanej współbieżności.
 - Przypiąć model i mapowanie etykiet do kategorii polityki. Osoba, miejscowość i pełny adres mają różne znaczenie; do adresów dodać kontekstowe reguły ulicy/numeru/kodu pocztowego. Słownik imion nie jest samodzielną podstawą blokady.
 - Sidecar zwraca tylko typ i zakres encji oraz score, jeśli model go udostępnia. Przeliczać indeksy znaków na offsety bajtowe UTF-8 dla dokładnie tej samej treści; błędne, niepełne lub niezgodne zakresy odrzucać przed redakcją. Wymagany NER podlega fail-closed.
 - Testować polskie odmiany, diakrytyki i kontekst: „Jan Kowalski”, „Romana Kowalskiego”, nazwy firm, miejscowości oraz słowa zbieżne z imionami. Mierzyć precision/recall encji i poprawność redakcji, nie zakładać, że wynik F1 na NKJP opisuje prompty aplikacji.
@@ -661,4 +706,4 @@ mix precommit
 mix assets.build
 ```
 
-**MVP jest ukończone po kroku 11. Pełna roadmapa jest ukończona po kroku 20**, gdy wszystkie scenariusze działają, polityki można zmieniać, a dashboard i eksport pokazują rzeczywiste wyniki enforcement.
+**MVP jest ukończone po kroku 11, po uprzednim wykonaniu podstawowego NER i pełnego kroku 12. Pełna roadmapa jest ukończona po kroku 20**, gdy wszystkie scenariusze działają, polityki można zmieniać, a dashboard i eksport pokazują rzeczywiste wyniki enforcement.

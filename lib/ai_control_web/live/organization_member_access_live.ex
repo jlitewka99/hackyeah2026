@@ -1,6 +1,7 @@
 defmodule AiControlWeb.OrganizationMemberAccessLive do
   use AiControlWeb, :live_view
 
+  alias AiControl.Gateway.Models
   alias AiControl.Organizations
   alias AiControlWeb.OrganizationUI
 
@@ -9,6 +10,7 @@ defmodule AiControlWeb.OrganizationMemberAccessLive do
 
   def handle_event("save", %{"access" => params}, socket) do
     attrs = %{role: params["role"] || "user", grants: OrganizationUI.grant_params(params)}
+    socket = assign(socket, :form, OrganizationUI.submitted_access_form(params))
 
     case Organizations.update_member(
            socket.assigns.current_scope,
@@ -36,7 +38,10 @@ defmodule AiControlWeb.OrganizationMemberAccessLive do
       {:ok, member} ->
         {:ok, agents} = AiControl.Agents.list_assignable_agents(socket.assigns.current_scope)
 
+        {:ok, models} = Models.list_assignable(socket.assigns.current_scope)
+
         assign(socket,
+          model_options: models,
           agent_options: Enum.map(agents, &{&1.name, &1.id}),
           member: member,
           form: OrganizationUI.access_form(member.grants, member.role)

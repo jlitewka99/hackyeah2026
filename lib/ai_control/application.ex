@@ -1,18 +1,23 @@
 defmodule AiControl.Application do
-  # See https://elixir.hexdocs.pm/Application.html
-  # for more information on OTP Applications
   @moduledoc false
 
   use Application
 
+  alias AiControl.Gateway.Config
+  # See https://elixir.hexdocs.pm/Application.html
+  # for more information on OTP Applications
   @impl true
   def start(_type, _args) do
+    Config.validate!()
+
     children = [
       AiControlWeb.Telemetry,
       AiControlWeb.RequestLog,
       AiControl.Repo,
       AiControl.Accounts.LoginLimiter,
       AiControl.Policies.Cache,
+      AiControl.Gateway.Limiter,
+      AiControl.Gateway.Supervisor,
       {DNSCluster, query: Application.get_env(:ai_control, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: AiControl.PubSub},
       # Start a worker by calling: AiControl.Worker.start_link(arg)
