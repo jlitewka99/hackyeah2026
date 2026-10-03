@@ -23,17 +23,25 @@ export PGPORT=55432
 Install dependencies, create and migrate the development database, and build assets:
 
 ```sh
-export AUDIT_FINGERPRINT_KEY="$(openssl rand -base64 32)"
-export AUDIT_FINGERPRINT_KEY_ID=v1
 mix setup
 mix phx.server
 ```
 
-Keep the audit key in your local environment or secret manager and reuse it on
-restart. Generating a new key changes fingerprints. Development and production
-require a separate base64-encoded key with at least 32 random bytes; tests use
-a deterministic key configured only in `config/test.exs`. When rotating the key,
-also change `AUDIT_FINGERPRINT_KEY_ID`. Historical records retain their key IDs.
+Development uses a local audit key configured in `config/dev.exs`, so no audit
+environment variables are required. Production requires a separate
+base64-encoded key with at least 32 random bytes; tests use a deterministic key
+configured only in `config/test.exs`.
+
+For production, generate the key once, keep it in your environment or secret
+manager, and reuse it on restart:
+
+```sh
+export AUDIT_FINGERPRINT_KEY="$(openssl rand -base64 32)"
+export AUDIT_FINGERPRINT_KEY_ID=v1
+```
+
+Generating a new key changes fingerprints. When rotating the key, also change
+`AUDIT_FINGERPRINT_KEY_ID`. Historical records retain their key IDs.
 
 Open [localhost:4000](http://localhost:4000). The server can also run inside IEx
 with `iex -S mix phx.server`.

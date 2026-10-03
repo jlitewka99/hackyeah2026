@@ -1,6 +1,6 @@
 import Config
 
-if config_env() != :test do
+if config_env() == :prod do
   encoded_key =
     System.get_env("AUDIT_FINGERPRINT_KEY") || raise "AUDIT_FINGERPRINT_KEY is required"
 

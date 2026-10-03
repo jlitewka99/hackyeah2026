@@ -1,5 +1,9 @@
 import Config
 
+config :ai_control, AiControl.Security.Fingerprint,
+  key: Base.decode64!("A3P1v7kNphuWenZXCLWuaFdIOM0H0PGU04e0jhjmJ1I="),
+  key_id: "dev-v1"
+
 # Configure your database
 config :ai_control, AiControl.Repo,
   username: "postgres",
