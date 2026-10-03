@@ -235,7 +235,7 @@ defmodule AiControlWeb.UserAuth do
   def on_mount(:require_sudo_mode, _params, session, socket) do
     socket = mount_current_scope(socket, session)
 
-    if socket.assigns.current_scope && Accounts.sudo_mode?(socket.assigns.current_scope.user, -10) do
+    if socket.assigns.current_scope && Accounts.sudo_mode?(socket.assigns.current_scope.user) do
       {:cont, socket}
     else
       socket =

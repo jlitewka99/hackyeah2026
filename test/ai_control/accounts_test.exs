@@ -92,13 +92,15 @@ defmodule AiControl.AccountsTest do
       now = DateTime.utc_now()
 
       assert Accounts.sudo_mode?(%User{authenticated_at: DateTime.utc_now()})
-      assert Accounts.sudo_mode?(%User{authenticated_at: DateTime.add(now, -19, :minute)})
+      assert Accounts.sudo_mode?(%User{authenticated_at: DateTime.add(now, -9, :minute)})
+      refute Accounts.sudo_mode?(%User{authenticated_at: DateTime.add(now, -10, :minute)})
+      refute Accounts.sudo_mode?(%User{authenticated_at: DateTime.add(now, -11, :minute)})
       refute Accounts.sudo_mode?(%User{authenticated_at: DateTime.add(now, -21, :minute)})
 
       # minute override
-      refute Accounts.sudo_mode?(
+      assert Accounts.sudo_mode?(
                %User{authenticated_at: DateTime.add(now, -11, :minute)},
-               -10
+               -20
              )
 
       # not authenticated
@@ -177,6 +179,58 @@ defmodule AiControl.AccountsTest do
 
       assert Repo.get!(User, user.id).email == user.email
       assert Repo.get_by(UserToken, user_id: user.id)
+    end
+
+    test "does not reuse a consumed token", %{user: user, token: token, email: email} do
+      assert {:ok, changed_user} = Accounts.update_user_email(user, token)
+      assert {:error, :transaction_aborted} = Accounts.update_user_email(changed_user, token)
+      assert Repo.get!(User, user.id).email == email
+      refute Repo.get_by(UserToken, user_id: user.id)
+    end
+
+    test "rejects a stale user after the stored email changes", %{user: user, token: token} do
+      current_email = unique_user_email()
+      Repo.update!(Ecto.Changeset.change(user, email: current_email))
+
+      assert {:error, :transaction_aborted} = Accounts.update_user_email(user, token)
+      assert Repo.get!(User, user.id).email == current_email
+      assert Repo.get_by(UserToken, user_id: user.id)
+    end
+
+    test "rejects another user's token even when its context matches", %{user: user} do
+      other_user = unconfirmed_user_fixture()
+
+      {token, record} =
+        UserToken.build_email_token(
+          %{other_user | email: unique_user_email()},
+          "change:#{user.email}"
+        )
+
+      record = Repo.insert!(record)
+
+      assert {:error, :transaction_aborted} = Accounts.update_user_email(user, token)
+      assert Repo.get!(User, user.id).email == user.email
+      assert Repo.get!(User, other_user.id).email == other_user.email
+      assert Repo.get!(UserToken, record.id)
+      assert Repo.get_by(UserToken, user_id: user.id)
+    end
+
+    test "a taken target email preserves the account and all pending tokens", %{user: user} do
+      other_user = unconfirmed_user_fixture()
+
+      {token, record} =
+        UserToken.build_email_token(%{user | email: other_user.email}, "change:#{user.email}")
+
+      Repo.insert!(record)
+
+      pending_tokens =
+        Repo.all(from(t in UserToken, where: t.user_id == ^user.id, order_by: t.id))
+
+      assert {:error, :transaction_aborted} = Accounts.update_user_email(user, token)
+      assert Repo.get!(User, user.id).email == user.email
+
+      assert Repo.all(from(t in UserToken, where: t.user_id == ^user.id, order_by: t.id)) ==
+               pending_tokens
     end
   end
 

@@ -92,6 +92,25 @@ Bootstrap i odzyskiwanie opisano w README, a tokeny i komponenty w DESIGN.md
 oraz `.impeccable/design.json`. Testy i podgląd korzystały z osobnej, tymczasowej
 bazy PostgreSQL, bez zmian w lokalnej bazie użytkownika.
 
+**Naprawa P2 2026-10-03:** potwierdzanie zmiany emaila blokuje rekord użytkownika
+przez `FOR UPDATE` przed sprawdzeniem tokenu. Token jest powiązany z aktualnym
+adresem i identyfikatorem konta; nieaktualny użytkownik oraz token innego konta
+są odrzucane. Równoczesne użycie tego samego tokenu lub dwóch tokenów dla
+dotychczasowego adresu dopuszcza dokładnie jedną zmianę. Nieudana zmiana
+pozostawia dane konta i tokeny bez zmian.
+
+Ujednolicono okno autoryzacji ustawień do 10 minut w HTTP i LiveView. Po jego
+wygaśnięciu zapis z otwartej strony przekierowuje do logowania z komunikatem,
+bez awarii LiveView, wysłania emaila ani uruchomienia formularza zmiany hasła.
+Dodano testy współbieżności na osobnych połączeniach PostgreSQL z kontrolowaną
+barierą blokady oraz testy formularzy po 11 i 21 minutach, granicy 10 minut,
+powiązania tokenu z kontem i rollbacku. Testy nie używają usypiania procesów.
+
+Weryfikacja naprawy: `mix precommit` przeszedł (127 testów, brak ostrzeżeń
+kompilacji i uwag Credo), podobnie `mix assets.build`. Sprawdzenia korzystały
+z osobnej, tymczasowej instancji PostgreSQL, bez zmian w lokalnej bazie użytkownika.
+Oba testy współbieżności przeszły również przy jednym schedulerze BEAM.
+
 ### Krok 2. Organizacje, członkostwa i zaproszenia
 
 - Dodać organizacje, członkostwa i jednorazowe zaproszenia ważne 24 godziny.

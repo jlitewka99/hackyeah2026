@@ -52,7 +52,7 @@ defmodule AiControlWeb.UserSessionController do
   def update_password(conn, %{"user" => user_params}) do
     user = conn.assigns.current_scope.user
 
-    if Accounts.sudo_mode?(user, -10) do
+    if Accounts.sudo_mode?(user) do
       case Accounts.update_user_password(user, user_params) do
         {:ok, {user, expired_tokens}} ->
           UserAuth.disconnect_sessions(expired_tokens)

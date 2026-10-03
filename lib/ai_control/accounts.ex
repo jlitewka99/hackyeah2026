@@ -129,10 +129,10 @@ defmodule AiControl.Accounts do
   @doc """
   Checks whether the user is in sudo mode.
 
-  The user is in sudo mode when the last authentication was done no further
-  than 20 minutes ago. The limit can be given as second argument in minutes.
+  The user is in sudo mode when the last authentication was done less than
+  10 minutes ago. The limit can be given as second argument in minutes.
   """
-  def sudo_mode?(user, minutes \\ -20)
+  def sudo_mode?(user, minutes \\ -10)
 
   def sudo_mode?(%User{authenticated_at: ts}, minutes) when is_struct(ts, DateTime) do
     DateTime.after?(ts, DateTime.utc_now() |> DateTime.add(minutes, :minute))
@@ -158,17 +158,25 @@ defmodule AiControl.Accounts do
   @doc """
   Updates the user email using the given token.
 
-  If the token matches, the user email is updated and the token is deleted.
+  Locks the current user before verifying the token so concurrent confirmations
+  cannot consume the same token or confirm competing changes to the old email.
+  If the token matches, the user email is updated and its change tokens are deleted.
   """
   def update_user_email(user, token) do
-    context = "change:#{user.email}"
-
     Repo.transact(fn ->
-      with {:ok, query} <- UserToken.verify_change_email_token_query(token, context),
-           %UserToken{sent_to: email} <- Repo.one(query, log: false),
-           {:ok, user} <- Repo.update(User.email_changeset(user, %{email: email})),
+      with %User{} = current_user <-
+             Repo.one(from(u in User, where: u.id == ^user.id, lock: "FOR UPDATE"), log: false),
+           true <- current_user.email == user.email,
+           context = "change:#{current_user.email}",
+           {:ok, query} <- UserToken.verify_change_email_token_query(token, context),
+           %UserToken{sent_to: email} <-
+             Repo.one(from(t in query, where: t.user_id == ^current_user.id), log: false),
+           {:ok, user} <-
+             Repo.update(User.email_changeset(current_user, %{email: email}), log: false),
            {_count, _result} <-
-             Repo.delete_all(from(UserToken, where: [user_id: ^user.id, context: ^context])) do
+             Repo.delete_all(from(UserToken, where: [user_id: ^user.id, context: ^context]),
+               log: false
+             ) do
         {:ok, user}
       else
         _ -> {:error, :transaction_aborted}

@@ -3,8 +3,11 @@ defmodule AiControlWeb.UserSettingsLiveTest do
 
   import AiControl.AccountsFixtures
   import Phoenix.LiveViewTest
+  import Swoosh.TestAssertions
 
   alias AiControl.Accounts
+  alias AiControl.Accounts.UserToken
+  alias AiControl.Repo
 
   test "shows both settings forms after recent authentication", %{conn: conn} do
     {:ok, view, _} = live(log_in_user(conn, user_fixture()), ~p"/users/settings")
@@ -80,5 +83,69 @@ defmodule AiControlWeb.UserSettingsLiveTest do
 
     assert {:error, {:live_redirect, %{to: "/users/settings", flash: %{"error" => _}}}} =
              live(conn, ~p"/users/settings/confirm-email/#{token}")
+  end
+
+  for minutes <- [11, 21] do
+    @minutes minutes
+
+    test "email submission redirects after #{@minutes} minutes without sending instructions", %{
+      conn: conn
+    } do
+      user = user_fixture()
+      assert_email_sent()
+      {:ok, view, _} = live(log_in_user(conn, user), ~p"/users/settings")
+      expire_authentication(view, @minutes)
+
+      assert {:error, {:live_redirect, %{to: "/users/log-in"}}} =
+               view
+               |> form("#email_form", user: %{email: unique_user_email()})
+               |> render_submit()
+
+      assert %{"error" => "You must re-authenticate to access this page."} =
+               assert_redirect(view, ~p"/users/log-in")
+
+      assert_no_email_sent()
+      assert Repo.get!(Accounts.User, user.id).email == user.email
+      refute Repo.get_by(UserToken, user_id: user.id, context: "change:#{user.email}")
+    end
+
+    test "password submission redirects after #{@minutes} minutes without changing credentials",
+         %{conn: conn} do
+      user = user_fixture() |> set_password()
+      conn = log_in_user(conn, user)
+      token = get_session(conn, :user_token)
+      {:ok, view, _} = live(conn, ~p"/users/settings")
+      expire_authentication(view, @minutes)
+
+      assert {:error, {:live_redirect, %{to: "/users/log-in"}}} =
+               view
+               |> form("#password_form",
+                 user: %{
+                   password: "a replacement password",
+                   password_confirmation: "a replacement password"
+                 }
+               )
+               |> render_submit()
+
+      assert %{"error" => "You must re-authenticate to access this page."} =
+               assert_redirect(view, ~p"/users/log-in")
+
+      assert Repo.get!(Accounts.User, user.id).hashed_password == user.hashed_password
+      assert Accounts.get_user_by_session_token(token)
+    end
+  end
+
+  defp expire_authentication(view, minutes) do
+    :sys.replace_state(view.pid, fn state ->
+      scope = state.socket.assigns.current_scope
+
+      user = %{
+        scope.user
+        | authenticated_at: DateTime.add(DateTime.utc_now(:second), -minutes, :minute)
+      }
+
+      socket = Phoenix.Component.assign(state.socket, :current_scope, %{scope | user: user})
+      %{state | socket: socket}
+    end)
   end
 end

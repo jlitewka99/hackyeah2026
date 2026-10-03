@@ -151,6 +151,32 @@ defmodule AiControlWeb.UserSessionControllerTest do
     assert Accounts.get_user_by_email_and_password(user.email, valid_user_password())
   end
 
+  test "direct password update accepts authentication aged nine minutes and revokes old sessions",
+       %{conn: conn} do
+    user = user_fixture() |> set_password()
+    other_token = Accounts.generate_user_session_token(user)
+
+    conn =
+      log_in_user(conn, user,
+        token_authenticated_at: DateTime.add(DateTime.utc_now(:second), -9, :minute)
+      )
+
+    old_token = get_session(conn, :user_token)
+    password = "a replacement password"
+
+    conn =
+      post(conn, ~p"/users/update-password",
+        user: %{password: password, password_confirmation: password}
+      )
+
+    assert redirected_to(conn) == ~p"/users/settings"
+    assert get_session(conn, :user_token) != old_token
+    assert Accounts.get_user_by_session_token(get_session(conn, :user_token))
+    refute Accounts.get_user_by_session_token(old_token)
+    refute Accounts.get_user_by_session_token(other_token)
+    assert Accounts.get_user_by_email_and_password(user.email, password)
+  end
+
   test "direct password update reports invalid values without crashing", %{conn: conn} do
     conn =
       conn

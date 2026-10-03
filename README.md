@@ -54,8 +54,10 @@ constraint also enforces the single-organizer rule.
 Sign in at `/users/log-in`. The organizer lands at `/platform/organizations`;
 `/users/settings` contains separate email and password forms. Organization
 management and invitations are implemented in the next step. Account changes
-require recent authentication. Changing a password revokes existing sessions;
-the submitting browser receives a fresh session. Remember-me cookies last 14
+require authentication within the last 10 minutes, both when opening settings
+and submitting changes. If that window expires while the page is open, submitting
+either form redirects to sign-in without applying the change. Changing a password
+revokes existing sessions; the submitting browser receives a fresh session. Remember-me cookies last 14
 days, use HttpOnly and SameSite=Lax, and require HTTPS in production.
 
 ### Recovering access
@@ -64,6 +66,8 @@ Choose **Forgot password?** or open `/users/recover`. An existing account receiv
 a single-use email link valid for 15 minutes. The response is identical for known
 and unknown emails. Consuming the link signs you in to account settings, where
 you can set a new password. Email changes require confirmation at the new address.
+Confirmations are serialized per account: concurrent uses of the same link, or
+competing links for the old address, permit only one successful change.
 
 Development uses Swoosh's local delivery adapter. The `/dev/mailbox` preview is
 restricted to an authenticated organizer. Configure `AiControl.Mailer` with a
