@@ -860,7 +860,9 @@ export GATEWAY_PRICES='{"qwen3.5:4b":{"currency":"USD","input_per_million":"2.50
 
 These example rates are operator choices, not inferred local-model prices.
 Decimal accounting stores a snapshot and rounds the final amount to 12 decimal
-places. Missing prices mean `not configured`, not a zero-cost estimate. This
+places. Missing prices mean `not configured`; configured prices with unknown
+usage mean `unavailable`. Confirmed unsent work has zero cost when rates are
+configured. This
 step reports costs; it does not add currency-based quota enforcement. Optional
 validated guard usage is retained separately in decision evidence; unavailable
 measurements remain `null` and never add to target-model token counters.
@@ -878,5 +880,5 @@ mix test test/ai_control/gateway/live_budget_tokenizer_test.exs --include live_m
 bash docker/smoke ai-control:step9
 ```
 
-See `docs/acceptance/step9.md` for actual results and remaining integration
-acceptance with steps 8 and 10. Tool counter integration remains steps 12/15.
+See `docs/acceptance/step9.md` for actual results, including the joint step 8
+acceptance and remaining semantic integration with step 10. Tool counter integration remains steps 12/15.

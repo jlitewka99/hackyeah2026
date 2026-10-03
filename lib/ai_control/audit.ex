@@ -97,7 +97,7 @@ defmodule AiControl.Audit do
       (is_nil(usage) || match?({:ok, ^usage}, Usage.normalize(usage)))
   end
 
-  defp budget_cost?("not configured"), do: true
+  defp budget_cost?(cost) when cost in ["not configured", "unavailable"], do: true
   defp budget_cost?(cost) when is_binary(cost), do: Regex.match?(~r/\A\d+(\.\d+)?\z/, cost)
   defp budget_cost?(_), do: false
   defp budget_currency?(nil), do: true

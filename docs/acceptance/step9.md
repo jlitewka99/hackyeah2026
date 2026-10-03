@@ -54,7 +54,9 @@ input/output audits and failed database admission. Input is counted after
 redaction; guard usage is audited separately and does not alter target-model
 counters. HTTP tests cover unauthenticated API-key attempts sharing the remote
 IP limiter and distinct hourly 429 codes with UTC Retry-After. Decimal costs
-retain request-time rates across price changes.
+retain request-time rates across price changes. Unknown usage with configured
+rates is `unavailable`, missing rates are `not configured`, and confirmed
+unsent work has zero configured cost.
 
 ## Scope and remaining integration
 

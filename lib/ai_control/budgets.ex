@@ -143,7 +143,11 @@ defmodule AiControl.Budgets do
       unbounded: if(current.unbounded, do: -1, else: 0)
     )
 
-    update_record(current, status: "released", unbounded: false)
+    update_record(current,
+      status: "released",
+      unbounded: false,
+      cost: if(current.price, do: Decimal.new(0))
+    )
   end
 
   def evidence(%Reservation{} = receipt) do
@@ -156,11 +160,14 @@ defmodule AiControl.Budgets do
       reserved_tokens: current.reserved_tokens,
       usage: current.usage,
       overrun: current.overrun,
-      cost:
-        if(current.cost, do: Decimal.to_string(current.cost, :normal), else: "not configured"),
+      cost: cost_evidence(current),
       currency: if(current.price, do: current.price["currency"])
     }
   end
+
+  defp cost_evidence(%{price: nil}), do: "not configured"
+  defp cost_evidence(%{cost: nil}), do: "unavailable"
+  defp cost_evidence(%{cost: cost}), do: Decimal.to_string(cost, :normal)
 
   def state(scope, agent_id \\ nil, now \\ DateTime.utc_now()) do
     with {:ok, current} <- Access.authorize(scope, "budgets.read"),

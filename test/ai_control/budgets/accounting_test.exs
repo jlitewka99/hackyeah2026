@@ -155,8 +155,15 @@ defmodule AiControl.Budgets.AccountingTest do
     Application.put_env(:ai_control, Config, Keyword.put(old, :prices, %{"qwen3.5:4b" => price}))
     snapshot = policy(context)
     receipt = admit(context, snapshot)
+    assert Budgets.evidence(receipt).cost == "unavailable"
+    unsent = admit(context, snapshot)
+    assert {:ok, released} = Budgets.abandon(unsent)
+    assert Decimal.equal?(released.cost, Decimal.new(0))
+    assert Decimal.equal?(Decimal.new(Budgets.evidence(released).cost), Decimal.new(0))
     Application.put_env(:ai_control, Config, Keyword.put(old, :prices, %{}))
     {:ok, receipt} = Budgets.dispatch(receipt)
+    {:ok, receipt} = Budgets.abandon(receipt)
+    assert Budgets.evidence(receipt).cost == "unavailable"
     assert {:ok, settled} = Budgets.settle(receipt, usage(1000, 100))
     assert Decimal.equal?(settled.cost, Decimal.new("0.0035"))
     assert settled.price == price
