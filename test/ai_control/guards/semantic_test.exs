@@ -169,4 +169,19 @@ defmodule AiControl.Guards.SemanticTest do
 
     refute Local.ready?(config)
   end
+
+  test "empty response fields preserve prompt-response labels", %{config: config} do
+    result = response([""], "Unsafe", ["Violent"], "moderation")
+    assert Local.valid_response?(result, [""], "moderation")
+    refute Local.valid_response?(%{result | "windows" => []}, [""], "moderation")
+    Req.Test.stub(__MODULE__, &Req.Test.json(&1, result))
+
+    assert {:ok, %{detections: [%{category: "content_safety"}]}} =
+             Moderation.assess(
+               [""],
+               nil,
+               snapshot(),
+               Keyword.put(config, :semantic_prompt, "accepted prompt context")
+             )
+  end
 end

@@ -110,6 +110,17 @@ class ServiceTest(unittest.TestCase):
             self.assertEqual(first.result().status_code, 200)
             self.assertFalse(client.get("/ready").json()["busy"])
 
+    def test_empty_moderation_response_still_checks_context(self):
+        class ContextLimit(Fake):
+            def classify(self, text, task, prompt, deadline):
+                self.asserted = (text, task, prompt)
+                raise ValueError("context_limit")
+
+        model = ContextLimit()
+        with self.assertRaisesRegex(ValueError, "context_limit"):
+            analyze(model, request("", "moderation"))
+        self.assertEqual(model.asserted, ("", "moderation", "safe input"))
+
 
 if __name__ == "__main__":
     unittest.main()

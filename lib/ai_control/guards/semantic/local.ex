@@ -66,7 +66,7 @@ defmodule AiControl.Guards.Semantic.Local do
       Enum.all?(windows, &task_window?(&1, fields, task)) &&
       length(windows) ==
         length(Enum.uniq_by(windows, &Map.take(&1, ~w(field_index start_byte end_byte)))) &&
-      all_fields_covered?(fields, windows)
+      all_fields_covered?(fields, windows, task)
   end
 
   def valid_response?(_, _, _), do: false
@@ -88,22 +88,22 @@ defmodule AiControl.Guards.Semantic.Local do
         (task != "moderation" || window["refusal"] in ["Yes", "No"]) &&
         (task != "injection" || is_nil(window["refusal"]))
 
-  defp all_fields_covered?(fields, windows),
+  defp all_fields_covered?(fields, windows, task),
     do:
       fields
       |> Enum.with_index()
       |> Enum.all?(fn {text, index} ->
-        covered?(text, Enum.filter(windows, &(&1["field_index"] == index)))
+        covered?(text, Enum.filter(windows, &(&1["field_index"] == index)), task)
       end)
 
-  defp covered?("", [window]),
+  defp covered?("", [window], task),
     do:
-      window["start_byte"] == 0 && window["end_byte"] == 0 && window["severity"] == "Safe" &&
-        window["categories"] == []
+      window["start_byte"] == 0 && window["end_byte"] == 0 &&
+        (task == "moderation" || (window["severity"] == "Safe" && window["categories"] == []))
 
-  defp covered?("", _windows), do: false
+  defp covered?("", _windows, _task), do: false
 
-  defp covered?(text, windows) do
+  defp covered?(text, windows, _task) do
     windows
     |> Enum.sort_by(& &1["start_byte"])
     |> Enum.reduce_while(0, fn window, covered ->

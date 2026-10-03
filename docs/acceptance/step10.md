@@ -9,15 +9,15 @@ model selection and every Prompt Guard implementation/access task belong to 11B.
 
 - `mix precommit`: strict compilation, formatting, lockfile, Credo, ExUnit and
   JavaScript regressions pass after integrating Steps 8 and 12A from main:
-  **429 ExUnit tests**, five opt-in tests excluded,
+  **430 ExUnit tests**, five opt-in tests excluded,
   and **three JavaScript tests**.
 - `mix assets.build`: Tailwind/esbuild pass.
 - `mix dialyzer`: zero errors. Production compilation passes.
 - `mix security`: dependency audit and Sobelow pass; the existing low-confidence
   policy-upload path finding is unchanged.
-- Python semantic contract tests: seven pass, including full UTF-8 tail/overlap
+- Python semantic contract tests: eight pass, including full UTF-8 tail/overlap
   coverage, work/deadline limits, single-scan capacity, strict labels, private
-  errors and untruncated oversized moderation context.
+  errors and untruncated oversized moderation context, even for an empty response.
 - Gateway mocks cover Polish labels, severity mapping, PII separated from injection,
   input blocking before downstream, required failure, output blocking with redacted
   prompt context, private audit and immutable in-flight policy snapshots.
