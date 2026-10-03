@@ -1,11 +1,18 @@
 defmodule AiControl.Security.GuardResult do
   @moduledoc "Guard measurements and findings. Enforcement belongs to Policy.Engine."
+  alias AiControl.Budgets.Usage
   alias AiControl.Security.{Detection, Validation}
 
-  @fields [:guard, :status, :detections, :signals, :duration_us, :error_code]
+  @fields [:guard, :status, :detections, :signals, :duration_us, :error_code, :usage]
   @signals ~w(risk_score injection_score pii_count secret_count exploit_count)
   @error_codes ~w(provider_unavailable provider_timeout provider_invalid_response guard_unavailable upstream_timeout upstream_unavailable upstream_rejected upstream_invalid_response)
-  defstruct guard: nil, status: nil, detections: [], signals: %{}, duration_us: 0, error_code: nil
+  defstruct guard: nil,
+            status: nil,
+            detections: [],
+            signals: %{},
+            duration_us: 0,
+            error_code: nil,
+            usage: nil
 
   @type t :: %__MODULE__{
           guard: String.t(),
@@ -13,7 +20,8 @@ defmodule AiControl.Security.GuardResult do
           detections: [Detection.t()],
           signals: map(),
           duration_us: non_neg_integer(),
-          error_code: String.t() | nil
+          error_code: String.t() | nil,
+          usage: map() | nil
         }
 
   def new(attrs), do: Validation.build(__MODULE__, attrs, @fields, &valid?/1)
@@ -22,10 +30,14 @@ defmodule AiControl.Security.GuardResult do
     Validation.code?(result.guard) && result.status in [:ok, :error, :skipped] &&
       detections?(result) &&
       signals?(result.signals) && Validation.duration?(result.duration_us) &&
-      error_code?(result) && (result.status == :ok || result.detections == [])
+      error_code?(result) && (result.status == :ok || result.detections == []) &&
+      usage?(result.usage)
   end
 
   def valid?(_), do: false
+
+  defp usage?(nil), do: true
+  defp usage?(value), do: match?({:ok, ^value}, Usage.normalize(value))
 
   defp detections?(result),
     do:

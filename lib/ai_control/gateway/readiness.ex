@@ -16,10 +16,20 @@ defmodule AiControl.Gateway.Readiness do
          true <- map_size(config[:models]) > 0,
          {:ok, models} <- provider.models(config),
          true <- pinned_catalog?(config, models),
-         true <- guards_ready?(policies, config) do
+         true <- guards_ready?(policies, config),
+         true <- tokenizer_ready?(policies, config) do
       :ok
     else
       _ -> {:error, :not_ready}
+    end
+  end
+
+  defp tokenizer_ready?(policies, config) do
+    if Enum.any?(policies, &AiControl.Budgets.hard_limit?/1) do
+      tokenizer = config[:tokenizer]
+      tokenizer.ready?(config)
+    else
+      true
     end
   end
 

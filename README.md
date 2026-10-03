@@ -259,8 +259,8 @@ Deterministic guards default to required on input and output; semantic analysis
 defaults to input. Explicit rule and guard fields override profile defaults.
 The initial policy allows `qwen3.5:4b` and all active agents in the requesting
 organization. Budgets start unconfigured. Organization and agent requests/tokens
-per UTC hour and workflow tool calls can be configured now; budget accounting
-and enforcement arrive in step 9. Step 7 connects deterministic guards and NER;
+per UTC hour are enforced by durable accounting. Workflow tool calls have an
+atomic counter ready for the step 12 endpoint. Step 7 connects deterministic guards and NER;
 the complete output filtering acceptance remains in step 8.
 
 Import [the example policy](priv/policies/balanced.yaml) by pasting YAML or uploading
@@ -462,14 +462,19 @@ is retained in the assessment evidence.
 | `GATEWAY_LLM_SLOTS` | 1 |
 | `GATEWAY_GUARD_SLOTS` | 2 |
 | `GATEWAY_REQUESTS_PER_MINUTE` | 60 per actor in an organization |
+| `GATEWAY_IP_REQUESTS_PER_MINUTE` | 300 attempts per remote IP before authentication |
+| `GATEWAY_DEFAULT_MAX_TOKENS` | 1024 when a token limit is active |
+| `TOKENIZER_BASE_URL` | `http://127.0.0.1:8002` (private) |
+| `TOKENIZER_TIMEOUT_MS` | 5000 |
+| `GATEWAY_PRICES` | `{}`; no configured cost |
 
 The ingress counter is local Hammer/ETS and is shared by all keys of one agent;
 restart resets it. Authenticated rejected requests count too. Saturated slots return
 `429` immediately with `Retry-After`; timeout, cancellation and owner death stop the
 supervised worker and free the lease. Generation has no retries or redirects, and
-response reception stops at its size cap. Durable budgets are step 9.
+response reception stops at its size cap. Hourly budgets persist in PostgreSQL.
 `400/413` indicate invalid/oversized input, `403` policy denial, `429` overload,
-`502` unusable backend responses, `503` unavailable security/audit/model services
+`502` unusable backend responses, `503` unavailable security/audit/model/accounting services
 and `504` backend timeout. Error responses use fixed text and a server request ID.
 
 `GET /health` is liveness. `GET /ready` is bounded readiness of the database,
@@ -692,3 +697,124 @@ pull requests.
 
 - [Phoenix guides](https://phoenix.hexdocs.pm/overview.html)
 - [Phoenix deployment guides](https://phoenix.hexdocs.pm/deployment.html)
+
+## Durable budgets and usage (step 9)
+
+Apply `mix ecto.migrate` before starting the new application; releases run this
+through `AiControl.Release.migrate/0`. Migration
+`20261003220124_create_durable_budgets` adds hourly buckets, reservations,
+workflow counters and execution deduplication. Existing policy schemas and
+hourly units are unchanged. An empty form field / YAML `null` means no limit;
+zero denies new admission or reservation. Policy activation, rollback, cache
+loss and restart never reset counters. Budget state requires `budgets.read`
+and current agent grants. The separate Budgets page remains step 11.
+
+After validation and agent/model authorization, admission locks the organization
+then its organization and agent buckets in one transaction. An admitted chat
+counts once even if input guards, token reservation, a downstream service or
+audit subsequently reject it. Invalid payloads, invalid credentials, revoked
+access and hourly request refusals do not count. The pre-authentication IP
+limiter uses `remote_ip`, independently of the existing actor limiter and active
+worker slots. Forwarded headers do not select the IP counter.
+
+With either hourly token limit active, missing `max_tokens` receives the
+operator default (1024). After input redaction, the provider renders the full
+prompt with the private `_debug_render_only` flag in **Ollama 0.35.1**, without
+generating. Public API payloads cannot set this flag. The tokenizer counts the
+rendered conversation, special tokens, history and tools, then PostgreSQL
+reserves input plus maximum output against both levels. Admission preserves the
+verified actor, request UUID, model, policy settings/version/checksum, UTC window
+and price snapshot. Generation rechecks access and persists `dispatching`
+before invoking transport. Generation is never retried.
+
+The private FastAPI/tokenizers sidecar supports only the manifest-pinned
+`qwen3.5:4b` Q4_K_M digest in `sidecar/tokenizer/models.v1.json`. It verifies
+SHA-256 and size, loads offline, exposes only `/count` and `/ready`, and emits
+no prompt access logs. The live acceptance compares counts with Ollama's actual
+`prompt_tokens`; changing runtime/model/tokenizer requires a new manifest and
+that acceptance. Unsupported combinations or unavailable counting fail closed
+with `503` under a hard token limit. Without a token limit the existing chat
+continues without a tokenizer. `/ready` additionally checks tokenizer agreement
+when any effective active policy has a token limit. The container starts both
+sidecars on loopback and supervises them with BEAM; only port 4000 is exposed.
+
+For local development (use a separate venv if needed):
+
+```sh
+python3.11 -m venv .venv
+.venv/bin/pip install -r sidecar/tokenizer/requirements.lock
+.venv/bin/python sidecar/tokenizer/models.py download sidecar/tokenizer/models
+HF_HUB_OFFLINE=1 .venv/bin/python -m uvicorn service:app \
+  --app-dir sidecar/tokenizer --host 127.0.0.1 --port 8002 \
+  --no-access-log --log-level critical
+```
+
+Build/setup downloads the pinned tokenizer artifact; running requests never
+download artifacts. License and provenance are in `sidecar/tokenizer/`.
+
+Valid numeric model usage is settled before response-content validation and
+output filtering, including later output/audit failures. Equal repeat settlement
+is a no-op; contradictory settlement is rejected. At 5000 tokens, a 4000-token
+reservation excludes another 4000-token reservation; actual usage 2200 returns
+1800. Actual overrun is charged in full and marked in evidence. The original
+UTC hour owns the entire lifecycle even if completion crosses midnight. Hourly
+request/token refusals return distinct `429` codes and `Retry-After` to the next
+UTC hour. Accounting failure returns `503`.
+
+Confirmed unsent work (`admitted`/`reserved`) releases its tokens. Any timeout,
+cancellation or worker death after the durable dispatch marker retains the full
+reservation as `uncertain`; even a transport connection failure after that
+marker is conservative. Startup recovery releases unsent receipts and marks
+persisted dispatches uncertain. TTL never refunds potentially generated tokens.
+Without a token limit, unknown usage has no upper bound: an unresolved unbounded
+receipt prevents enforcing a newly activated token limit in that same hour.
+Later hours use independent counters. **Run one application instance per
+database during this MVP**: startup recovery assumes other workers are stopped.
+Database transactions serialize concurrent requests; coordinated recovery across
+multiple live instances requires a deployment lease in a later change.
+
+Reconcile only with independently verified operator evidence. From a controlled
+application console, pass the freshly authenticated organization scope to:
+
+```elixir
+{:ok, bucket} = AiControl.Budgets.state(scope) # or state(scope, agent_id)
+AiControl.Budgets.reconcile(scope, reservation_id, :not_sent)
+AiControl.Budgets.reconcile(scope, reservation_id, %{
+  "prompt_tokens" => 2000, "completion_tokens" => 200, "total_tokens" => 2200
+})
+```
+
+`budgets.manage` and current tenant/agent grants are required. Reconciliation
+and its audit entry commit atomically; audit failure leaves the hold intact.
+`not_sent` requires evidence of no generation, not merely elapsed time.
+Read state may use a one-second ETS cache; enforcement always uses PostgreSQL.
+
+Operator prices are decimal **strings** per million input/output tokens, with
+an uppercase three-letter currency. For example:
+
+```sh
+export GATEWAY_PRICES='{"qwen3.5:4b":{"currency":"USD","input_per_million":"2.50","output_per_million":"10.00"}}'
+```
+
+These example rates are operator choices, not inferred local-model prices.
+Decimal accounting stores a snapshot and rounds the final amount to 12 decimal
+places. Missing prices mean `not configured`, not a zero-cost estimate. This
+step reports costs; it does not add currency-based quota enforcement. Optional
+validated guard usage is retained separately in decision evidence; unavailable
+measurements remain `null` and never add to target-model token counters.
+Telemetry separates `budget_admission`, `budget_reservation` and
+`budget_settlement` from generation. Audit includes safe identifiers,
+reservation status, usage, overrun and cost, without prompt or response text.
+
+Run acceptance with:
+
+```sh
+mix precommit
+mix assets.build
+PYTHONPATH=sidecar/tokenizer .venv/bin/python -m unittest discover -s tests/tokenizer
+mix test test/ai_control/gateway/live_budget_tokenizer_test.exs --include live_models
+bash docker/smoke ai-control:step9
+```
+
+See `docs/acceptance/step9.md` for actual results and remaining integration
+acceptance with steps 8 and 10. Tool counter integration remains steps 12/15.

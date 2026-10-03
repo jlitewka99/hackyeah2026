@@ -25,6 +25,10 @@ COPY sidecar/ner ./
 RUN /opt/ner/bin/python models.py download /models
 
 FROM ${PYTHON_IMAGE} AS runner
+COPY sidecar/tokenizer/requirements.lock /tmp/tokenizer-requirements.lock
+RUN python -m venv /opt/tokenizer && /opt/tokenizer/bin/pip install --no-cache-dir -r /tmp/tokenizer-requirements.lock
+COPY sidecar/tokenizer /app/tokenizer
+RUN /opt/tokenizer/bin/python /app/tokenizer/models.py download /app/tokenizer-models
 RUN apt-get update && apt-get install -y --no-install-recommends libstdc++6 libncurses6 libgomp1 openssl ca-certificates tini curl bash && rm -rf /var/lib/apt/lists/* && useradd --uid 10001 --create-home app
 WORKDIR /app
 COPY --from=builder --chown=app:app /app/_build/prod/rel/ai_control ./
@@ -32,7 +36,7 @@ COPY --from=ner-builder /opt/ner /opt/ner
 COPY --from=ner-builder /models /app/models
 COPY --chown=app:app sidecar/ner /app/ner
 COPY --chmod=755 docker/start docker/healthcheck /app/docker/
-ENV LANG=C.UTF-8 PHX_SERVER=true PORT=4000 NER_BASE_URL=http://127.0.0.1:8001 STANZA_RESOURCES_DIR=/app/models PYTHONDONTWRITEBYTECODE=1
+ENV LANG=C.UTF-8 PHX_SERVER=true PORT=4000 NER_BASE_URL=http://127.0.0.1:8001 TOKENIZER_BASE_URL=http://127.0.0.1:8002 TOKENIZER_MODELS_DIR=/app/tokenizer-models STANZA_RESOURCES_DIR=/app/models PYTHONDONTWRITEBYTECODE=1 HF_HUB_OFFLINE=1
 USER app
 EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 CMD ["/app/docker/healthcheck"]

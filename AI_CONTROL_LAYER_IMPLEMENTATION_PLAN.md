@@ -530,6 +530,8 @@ wizualnego; zastanego driftu nie naprawiano w tym rozszerzeniu.
 
 ### Krok 9. Budżety i rozliczanie użycia
 
+**Stan implementacji (2026-10-04):** trwałe liczniki, rezerwacje, rozliczanie usage/kosztów, tokenizer i integracja gatewaya są zaimplementowane na `JL/step-9-budgets`. `mix precommit`: 383 testy; sidecar: 4 testy; rzeczywisty Ollama 0.35.1: zgodność czterech promptów (23/60/273/328 tokenów). Odbiór Policies obejmuje desktop/mobile, oba motywy i klawiaturę. [Wyniki odbioru](docs/acceptance/step9.md). Checkbox pozostaje otwarty do pomyślnego odbioru kontenera w CI. Wspólna integracja rzeczywistego output filtering i semantyki jest odbierana po scaleniu kroków 8 i 10; narzędzia/workflowy podłączają kroki 12 i 15.
+
 **Praca równoległa:** po ukończeniu 7 realizować równolegle z 8, 10 i 12A. Nie wymaga ukończenia 8 do budowy liczników i integracji z istniejącym gatewayem; wspólne scenariusze blokady wyjścia są sprawdzane po scaleniu.
 
 - Wprowadzić limity żądań i tokenów na godzinę dla organizacji i agentów oraz wywołań narzędzi na workflow. Pełne rozliczanie narzędzi i workflowów zostaje podłączone w krokach 12 i 15.

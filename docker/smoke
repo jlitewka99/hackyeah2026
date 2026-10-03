@@ -1,5 +1,5 @@
 #!/bin/bash
-# Linux acceptance: real models, release transport, isolation and both child failures.
+# Linux acceptance: real models, release transport, isolation and all child failures.
 set -euo pipefail
 image=${1:-ai-control:step7}
 network=ai-control-step7-ci
@@ -37,6 +37,7 @@ start_app
 [[ $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4017/health) == 200 ]]
 [[ $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4017/ready) == 503 ]]
 [[ $(docker port "$container" 8001/tcp 2>/dev/null || true) == '' ]]
+[[ $(docker port "$container" 8002/tcp 2>/dev/null || true) == '' ]]
 docker exec "$container" /app/bin/ai_control rpc '
   {:ok, %{settings: settings}} = AiControl.Policies.Configuration.validate(AiControl.Policies.Configuration.default(2))
   text = "😀 Rozmawiałem z Janem Kowalskim przy ul. Długiej 12, 00-001 Warszawa."
@@ -51,19 +52,24 @@ docker exec "$container" /app/bin/ai_control rpc '
   IO.puts("Real NER release transport and UTF-8 redaction passed")'
 docker run --rm --entrypoint /opt/ner/bin/python -e NER_LIVE=1 -e PYTHONPATH=/app/ner \
   -v "$PWD/tests/ner:/app/tests/ner:ro" "$image" -m unittest discover -s /app/tests/ner
+docker run --rm --entrypoint /opt/tokenizer/bin/python -e PYTHONPATH=/app/tokenizer \
+  -v "$PWD/tests/tokenizer:/app/tests/tokenizer:ro" "$image" -m unittest discover -s /app/tests/tokenizer
+docker exec "$container" /opt/tokenizer/bin/python /app/tokenizer/models.py verify /app/tokenizer-models
 docker exec "$container" /opt/ner/bin/python /app/ner/benchmark.py | tee /tmp/step7-ner-benchmark.json
 docker exec -e AI_CONTROL_ORGANIZER_EMAIL=ci@example.test -e AI_CONTROL_ORGANIZER_PASSWORD=synthetic-ci-password \
   "$container" /app/bin/ai_control eval 'AiControl.Release.bootstrap_organizer()'
 docker exec -e AI_CONTROL_ORGANIZER_EMAIL=ci@example.test -e AI_CONTROL_ORGANIZER_PASSWORD=synthetic-ci-password \
   "$container" /app/bin/ai_control eval 'AiControl.Release.bootstrap_organizer()'
-for child in uvicorn beam.smp; do
+for child in ner tokenizer beam.smp; do
   docker exec "$container" /opt/ner/bin/python -c '
 import os, signal, sys
 from pathlib import Path
 target = sys.argv[1]
 for path in Path("/proc").glob("[0-9]*/cmdline"):
     args = path.read_bytes().split(b"\0")
-    if any(arg.decode(errors="ignore").endswith(target) for arg in args) and int(path.parent.name) != os.getpid():
+    command = [arg.decode(errors="ignore") for arg in args]
+    matches = any(arg.endswith("beam.smp") for arg in command) if target == "beam.smp" else "/app/" + target in command
+    if matches and int(path.parent.name) != os.getpid():
         os.kill(int(path.parent.name), signal.SIGKILL)
         break
 else:
@@ -76,4 +82,4 @@ else:
 done
 docker stop --time 25 "$container" >/dev/null
 [[ $(docker inspect -f '{{.State.ExitCode}}' "$container") == 0 ]]
-echo 'Container health, offline NER, release tasks, child failures and SIGTERM passed'
+echo 'Container health, offline NER and tokenizer, release tasks, three child failures and SIGTERM passed'

@@ -58,3 +58,4 @@ __pycache__/
 *.pyc
 .venv/
 /sidecar/ner/models/
+/sidecar/tokenizer/models/

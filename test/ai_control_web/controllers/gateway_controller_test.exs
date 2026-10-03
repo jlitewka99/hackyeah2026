@@ -37,6 +37,63 @@ defmodule AiControlWeb.GatewayControllerTest do
     assert get(conn, "/ready") |> json_response(503) == %{"status" => "not_ready"}
   end
 
+  test "invalid API keys share the remote IP limiter before authentication", context do
+    Application.put_env(
+      :ai_control,
+      Config,
+      Keyword.put(Config.get(), :ip_requests_per_minute, 1)
+    )
+
+    conn = %{build_conn() | remote_ip: {192, 0, 2, 91}}
+    invalid = put_req_header(conn, "authorization", "Bearer invalid")
+    assert invalid |> get("/v1/models") |> json_response(401)
+    result = get(invalid, "/v1/models")
+    assert json_response(result, 429)["error"]["code"] == "rate_limited"
+    assert [retry] = get_resp_header(result, "retry-after")
+    assert String.to_integer(retry) in 1..60
+
+    refute Repo.exists?(
+             from(b in AiControl.Budgets.Bucket,
+               where: b.organization_id == ^context.scope.organization.id
+             )
+           )
+  end
+
+  test "hourly budget denials have distinct codes and UTC retry times", context do
+    Application.put_env(
+      :ai_control,
+      Config,
+      Keyword.put(Config.get(), :tokenizer, AiControl.TestBudgetTokenizer)
+    )
+
+    for {limits, code} <- [
+          {%{"requests_per_hour" => 0}, "request_budget_exceeded"},
+          {%{"tokens_per_hour" => 0}, "token_budget_exceeded"}
+        ] do
+      activate_gateway_policy(context.scope, %{"budgets" => %{"organization" => limits}})
+
+      Req.Test.stub(__MODULE__, fn conn ->
+        case conn.request_path do
+          "/api/tags" ->
+            Req.Test.json(conn, %{
+              models: [%{name: "qwen3.5:4b", digest: String.duplicate("a", 64)}]
+            })
+
+          "/api/version" ->
+            Req.Test.json(conn, %{version: "0.35.1"})
+
+          _ ->
+            Req.Test.json(conn, %{_debug_info: %{rendered_template: "prompt"}})
+        end
+      end)
+
+      result = post(context.conn, "/v1/chat/completions", Jason.encode!(request()))
+      assert json_response(result, 429)["error"]["code"] == code
+      assert [retry] = get_resp_header(result, "retry-after")
+      assert String.to_integer(retry) in 1..3600
+    end
+  end
+
   test "raw oversized, invalid JSON and unsupported payloads receive safe audited errors", %{
     conn: conn
   } do

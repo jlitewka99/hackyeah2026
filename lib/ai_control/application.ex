@@ -14,6 +14,8 @@ defmodule AiControl.Application do
       AiControlWeb.Telemetry,
       AiControlWeb.RequestLog,
       AiControl.Repo,
+      AiControl.Budgets.Cache,
+      AiControl.Budgets.Recovery,
       AiControl.Accounts.LoginLimiter,
       AiControl.Policies.Cache,
       AiControl.Gateway.Limiter,
