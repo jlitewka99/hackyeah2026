@@ -50,7 +50,7 @@ docker exec "$container" /app/bin/ai_control rpc '
   false = String.contains?(safe, "Długiej")
   IO.puts("Real NER release transport and UTF-8 redaction passed")'
 docker run --rm --entrypoint /opt/ner/bin/python -e NER_LIVE=1 -e PYTHONPATH=/app/ner \
-  -v "$PWD/tests/ner:/tests:ro" "$image" -m unittest discover -s /tests
+  -v "$PWD/tests/ner:/app/tests/ner:ro" "$image" -m unittest discover -s /app/tests/ner
 docker exec "$container" /opt/ner/bin/python /app/ner/benchmark.py | tee /tmp/step7-ner-benchmark.json
 docker exec -e AI_CONTROL_ORGANIZER_EMAIL=ci@example.test -e AI_CONTROL_ORGANIZER_PASSWORD=synthetic-ci-password \
   "$container" /app/bin/ai_control eval 'AiControl.Release.bootstrap_organizer()'
