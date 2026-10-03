@@ -54,7 +54,10 @@ defmodule AiControl.Gateway.Request do
 
   defp arguments?(_), do: false
 
-  defp tools?(tools), do: is_list(tools) && length(tools) <= 100 && Enum.all?(tools, &tool?/1)
+  defp tools?(tools) do
+    is_list(tools) && length(tools) <= 100 && Enum.all?(tools, &tool?/1) &&
+      tools |> Enum.map(& &1["function"]["name"]) |> Enum.uniq() |> length() == length(tools)
+  end
 
   defp tool?(tool) do
     object?(tool, ~w(type function)) && tool["type"] == "function" &&
