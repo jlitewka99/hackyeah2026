@@ -22,7 +22,13 @@ defmodule AiControlWeb.OrganizationMembersLive do
     case Invitations.issue(socket.assigns.current_scope, attrs, &url(~p"/invitations/#{&1}")) do
       {:ok, _} ->
         {:noreply,
-         socket |> put_flash(:info, "Invitation sent. It expires in 24 hours.") |> refresh()}
+         socket
+         |> assign(
+           :invitation_form,
+           to_form(Invitations.change_invitation(attrs), as: :invitation)
+         )
+         |> put_flash(:info, "Invitation sent. It expires in 24 hours.")
+         |> refresh()}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, :invitation_form, to_form(changeset, as: :invitation))}

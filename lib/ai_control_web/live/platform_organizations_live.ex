@@ -15,6 +15,7 @@ defmodule AiControlWeb.PlatformOrganizationsLive do
      |> assign(
        page_title: "Organizations",
        form: to_form(Organizations.change_organization()),
+       invitation_organization_id: nil,
        invitation_form: to_form(Invitations.change_invitation(), as: :invitation)
      )
      |> refresh()}
@@ -50,15 +51,25 @@ defmodule AiControlWeb.PlatformOrganizationsLive do
   end
 
   def handle_event("invite-owner", %{"invitation" => attrs}, socket) do
+    socket = assign(socket, :invitation_organization_id, attrs["organization_id"])
+    invitation_attrs = %{email: attrs["email"], role: :superadmin}
+
     with {:ok, scope} <-
            Organizations.fetch_scope(socket.assigns.current_scope, attrs["organization_id"]),
          {:ok, _} <-
            Invitations.issue(
              scope,
-             %{email: attrs["email"], role: :superadmin},
+             invitation_attrs,
              &url(~p"/invitations/#{&1}")
            ) do
-      {:noreply, socket |> put_flash(:info, "Superadmin invitation sent.") |> refresh()}
+      {:noreply,
+       socket
+       |> assign(
+         :invitation_form,
+         to_form(Invitations.change_invitation(invitation_attrs), as: :invitation)
+       )
+       |> put_flash(:info, "Superadmin invitation sent.")
+       |> refresh()}
     else
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, :invitation_form, to_form(changeset, as: :invitation))}

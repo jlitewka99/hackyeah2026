@@ -41,9 +41,17 @@ defmodule AiControl.Organizations.Invitations do
          {:ok, inserted} <- Repo.insert(changeset, log: false) do
       {:ok, {inserted, Base.url_encode64(token, padding: false), scope.organization.name}}
     else
-      false -> if(changeset.valid?, do: {:error, :forbidden}, else: {:error, changeset})
-      true -> {:error, :already_member}
-      {:error, reason} -> {:error, reason}
+      false ->
+        if(changeset.valid?,
+          do: {:error, :forbidden},
+          else: {:error, %{changeset | action: :insert}}
+        )
+
+      true ->
+        {:error, :already_member}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
