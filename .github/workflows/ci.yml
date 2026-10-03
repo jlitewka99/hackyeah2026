@@ -18,7 +18,7 @@ env:
 
 jobs:
   container:
-    name: Phoenix, NER and tokenizer container
+    name: Phoenix, NER, Qwen and tokenizer container
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
@@ -26,9 +26,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build CPU release with pinned offline models
-        run: docker build --tag ai-control:step7 .
-      - name: Real NER and tokenizer, release tasks and process supervision
-        run: bash docker/smoke ai-control:step7
+        run: docker build --tag ai-control:step10 .
+      - name: Real NER, Qwen and tokenizer, release tasks and process supervision
+        run: bash docker/smoke ai-control:step10
       - name: Preserve Linux NER measurements
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

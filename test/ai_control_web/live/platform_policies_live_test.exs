@@ -9,11 +9,33 @@ defmodule AiControlWeb.PlatformPoliciesLiveTest do
     {:ok, view, _} = live(log_in_user(conn, scope.user), ~p"/platform/policies")
     view |> element("#policy-new") |> render_click()
     view |> element("#policy-upgrade") |> render_click()
-    assert has_element?(view, "#policy-draft-schema", "v2")
+    assert has_element?(view, "#policy-draft-schema", "v3")
+    view |> element("#policy-guards > summary") |> render_click()
+    assert has_element?(view, "#policy-guard-moderation-mode option[value='']", "disabled")
+    refute has_element?(view, "#policy-rule-prompt_injection-threshold")
+    refute has_element?(view, "#policy-rule-content_safety-action option[value='redact']")
+
+    view
+    |> form("#policy-form", %{
+      "policy" => %{
+        "guards" => %{
+          "semantic" => %{"severities" => ["Unsafe", "Controversial"]},
+          "moderation" => %{
+            "mode" => "required",
+            "categories" => ["Violent", "PII"],
+            "severities" => ["Unsafe"]
+          }
+        }
+      }
+    })
+    |> render_change()
+
     assert has_element?(view, "#policy-schema", "v1")
     view |> form("#policy-form") |> render_submit()
     assert has_element?(view, "#policy-diff-schema_version")
     assert has_element?(view, "#policy-activate")
+    assert has_element?(view, "#policy-diff-guards-moderation-enabled")
+    assert has_element?(view, "#policy-diff-guards-semantic-severities")
     assert has_element?(view, "#policy-schema", "v1")
   end
 

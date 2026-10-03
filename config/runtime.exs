@@ -8,6 +8,8 @@ gateway_models =
   end
 
 gateway_config = [
+  semantic_url: System.get_env("SEMANTIC_BASE_URL", "http://127.0.0.1:8003"),
+  semantic_timeout: String.to_integer(System.get_env("GATEWAY_SEMANTIC_TIMEOUT_MS", "30000")),
   tokenizer_url: System.get_env("TOKENIZER_BASE_URL", "http://127.0.0.1:8002"),
   tokenizer_timeout: String.to_integer(System.get_env("TOKENIZER_TIMEOUT_MS", "5000")),
   default_max_tokens: String.to_integer(System.get_env("GATEWAY_DEFAULT_MAX_TOKENS", "1024")),

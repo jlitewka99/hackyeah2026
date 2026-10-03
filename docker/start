@@ -18,6 +18,8 @@ trap 'cleanup; exit 0' TERM INT
 ./bin/ai_control eval 'AiControl.Release.migrate()'
 /opt/ner/bin/python -m uvicorn service:app --app-dir /app/ner --host 127.0.0.1 --port 8001 --workers 1 --timeout-graceful-shutdown 10 --no-access-log --log-level critical &
 pids+=("$!")
+/opt/semantic/bin/python -m uvicorn service:app --app-dir /app/semantic --host 127.0.0.1 --port 8003 --workers 1 --timeout-graceful-shutdown 10 --no-access-log --log-level critical &
+pids+=("$!")
 /opt/tokenizer/bin/python -m uvicorn service:app --app-dir /app/tokenizer --host 127.0.0.1 --port 8002 --workers 1 --timeout-graceful-shutdown 10 --no-access-log --log-level critical &
 pids+=("$!")
 ./bin/ai_control start &

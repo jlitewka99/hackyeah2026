@@ -249,6 +249,8 @@ back the change. Global audit events use an explicit organizer-only platform
 scope; organization reads remain isolated. Policy audit stores IDs, checksums,
 authors and timestamps rather than source configuration or YAML.
 
+Legacy v1/v2 numeric rule settings remain readable and retain their checksums:
+
 | Profile | Personal data | Secrets / exploits | Injection threshold | Semantic guard |
 | --- | --- | --- | --- | --- |
 | Relaxed | redact | block | 0.9 | optional |
@@ -264,7 +266,7 @@ atomic counter ready for the step 12 endpoint. Steps 7–8 connect deterministic
 guards and NER to input and output, including schema validation after output redaction.
 
 Import [the example policy](priv/policies/balanced.yaml) by pasting YAML or uploading
-one file. Both schema versions accept one UTF-8 document up to 64 KiB. Unknown fields,
+one file. All three schema versions accept one UTF-8 document up to 64 KiB. Unknown fields,
 duplicate keys, aliases, anchors and explicit tags are rejected. Forms and YAML
 share `AiControl.Policies.Configuration`; errors contain field paths without
 input values. Exports use the JSON-compatible YAML 1.2 subset to preserve empty
@@ -445,8 +447,9 @@ microsecond durations and fixed stage/result codes, without content or identitie
 as metric labels.
 
 **The existing balanced policy still requires its guards.** Deterministic
-adapters are connected. NER requires an explicitly activated v2 policy; the
-semantic adapter remains step 10. Missing required adapters return
+adapters and pinned Qwen semantic analysis are connected. NER requires an
+explicitly activated v2/v3 policy; response moderation requires v3 and is disabled
+by default. Missing required adapters return
 `503` and never call the LLM. A bare Ollama installation is not a ready protected
 service. Optional adapters may fail only under an explicit policy; their failure
 is retained in the assessment evidence.
@@ -457,7 +460,8 @@ is retained in the assessment evidence.
 | `GATEWAY_RESPONSE_BYTES` | 4194304 (4 MiB, including error bodies) |
 | `GATEWAY_CONNECT_TIMEOUT_MS` | 2000 |
 | `GATEWAY_LLM_TIMEOUT_MS` | 120000 (metadata and generation together) |
-| `GATEWAY_GUARD_TIMEOUT_MS` | 10000 |
+| `GATEWAY_GUARD_TIMEOUT_MS` | 10000 (deterministic/NER) |
+| `GATEWAY_SEMANTIC_TIMEOUT_MS` | 30000 (1–30000; whole semantic call) |
 | `GATEWAY_READINESS_TIMEOUT_MS` | 5000 |
 | `GATEWAY_LLM_SLOTS` | 1 |
 | `GATEWAY_GUARD_SLOTS` | 2 |
@@ -635,17 +639,85 @@ tool core and sandbox; production execution remains in step 12B.
 The separate Signatures dashboard remains step 11. Step 8 applies these adapters
 to generated text and decoded tool arguments before returning any output.
 
+### Qwen semantic analysis and schema v3
+
+`Qwen/Qwen3Guard-Gen-0.6B` runs through the replaceable
+`AiControl.Guards.Semantic.Provider` interface and the bounded `Req` HTTP adapter.
+The [model manifest](sidecar/semantic/models.v1.json) pins weights, tokenizer,
+chat template and SHA-256 checksums at revision
+`fada3b2f655b89601929198343c94cd2f64d93cc`. Image preparation downloads the
+files; runtime verifies them and loads them offline through Transformers 4.57.1
+and Torch 2.8.0, on CPU in FP32, without quantization.
+The [Qwen model card](https://huggingface.co/Qwen/Qwen3Guard-Gen-0.6B) defines
+severity/category labels and separate prompt–response moderation.
+
+All supplied fields are scanned in tokenizer windows of up to 2048 tokens with
+256-token overlap. The service reserves template/generation space and admits one
+active scan, at most 128 windows and 30 seconds per whole call. Missing fields,
+invalid UTF-8 coverage, unknown labels, malformed results, overwork and timeout
+fail the guard. A required guard blocks the request or response. HTTP requests
+have a response-size limit, no retries and no redirects. Internal `/analyze`
+returns labels and byte coverage; `/ready` returns model identity and process
+measurements. Neither endpoint logs source text or raw generated classifications.
+
+Use **Upgrade to v3** in either policy editor. It upgrades only the draft;
+**Save version**, review differences, and **Activate version** remain separate
+steps. Existing v1/v2 versions and checksums stay unchanged. V3 injection maps
+only `Jailbreak`: relaxed/balanced use `Unsafe`; strict also uses `Controversial`.
+The label rules use `allow/block`, without a confidence slider. A finding's `1`
+is explicitly a binary label-mapping signal, not a probability.
+
+Response moderation is a separate, output-only `moderation` guard and
+`content_safety` rule, disabled by default. Choose its severity labels and safety
+categories, then require or optionally enable it. It uses current response fields
+and the accepted, redacted input as per-call context. The context is never stored
+in shared configuration or audit; oversized prompt–response context fails rather
+than truncating. Audit evidence contains only model set/revision, labels, refusal,
+binary semantics and UTF-8 scan coverage.
+
+For local real-model acceptance:
+
+```sh
+python3.11 -m venv _build/semantic-venv
+_build/semantic-venv/bin/pip install -r sidecar/semantic/requirements.lock
+_build/semantic-venv/bin/python sidecar/semantic/models.py download _build/semantic-models
+SEMANTIC_MODELS_DIR="$PWD/_build/semantic-models" HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+  _build/semantic-venv/bin/python -m uvicorn service:app --app-dir sidecar/semantic \
+  --host 127.0.0.1 --port 8003 --workers 1 --no-access-log --log-level critical
+```
+
+In another terminal, using an isolated test database:
+
+```sh
+_build/semantic-venv/bin/python -m unittest discover -s tests/semantic
+SEMANTIC_BASE_URL=http://127.0.0.1:8003 mix test test/ai_control/gateway/live_semantic_test.exs --include live_models
+SEMANTIC_BASE_URL=http://127.0.0.1:8003 mix ai_control.benchmark_semantic \
+  --split all --output docs/acceptance/step10-qwen --hardware 'Record CPU, OS, RAM and thread count'
+```
+
+The frozen dataset contains 200 Polish input cases and 40 moderation pairs, split
+50/50 by family before measurements. Reports contain IDs, confusion matrices,
+errors, warm p50/p95, cold load and peak RSS; PII is its own group and a negative
+for injection, rather than a PII recognizer benchmark. The [acceptance record](docs/acceptance/step10.md)
+records results and limits. All Prompt Guard implementation, gated weight access
+and same-hardware comparison belong to Step 11B, together with final MVP quality
+selection (FPR ≤ 5%, then mean direct/indirect recall, then p95). Full output
+filtering, budget settlement and tool integration finish in 12B/11B.
+
 ### One container on Coolify
 
 Use Coolify's [Dockerfile build pack](https://coolify.io/docs/applications/builds/dockerfile)
 with `/Dockerfile`, build context `/`, port **4000**, and your HTTPS domain.
 PostgreSQL and Ollama are separate services reachable from the container.
-Phoenix binds `0.0.0.0:4000`; NER binds only `127.0.0.1:8001` and is not published.
+Phoenix binds `0.0.0.0:4000`; NER (`127.0.0.1:8001`), budget tokenizer
+(`127.0.0.1:8002`) and Qwen (`127.0.0.1:8003`) are internal loopback services
+and are not published. Step 9 added the tokenizer; Qwen uses a separate port.
 Models are fetched and checked at image build time, then verified and loaded
 offline on startup. The non-root container uses `tini` and a supervisor script
-that forwards termination, reaps children and exits when either service fails.
-Allow roughly 2 GiB memory initially and measure on the deployment CPU;
-[acceptance measurements](docs/acceptance/step7.md) are synthetic smoke figures.
+that forwards termination, reaps children and exits when any of the four
+processes fails. CPU FP32 Qwen and NER need separate memory headroom; size the
+container from [Qwen acceptance measurements](docs/acceptance/step10.md) and
+[NER measurements](docs/acceptance/step7.md), then measure on the deployment CPU.
 
 Set these runtime variables using Coolify's secrets UI:
 
@@ -659,7 +731,11 @@ Set these runtime variables using Coolify's secrets UI:
 | `OLLAMA_BASE_URL` | Reachable external Ollama HTTP origin |
 | `GATEWAY_MODELS` | JSON map of model names to verified full SHA-256 digests |
 | `NER_BASE_URL` | Keep `http://127.0.0.1:8001` for this container |
-| `NER_CPU_THREADS` | CPU inference threads, default `2` |
+| `NER_CPU_THREADS` | NER CPU inference threads, default `2` |
+| `TOKENIZER_BASE_URL` | Keep `http://127.0.0.1:8002` for this container |
+| `SEMANTIC_BASE_URL` | Keep `http://127.0.0.1:8003` for this container |
+| `SEMANTIC_CPU_THREADS` | Qwen CPU inference threads, default `2` |
+| `GATEWAY_SEMANTIC_TIMEOUT_MS` | Whole semantic call, default `30000`, maximum `30000` |
 | `POOL_SIZE` | PostgreSQL connections, default `10` |
 
 `PHX_SERVER=true`, `PORT=4000` and the model directory are image defaults.
@@ -675,9 +751,9 @@ container console after setting temporary organizer credentials:
 Bootstrap reads `AI_CONTROL_ORGANIZER_EMAIL` and `AI_CONTROL_ORGANIZER_PASSWORD`;
 it is idempotent for the existing organizer and never prints credentials.
 Remove those temporary variables afterward. The image healthcheck checks
-Phoenix `/health` and NER `/ready`; Coolify can use that Dockerfile healthcheck.
-Gateway `/ready` also checks every required security control and can remain
-**503 until step 10** supplies semantic analysis. Health is not permission to
+Phoenix `/health`, NER `/ready` and Qwen `/ready`; Coolify can use that Dockerfile
+healthcheck. Gateway `/ready` additionally checks the database, Ollama/model
+allowlist and every required security control. Health is not permission to
 send traffic under an incomplete required policy. Deployment is a separate step.
 
 For local real NER acceptance (models must already be downloaded):
@@ -693,7 +769,7 @@ STANZA_RESOURCES_DIR=/tmp/ai-control-models /tmp/ai-control-ner/bin/python -m uv
 Run `NER_LIVE=1 STANZA_RESOURCES_DIR=/tmp/ai-control-models /tmp/ai-control-ner/bin/python
 -m unittest discover -s tests/ner` and `mix test test/ai_control/gateway/live_ner_test.exs
 --include live_ner` against an isolated PostgreSQL test database. The live gateway
-tests disable the unimplemented semantic guard only in their temporary
+tests disable the semantic guard only in their temporary
 organizations. A controlled backend inspects the redacted input and supplies
 synthetic Polish names, addresses and escaped tool arguments to the real NER
 output pipeline.
@@ -707,6 +783,7 @@ examples, and security tests. Demo files, database rows, mailbox, and commands u
 in-memory resources; HTTP uses exact URLs and operator-pinned IPs through Req.
 Production execution with budgets, guards, audit, result filtering, and
 `POST /v1/tool_calls` remains in step 12B.
+
 
 ## Tests and quality checks
 
@@ -741,13 +818,13 @@ mix assets.build
 ## Continuous integration
 
 GitHub Actions runs on pull requests, pushes to `main`, and manual dispatches.
-Checks are Quality, Tests, Dialyzer, Security, and Phoenix and Polish NER container. CI uses Ubuntu 24.04,
+Checks are Quality, Tests, Dialyzer, Security, and Phoenix, NER, Qwen and tokenizer container. CI uses Ubuntu 24.04,
 reads the pinned BEAM versions from `.tool-versions`, starts PostgreSQL 17 for
 tests, and builds frontend assets. The Tests job also installs the pinned Node.js
 version. Dependencies, compiled files, and PLTs are cached per platform and tool
 version; a run without a cache builds them from scratch. Actions are pinned to
 commit SHAs. The container job builds the production image, runs Python unit/live
-NER fixtures, tests the release transport, health, bootstrap and process failures,
+NER/Qwen/tokenizer fixtures, tests the release transport, health, bootstrap and all four process failures,
 and uploads Linux latency/memory measurements. No image is published or deployed.
 
 Dependabot checks Mix dependencies and GitHub Actions every Monday at 09:00

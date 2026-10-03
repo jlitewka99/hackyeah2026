@@ -54,9 +54,12 @@
       </div>
       <div>
         <dt>Prompt injection</dt><dd>
-          {String.capitalize(@current.version.settings["rules"]["prompt_injection"]["action"])} from {@current.version.settings[
-            "rules"
-          ]["prompt_injection"]["threshold"]}
+          {String.capitalize(@current.version.settings["rules"]["prompt_injection"]["action"])}
+          <%= if @current.version.settings["schema_version"] == 3 do %>
+            · {Enum.join(@current.version.settings["guards"]["semantic"]["severities"], ", ")}
+          <% else %>
+            from {@current.version.settings["rules"]["prompt_injection"]["threshold"]}
+          <% end %>
         </dd>
       </div>
       <div>
@@ -88,7 +91,16 @@
       <dl class="mt-3 space-y-3">
         <div :for={{category, rule} <- Enum.sort(@current.version.settings["rules"])}>
           <dt class="font-medium">{label(category)}</dt><dd class="muted">
-            {String.capitalize(rule["action"])} from {rule["threshold"]} · {rule["id"]}
+            {String.capitalize(rule["action"])}
+            <span :if={
+              @current.version.settings["schema_version"] == 3 &&
+                category in ~w(prompt_injection content_safety)
+            }> · Selected severity labels</span>
+            <span :if={
+              !(@current.version.settings["schema_version"] == 3 &&
+                  category in ~w(prompt_injection content_safety))
+            }> from {rule["threshold"]}</span>
+            · {rule["id"]}
           </dd>
         </div>
         <div :for={{guard, settings} <- Enum.sort(@current.version.settings["guards"])}>
@@ -98,6 +110,14 @@
               settings["required"] -> "Required"
               true -> "Optional"
             end} · {Enum.join(settings["stages"], ", ")}
+            <span :if={Map.has_key?(settings, "severities")}> · Labels: {Enum.join(
+              settings["severities"],
+              ", "
+            )}</span>
+            <span :if={Map.has_key?(settings, "categories")}> · Categories: {Enum.join(
+              settings["categories"],
+              ", "
+            )}</span>
             <span :if={guard == "ner"}> · {Enum.map_join(settings["entities"], ", ", &label/1)}</span>
           </dd>
         </div>
@@ -236,18 +256,18 @@
       <div class="policy-heading mb-6">
         <p id="policy-draft-schema" class="font-medium">Schema v{schema_version(@form)}</p>
         <button
-          :if={schema_version(@form) == 1}
+          :if={schema_version(@form) < 3}
           id="policy-upgrade"
           type="button"
           class="button-secondary"
           phx-click="upgrade"
           phx-disable-with="Upgrading…"
-        >Upgrade to v2</button>
+        >Upgrade to v3</button>
       </div>
-      <p :if={schema_version(@form) == 1} class="muted mb-6">
-        Upgrade this draft to configure named entities. Saving and activation remain separate steps.
+      <p :if={schema_version(@form) < 3} class="muted mb-6">
+        Upgrade this draft to configure label mapping and optional response moderation. Saving and activation remain separate steps.
       </p>
-      <section :if={schema_version(@form) == 2} id="policy-detector-sets" class="mb-6">
+      <section :if={schema_version(@form) in [2, 3]} id="policy-detector-sets" class="mb-6">
         <h3 class="font-medium">Detector sets</h3>
         <p class="muted mt-2">
           Immutable sets keep detection reproducible. Tool execution is configured in a later step.
@@ -285,7 +305,7 @@
       />
       <div class="mt-6" id="policy-rules">
         <h3 class="font-medium">Detection rules</h3>
-        <div :for={category <- @categories} class="policy-rule-row">
+        <div :for={category <- category_catalog(@form)} class="policy-rule-row">
           <p class="font-medium">{label(category)}</p>
           <.input
             name={"policy[rules][#{category}][action]"}
@@ -293,15 +313,15 @@
             value={nested(@form, :rules, category, "action")}
             type="select"
             label="Action override"
-            options={[
-              {"Profile default · #{label(draft_defaults["rules"][category]["action"])}", ""},
-              {"Allow", "allow"},
-              {"Redact", "redact"},
-              {"Block", "block"}
-            ]}
+            options={
+              [
+                {"Profile default · #{label(draft_defaults["rules"][category]["action"])}", ""}
+              ] ++ rule_actions(@form, category)
+            }
             errors={field_errors(@errors, "rules.#{category}.action")}
           />
           <.input
+            :if={!label_rule?(@form, category)}
             name={"policy[rules][#{category}][threshold]"}
             id={"policy-rule-#{category}-threshold"}
             value={nested(@form, :rules, category, "threshold")}
@@ -313,6 +333,9 @@
             placeholder={to_string(draft_defaults["rules"][category]["threshold"])}
             errors={field_errors(@errors, "rules.#{category}.threshold")}
           />
+          <p :if={label_rule?(@form, category)} class="muted text-sm">
+            Uses the selected severity labels, not a confidence threshold.
+          </p>
           <.input
             name={"policy[rules][#{category}][id]"}
             id={"policy-rule-#{category}-id"}
@@ -332,8 +355,12 @@
         <p class="muted mt-3">
           An unavailable required guard blocks the request. Select Profile default to remove an override.
         </p>
-        <p :if={schema_version(@form) == 2} id="policy-phase-order" class="muted text-sm mt-2">
-          Evaluation order: PII, secrets and signatures → decision and redaction → named entities → decision and redaction → semantic guard.
+        <p
+          :if={schema_version(@form) in [2, 3]}
+          id="policy-phase-order"
+          class="muted text-sm mt-2"
+        >
+          Evaluation order: PII, secrets and signatures → decision and redaction → named entities → decision and redaction → semantic analysis and enabled response moderation.
         </p>
         <div :for={guard <- guard_catalog(@form)} class="policy-rule-row">
           <p class="font-medium">{label(guard)}</p>
@@ -344,14 +371,14 @@
             type="select"
             label="Requirement override"
             options={[
-              {"Profile default · #{if draft_defaults["guards"][guard]["required"], do: "required", else: "optional"}",
-               ""},
+              {"Profile default · #{default_guard_mode(draft_defaults["guards"][guard])}", ""},
               {"Required", "required"},
               {"Optional", "optional"},
               {"Disabled", "disabled"}
             ]}
           />
           <.input
+            :if={guard != "moderation"}
             name={"policy[guards][#{guard}][stages]"}
             id={"policy-guard-#{guard}-stages"}
             value={nested(@form, :guards, guard, "stages")}
@@ -365,6 +392,58 @@
               {"Input and output", "input,output"}
             ]}
           />
+          <p :if={guard == "moderation"} class="muted text-sm">
+            Output only. Disabled by default.
+          </p>
+          <div
+            :if={schema_version(@form) == 3 && guard in ["semantic", "moderation"]}
+            class="md:col-start-2 md:col-span-2"
+          >
+            <.input
+              name={"policy[guards][#{guard}][severities][]"}
+              id={"policy-#{guard}-severities"}
+              type="select"
+              multiple
+              size="2"
+              label="Severity labels that trigger the rule"
+              value={
+                nested(
+                  @form,
+                  :guards,
+                  guard,
+                  "severities",
+                  draft_defaults["guards"][guard]["severities"]
+                )
+              }
+              options={Enum.map(severities(), &{&1, &1})}
+              errors={field_errors(@errors, "guards.#{guard}.severities")}
+            />
+            <p class="muted text-sm mt-2">
+              Qwen returns severity labels.
+              <span :if={guard == "semantic"}>Injection uses only the Jailbreak category.</span>
+              <span :if={guard == "moderation"}>Select the response categories to check below.</span>
+            </p>
+            <.input
+              :if={guard == "moderation"}
+              name="policy[guards][moderation][categories][]"
+              id="policy-moderation-categories"
+              type="select"
+              multiple
+              size="8"
+              label="Response safety categories"
+              value={
+                nested(
+                  @form,
+                  :guards,
+                  guard,
+                  "categories",
+                  draft_defaults["guards"][guard]["categories"]
+                )
+              }
+              options={Enum.map(safety_categories(), &{&1, &1})}
+              errors={field_errors(@errors, "guards.moderation.categories")}
+            />
+          </div>
           <div :if={guard == "ner"} class="md:col-start-2 md:col-span-2">
             <.input
               name="policy[guards][ner][entities][]"

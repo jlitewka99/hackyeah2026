@@ -46,7 +46,7 @@ defmodule AiControl.Gateway do
          :ok <- authorize_again(current, policy, opts[:agent_id], params["model"]) do
       case generate(safe, receipt, current, policy, opts) do
         {:ok, response} ->
-          {filter_output(response, current, policy, request_id, safe["model"], contract), :output}
+          {filter_output(response, current, policy, request_id, safe, contract), :output}
 
         error ->
           {error, :output}
@@ -56,10 +56,13 @@ defmodule AiControl.Gateway do
     end
   end
 
-  defp filter_output(response, current, policy, request_id, model, contract) do
-    with {:ok, response} <- Response.normalize(response, model, request_id),
+  defp filter_output(response, current, policy, request_id, safe, contract) do
+    with {:ok, response} <- Response.normalize(response, safe["model"], request_id),
          :ok <- Response.validate(response, contract) do
-      Stages.evaluate(response, current, policy, request_id, :output, tool_contract: contract)
+      Stages.evaluate(response, current, policy, request_id, :output,
+        tool_contract: contract,
+        semantic_prompt: Jason.encode!(safe["messages"])
+      )
     end
   end
 

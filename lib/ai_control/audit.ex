@@ -204,7 +204,7 @@ defmodule AiControl.Audit do
 
   def record_phase_decision(context, assessment, decision, guards) do
     if is_list(guards) && guards != [] &&
-         Enum.all?(guards, &(&1 in Configuration.guards(2))),
+         Enum.all?(guards, &(&1 in Configuration.guards(3))),
        do: decision_event(context, assessment, decision, guards),
        else: {:error, :invalid_audit_data}
   end
@@ -340,7 +340,15 @@ defmodule AiControl.Audit do
     %{
       guards:
         Enum.map(assessment.results, fn result ->
-          Map.take(result, [:guard, :status, :signals, :duration_us, :error_code, :usage])
+          Map.take(result, [
+            :guard,
+            :status,
+            :signals,
+            :duration_us,
+            :error_code,
+            :usage,
+            :evidence
+          ])
         end),
       detections:
         Enum.map(

@@ -59,7 +59,7 @@ Gateway ma dwa obszary: **data plane** pośredniczy w komunikacji klient → LLM
 | --- | --- | --- |
 | Regex + checksum dla polskich identyfikatorów | Walidacja struktury i sum kontrolnych; dla PESEL również daty. Redakcja według polityki, bez gwarancji zerowego FPR | 7–8 |
 | Regex + entropia + kontekst dla sekretów | Skaner w Elixirze, wzorce znanych dostawców oraz kontrolowane heurystyki; audyt bez dopasowanych wartości | 7–8 |
-| Llama Prompt Guard 2 kontra Qwen3Guard | Porównanie na polskim zbiorze; wybór na podstawie jakości, lokalnej latencji, pamięci i dostępności | 10 |
+| Llama Prompt Guard 2 kontra Qwen3Guard | Adapter Prompt Guard, dostęp do wag i porównanie na wspólnym polskim zbiorze oraz sprzęcie | 11B |
 | NER dla nazw i adresów | Lokalny Presidio + Stanza PL/NKJP w MVP, jawne mapowanie etykiet i reguły adresów; dalsze rozszerzenia przy RAG | 7–8; rozszerzenia w 18 |
 | Rezerwacja i zwrot niewykorzystanych tokenów | Atomowe rezerwacje organizacji i agenta w PostgreSQL; ETS dla szybkich odczytów i limitera żądań | 6, 9 |
 | Fail-closed i profile | Zachować `relaxed`, `balanced`, `strict` oraz obowiązkowość guardów z kroku 5; awaria wymaganej kontroli blokuje | 6–11 |
@@ -80,7 +80,7 @@ Nie przenosimy wprost siedmiodniowego harmonogramu z researchu: auth, organizacj
 | Model/usługa | Zastosowanie i ograniczenia | Decyzja |
 | --- | --- | --- |
 | Llama Prompt Guard 2 86M | Klasyfikator prompt injection/jailbreak, okno 512 tokenów; polski poza opublikowaną listą języków ewaluacji. Licencja wag: **Llama 4 Community License**, nie MIT | Kandydat do kontroli wejścia; lokalny sidecar Transformers. [Model card](https://huggingface.co/meta-llama/Llama-Prompt-Guard-2-86M) |
-| Qwen3Guard-Gen-0.6B | Moderacja promptów i odpowiedzi, 119 języków/dialektów, Apache-2.0; generuje etykiety `Safe/Controversial/Unsafe` i kategorie | Pierwszy kandydat do próby dla polskiego; wybór po benchmarku, bez zakładania skalibrowanego score. [Model card](https://huggingface.co/Qwen/Qwen3Guard-Gen-0.6B) |
+| Qwen3Guard-Gen-0.6B | Moderacja promptów i odpowiedzi, 119 języków/dialektów, Apache-2.0; generuje etykiety `Safe/Controversial/Unsafe` i kategorie | Provider kroku 10; końcowy wybór po porównaniu w 11B, bez zakładania skalibrowanego score. [Model card](https://huggingface.co/Qwen/Qwen3Guard-Gen-0.6B) |
 | Qwen3Guard-Stream-0.6B | Wariant ze specjalną głowicą do klasyfikacji podczas generacji | Osobna próba w kroku 17; adapter wariantu Gen nie zapewnia obsługi Stream. [Repozytorium producenta](https://github.com/QwenLM/Qwen3Guard) |
 | Granite Guardian 4.1 8B | Kryteria BYOC, RAG i function calling; Apache-2.0; trening i testy na danych angielskich | P2, selektywnie dla operacji wysokiego ryzyka; polski i koszt lokalny do zmierzenia. [Model card](https://huggingface.co/ibm-granite/granite-guardian-4.1-8b) |
 | Presidio + Stanza PL/NKJP | NER w kontekście z polskimi etykietami m.in. `persName`, `placeName`, `geogName`, `orgName`; adresy wymagają dodatkowego kontekstu | Lokalny sidecar w krokach 7–8; jawne mapowanie etykiet i walidacja zakresów przed redakcją. Jakość zmierzyć na danych aplikacji. [Stanza](https://stanfordnlp.github.io/stanza/ner_models.html) |
@@ -102,7 +102,7 @@ Checkboxy oznaczają potwierdzone zakończenie kroku, a nie samą obecność kod
 - [x] Krok 7 — Deterministyczne guardy, NER i sygnatury
 - [x] Krok 8 — Output filtering
 - [x] Krok 9 — Budżety i rozliczanie użycia
-- [ ] Krok 10 — Semantyczne wykrywanie prompt injection
+- [x] Krok 10 — Semantyczne wykrywanie prompt injection
 - [ ] Krok 11 — Dashboard i zamknięcie wymaganego MVP
 - [ ] Krok 12 — Tool firewall i ograniczenia zasobów
 - [ ] Krok 13 — MCP gateway
@@ -134,7 +134,7 @@ Zmiana dotyczy pracy **po ukończeniu i scaleniu kroku 7**. Nie zmienia zakresu 
 | --- | --- | --- |
 | `JL/step-8-output-filtering` — 8 | Kontrola wszystkich pól odpowiedzi i argumentów narzędzi, NER wyjścia, walidacja JSON po redakcji, bezpieczna odmowa i audyt | Własny odbiór używa detektorów z 7; wspólny test rozliczenia zablokowanego wyjścia po scaleniu 9 |
 | `JL/step-9-budgets` — 9 | Trwałe liczniki i rezerwacje, tokenizer, rozliczenie usage, koszty, restart, współbieżność i obsługa niepewnego wykonania | W testach awarii wyjścia używa kontraktu guardu; rzeczywiste output filtering z 8 i semantyka z 10 są sprawdzane po integracji |
-| `JL/step-10-semantic-guards` — 10 | Provider injection i opcjonalnej moderacji odpowiedzi, sidecary, fragmentacja, polski benchmark i wersjonowane rozszerzenia polityki | Wykorzystuje kontrakt guardu gatewaya z 6 oraz aktualną treść po redakcji z 7; moderacja wszystkich pól odpowiedzi jest sprawdzana wspólnie z 8 |
+| `JL/step-10-semantic-guards` — 10 | Provider Qwen injection i opcjonalnej moderacji odpowiedzi, lokalny sidecar, fragmentacja, polski benchmark i schema v3 | Wykorzystuje kontrakt guardu gatewaya z 6 oraz aktualną treść po redakcji z 7; moderacja wszystkich pól odpowiedzi jest sprawdzana wspólnie z 8 |
 | `JL/step-12-tool-firewall` — 12A | `ToolRequest`, katalog i schematy argumentów, autoryzacja polityką, walidatory zasobów i sandboxowe adaptery | Endpoint i pełne wykonanie z budżetem oraz filtrowaniem wyników dopiero w 12B po scaleniu 8, 9 i 10 |
 
 Nie ma twardej zależności **8 → 9 → 10** dla implementacji tych modułów. Gateway z 6, rozszerzony w 7, ma już `AiControl.Gateway.Guard.assess/4`, `ready?/1`, typowane wyniki, snapshot i ocenę obu etapów. Krok 8 rozwija kontrolę odpowiedzi, 9 utrwala zużycie, a 10 dostarcza sygnały AI; żaden z nich nie powinien ponownie implementować pozostałych.
@@ -142,7 +142,7 @@ Nie ma twardej zależności **8 → 9 → 10** dla implementacji tych modułów.
 #### Wspólne kontrakty i odpowiedzialność
 
 - Zachować kontrakt `assess(fields, context, policy_snapshot, config)` z kroku 7 oraz `GuardResult`, `Detection`, indeksy pól i offsety UTF-8. Każdy guard dostaje ten sam snapshot polityki i analizuje bieżącą wersję tekstu; brak obowiązkowej kontroli nadal kończy żądanie odmową.
-- Wykonawca 8 odpowiada za kontrolę i reprezentację wyjścia w `Gateway.Stages`, `Response` i `Content`. Wykonawca 10 dostarcza adaptery semantyczne przez ten kontrakt; uzgodnione zmiany rejestracji guardów scala wykonawca 8, bez tworzenia drugiego pipeline'u.
+- Wykonawca 8 odpowiada za kontrolę i reprezentację wyjścia w `Gateway.Stages`, `Response` i `Content`. Wykonawca 10 rejestruje Qwen i osobny guard `moderation` w istniejącym pipeline; wykonawca 8 scala te punkty z pełną reprezentacją wyjścia. Kontekst zaakceptowanego wejścia jest opcją pojedynczego wywołania `Stages.evaluate/6`, przy zachowaniu `evaluate/5`.
 - Wykonawca 9 odpowiada za kontekst `Budgets`, migracje liczników oraz punkty naliczania, rezerwacji i rozliczenia w `Gateway`. Rezerwacja tokenów korzysta z treści po kontrolach wejścia, a usage jest rozliczane także przy późniejszej blokadzie wyjścia. NER wyjścia należy wyłącznie do 8.
 - Nowe kategorie/moderacja z 10 zachowują zgodność z wersjami polityki ukończonymi w 7; rozszerzenie walidatora, formularzy i checksumów ma jednego właściciela na branchu 10. Krok 12 korzysta z przygotowanego w 7 schematu narzędzi.
 - Każdy branch rozwija własne testy i fixtures. Zmiany wspólnej konfiguracji, supervisora, zależności i routera scalać pojedynczo; nie przenosić globalnego formatowania ani zmian należących do innego kroku.
@@ -154,7 +154,7 @@ Po pierwszej fali scalać kolejno **8 → 9 → 10 → 12A**, sprawdzając integ
 | --- | --- | --- |
 | 12B | `POST /v1/tool_calls`, trwały tenant-scoped licznik wykonania, autoryzacja przed wykonaniem, kontrole treści/semantyki, filtrowanie wyników, audyt i wszystkie sandboxowe scenariusze | Pełne kryteria odbioru kroku 12; żadnego wykonania przed kontrolą tożsamości, polityki, zasobu, budżetu i wymaganych guardów |
 | 11A | Rozbudowa istniejących stron, metryki z 8–10, Events, eksport JSONL, filtry i PubSub oraz prezentacja dostępnych wyników narzędzi | Testy stron i eksportu używają rzeczywistych kontekstów i fixtures; końcowa matryca narzędzi czeka na 12B |
-| 11B | Integracja 12B z dashboardem, skrypt testów bezpieczeństwa, mapowanie wymagań, pełne scenariusze i testy rzeczywistych modeli | Ukończone 8, 9, 10, pełny 12 oraz wszystkie kryteria MVP; dopiero wtedy zaznaczyć checkbox 11 |
+| 11B | Cały adapter Prompt Guard i dostęp do jego wag; porównanie z Qwen, integracja 12B z dashboardem, rozliczenia blokad, pełne output filtering, skrypt bezpieczeństwa i testy rzeczywistych modeli | Ukończone 8, 9, 10, pełny 12 oraz wszystkie kryteria MVP; dopiero wtedy zaznaczyć checkbox 11 |
 
 Testy po scaleniu obejmują także interakcje między branchami: tokenizację treści po redakcji, rozliczenie zablokowanej odpowiedzi, timeout NER/semantyki bez downstream, poprawność JSON argumentów po redakcji, snapshot podczas zmiany polityki oraz liczniki narzędzi przy równoczesnych wykonaniach. Każdy zakres kończy się `mix precommit`; frontend także `mix assets.build`, a 11B rzeczywistymi modelami i testami bezpieczeństwa z sekcji 5.
 
@@ -556,21 +556,22 @@ wizualnego; zastanego driftu nie naprawiano w tym rozszerzeniu.
 
 **Gotowe, gdy:** równoczesne rezerwacje nie przekraczają limitu organizacji ani agenta, a restart aplikacji nie odnawia wykorzystanego budżetu. Testy obejmują podwójne rozliczenie, timeout przed/po wysłaniu, brak usage, blokadę outputu, zmianę okna i obniżenie limitu. Wynik estymacji i warunki twardego limitu są opisane, a zużycie guardów AI mierzone oddzielnie od usage modelu docelowego.
 
-### Krok 10. Semantyczne wykrywanie prompt injection
+### Krok 10. Guard semantyczny Qwen i opcjonalna moderacja odpowiedzi
 
-**Praca równoległa:** po ukończeniu 7 realizować równolegle z 8, 9 i 12A przez istniejący kontrakt guardu z 6. Wspólna integracja moderacji wyjścia korzysta z reprezentacji utrzymywanej w 8; benchmark providera nie czeka na budżety ani narzędzia.
+**Praca równoległa:** po 7, równolegle z 8, 9 i 12A. Cały adapter Prompt Guard, dostęp do wag oraz porównanie modeli należą do **11B**; nie blokują pierwszej fali. Testy semantyki z pełnym output filtering, rozliczeniami i wykonywaniem narzędzi kończą 12B i 11B.
 
-- Wprowadzić zachowanie providera oraz implementacje lokalnego klasyfikatora i mocka.
-- Porównać `Llama-Prompt-Guard-2-86M` i `Qwen3Guard-Gen-0.6B` na wspólnym polskim zbiorze z sekcji 5.1. Najpierw sprawdzić dostępność wag, licencję i uruchomienie lokalne. Prompt Guard 22M jest opcjonalnym wariantem wydajnościowym, nie zamiennikiem o potwierdzonej jakości polskiego.
-- Uruchomić wybrany model jako lokalną usługę HTTP wywoływaną przez `Req`; rdzeń pozostaje w Elixirze. Sidecar nie jest publicznym endpointem aplikacji i nie zapisuje treści żądań. Przypiąć wersję wag, tokenizer i format odpowiedzi; Ollama/GGUF wymaga potwierdzenia poprawnego template i wyników po quantization.
-- Długie treści dzielić według tokenizera modelu na nachodzące fragmenty; Prompt Guard ma okno 512 tokenów. Sprawdzać wszystkie pola i cały tekst, także końcówkę. Równoległe skanowanie ma ograniczoną współbieżność oraz timeout całego żądania; przekroczenie limitu pracy nie oznacza pominięcia kontroli.
-- Zwracać rzeczywisty wynik klasyfikatora; decyzję podejmuje polityka. Numeric score Prompt Guard pozwala stroić próg; etykiety Qwen wymagają jawnego mapowania kategorii/severity i nie są prawdopodobieństwem. Jeśli adapter korzysta z `confidence` do reprezentacji sygnału binarnego, oznaczyć tę semantykę w kontrakcie i audycie; nie przedstawiać jej jako skalibrowanej pewności modelu.
-- Nie uznawać kategorii `Jailbreak` Qwen za dowód pełnej ochrony indirect injection. Wybrać provider dopiero po porównaniu direct/indirect injection oraz FPR na bezpiecznych tekstach; w razie potrzeby zachować oddzielny klasyfikator injection i opcjonalny moderator odpowiedzi.
-- Dodać moderację wyjścia przy użyciu modelu przeznaczonego do odpowiedzi, np. Qwen3Guard-Gen, jeśli aktywna polityka ją wymaga. Kategorie ogólnego safety nie mieszczą się automatycznie w katalogu `pii/secret/exploit/prompt_injection` z kroku 5: rozszerzenie wymaga walidatora, wersjonowania, formularzy i testów zgodności starych polityk. Nie mapować wszystkich szkodliwych odpowiedzi na prompt injection.
-- Wspólne fail-closed obejmuje timeout, brakujące pola, nieznaną etykietę, uszkodzony JSON i niepełne skanowanie. Nie próbować „sanityzować” injection przez usuwanie przypadkowych instrukcji; blokować zgodnie z polityką.
-- Domyślnie awaria obowiązkowej kontroli blokuje żądanie. Opcjonalne dopuszczenie prostego chatu podczas awarii wymaga jawnej polityki i audytu.
+- Wymienny provider, adapter HTTP `Qwen3Guard-Gen-0.6B` przez `Req` oraz mocki. Zachować `Guard.assess/4`, `ready?/1` i fazy po redakcji deterministycznej oraz NER. Ograniczyć odpowiedź HTTP; bez ponowień i przekierowań.
+- Wewnętrzne `/analyze` i `/ready`, loopback, dodatkowy proces kontenera Phoenix + NER. Po scaleniu kroku 9 kontener obejmuje też tokenizer rozliczeń: NER na 8001, tokenizer na 8002, Qwen na 8003. Transformers na CPU FP32 bez quantization; manifest przypina rewizję wag, tokenizer, template i SHA-256. Pobieranie przy buildzie, weryfikacja i ładowanie offline przy starcie. Healthcheck, SIGTERM i awaria dowolnego procesu obejmują wszystkie cztery procesy.
+- Skanować wszystkie pola tokenizerem: fragmenty do 2048 tokenów, zakładka 256, miejsce na template i 128 tokenów generacji, jeden aktywny skan, maksymalnie 128 fragmentów i 30 sekund na wywołanie. Niepełne pokrycie, błędne zakresy UTF-8, timeout, nieznane etykiety, uszkodzony wynik i limit pracy oznaczają błąd; wymagany guard blokuje.
+- Injection mapuje tylko kategorię `Jailbreak`; relaxed/balanced reagują na `Unsafe`, strict także na `Controversial`. Schema v3 pozwala wybierać severity oraz `allow/block`, bez progów pewności. Zachować ustawienia i checksumy v1/v2; upgrade zmienia wyłącznie draft.
+- Osobny guard `moderation`, domyślnie wyłączony, oraz kategoria `content_safety`. Wybierać severity i kategorie Qwen. Korzystać z bieżących pól odpowiedzi oraz zaakceptowanego wejścia po redakcji, przekazanego tylko w opcjach wywołania. Gdy cały kontekst z fragmentem odpowiedzi, template i generacją nie mieści się w oknie modelu, zwrócić błąd zamiast ucięcia.
+- `GuardResult.evidence` przechowuje walidowane model set/revision, severity, kategorie, refusal, semantykę binarnego sygnału i pokrycie. Audyt nie zawiera promptu, odpowiedzi ani surowej generacji klasyfikatora. Sygnał 0/1 nie jest prawdopodobieństwem.
+- Wspólny panel polityk platformy i organizacji: upgrade v3, mapowanie injection i moderacji, efektywne ustawienia i różnice przed osobną aktywacją. Zachować oba motywy, responsywność, klawiaturę i uprawnienia; odbiór przez impeccable.
+- Wersjonowany benchmark z sekcji 5.1 i komenda Mix zapisująca wyniki JSONL/CSV po ID przez `Req`. Standardowe testy używają mocków; `:live_models` i smoke kontenera sprawdzają rzeczywiste wagi.
 
-**Gotowe, gdy:** prawdziwy model semantyczny uczestniczy w enforcement, polski benchmark ma zapisane wyniki i uzasadnia wybór providera. Zmiana progu rzeczywistego score lub jawnego mapowania etykiet zmienia decyzję; blokada działa również dla ataku na końcu długiego tekstu. Testy mocków pokrywają błędy i fail-closed, a suite `--live-models` potwierdza działanie wybranych wag oraz moderacji wyjścia, jeśli ją włączono.
+**Gotowe, gdy:** rzeczywisty Qwen uczestniczy w enforcement, benchmark jest zapisany, a testy obejmują polski atak i bezpieczne porównanie, końcówkę i granicę fragmentów, zmianę mapowania, blokadę odpowiedzi, fail-closed, audyt bez treści, stały snapshot oraz zgodność v1/v2. Uruchomić `mix precommit`, `mix assets.build`, Python i odbiór UI. Krok 10 nie wymaga porównania z Meta; końcowa kwalifikacja providera i kryterium jakości MVP pozostają w 11B. Stan i ograniczenia zapisuje `docs/acceptance/step10.md`.
+
+**Odbiór 2026-10-04:** implementacja kroku 10 ukończona. `mix precommit`: 459 testów Elixir i 3 JavaScript; Python: 8 testów; rzeczywisty Qwen: 2 testy `:live_models`; assets, Dialyzer i security przechodzą. Impeccable: desktop/mobile, oba motywy, review `ship`. [CI](https://github.com/jlitewka99/hackyeah2026/actions/runs/37160056347) potwierdza offline Qwen/NER/tokenizer, release transport, awarie wszystkich czterech procesów i SIGTERM. Benchmark 240 przypadków zapisany w `docs/acceptance/step10-qwen`: 230 klasyfikacji, 10 timeoutów długich tekstów; testowy FPR injection 0/50, recall direct 32%, indirect 40% wśród 20 ukończonych przypadków (5 błędów). Te ograniczenia oraz kwalifikacja i porównanie z Prompt Guard pozostają jawne w 11B; ukończenie implementacji nie oznacza odbioru jakości modeli całego MVP.
 
 ### Krok 11. Dashboard i zamknięcie wymaganego MVP
 
@@ -585,6 +586,7 @@ wizualnego; zastanego driftu nie naprawiano w tym rozszerzeniu.
 - Eksport zawiera identyfikatory żądania/etapu, politykę i checksum, działania, rule/detector IDs, rzeczywiste sygnały oraz bezpieczne dane usage; bez surowych wartości, promptów i odpowiedzi. Odczyt i eksport ponownie sprawdzają `events.read`/`events.export` oraz organizację.
 - Aktualizować widoki przez PubSub z tematami oddzielnymi dla organizacji.
 - Formularze korzystają z `<.input>` i `to_form`; kolekcje z LiveView streams; strony z osobnych `.ex` i `.html.heex`.
+- W **11B** zaimplementować cały adapter Prompt Guard (także dostęp do gated wag i ich licencję) i porównać z Qwen na zamrożonych danych oraz tym samym sprzęcie. Najpierw wymagać **FPR ≤ 5%**, potem maksymalizować średni recall direct/indirect injection; remis rozstrzyga niższe p95. Brak kwalifikującego się wariantu oznacza niespełnione kryterium MVP.
 - Zakończyć wymagane testy pozytywne i negatywne oraz mapowanie do FR-01–FR-22.
 - Dostarczyć minimalne demo: safe allow, PESEL redact/block, secret block na wejściu i wyjściu, injection z bezpiecznym porównaniem, exploit i 429 przy limicie; pokazać zmianę aktywnej polityki bez restartu. Scenariusze narzędzi/RAG dołączają dopiero odpowiednie kroki.
 
@@ -785,7 +787,7 @@ ExUnit wykorzystuje `Req.Test`, kontrolowany zegar i `start_supervised!`. Testy 
 
 Skrypt `run_security_tests.sh` powstaje najpóźniej w kroku 11, obsługuje opcję `--live-models`, wyświetla podsumowanie i zwraca niezerowy exit code przy błędzie. Testy nie mogą wymagać płatnej usługi.
 
-### 5.1. Polski benchmark i wybór modeli — krok 10
+### 5.1. Polski benchmark Qwen — krok 10; porównanie i wybór — 11B
 
 Przygotować wersjonowany zestaw **200 syntetycznych przypadków** z identyfikatorem, językiem, źródłem/typem treści, oczekiwanymi kategoriami i działaniem dla wskazanej polityki:
 
@@ -794,15 +796,15 @@ Przygotować wersjonowany zestaw **200 syntetycznych przypadków** z identyfikat
 | Bezpieczne | 50 | Q&A, kod, zwykłe instrukcje i cytowanie ataków do analizy; teksty podobne do numerów, nazw i sekretów |
 | Direct injection | 50 | Próba zmiany instrukcji, przejęcia roli, wydobycia system promptu lub obejścia zasad |
 | Indirect/obfuscated injection | 50 | Dokument/wynik narzędzia, code block, mieszane języki, odstępy, Unicode i fragmentacja; część ataków poza pierwszym oknem modelu |
-| PII i prywatność | 50 | Poprawne/błędne PESEL, NIP, REGON, IBAN, karty, email, nazwiska i adresy; oczekiwane zakresy redakcji |
+| PII i prywatność | 50 | Poprawne/błędne PESEL, NIP, REGON, IBAN, karty, email, nazwiska i adresy; osobna etykieta PII, zakresy redakcji oceniają detektory z 7–8 |
 
-PII nie jest automatycznie injection. Etykiety obejmują każdy kontrolowany typ zagrożenia osobno; porównanie modeli injection nie liczy wykrycia PESEL jako wykrycia ataku. Dodatkowe przypadki output moderation i sekretów mają osobne etykiety oraz bezpieczne odpowiedzi porównawcze.
+PII nie jest automatycznie injection. Etykiety obejmują każdy kontrolowany typ zagrożenia osobno; porównanie modeli injection nie liczy wykrycia PESEL jako wykrycia ataku. Moderacja ma dodatkowe **40 par prompt–odpowiedź**: 20 bezpiecznych (w tym odmowy) i 20 szkodliwych. Jej kategorie i wyniki są oddzielne od injection.
 
-- Podzielić zbiór przed strojeniem na część kalibracyjną i odłożoną część testową, z równą reprezentacją grup. Podobne parafrazy tego samego ataku pozostają w jednej części. Wersja i checksum datasetu trafiają do raportu.
-- Dla score liczbowego sprawdzić progi, np. `0.5–0.9`; dla etykiet Qwen porównać jawne mapowania severity/kategorii. Progi profili z kroku 5 są ustawieniami początkowymi, nie wynikiem tej ewaluacji. Każdą zmianę wdrożyć jako nową politykę.
+- Zamrozić podział **50/50** przed pomiarami, z równą reprezentacją każdej grupy i moderacji. Podobne parafrazy tego samego ataku pozostają w jednej części. Wersja i checksum datasetu trafiają do raportu.
+- Krok 10 mierzy początkowe mapowanie Qwen; strojenie porównawcze w 11B używa wyłącznie kalibracji. Dla score Prompt Guard sprawdzić progi, np. `0.5–0.9`; dla Qwen porównać jawne mapowania severity/kategorii. Progi profili z kroku 5 są ustawieniami początkowymi, nie wynikiem tej ewaluacji. Każdą zmianę wdrożyć jako nową politykę.
 - Raportować TP/FP/TN/FN, precision, recall i FPR oddzielnie dla direct injection, indirect/obfuscated, PII i moderacji wyjścia. Raportować liczebność grup i błędy usług; mała próba nie uzasadnia twierdzenia „zero false positives”.
-- Mierzyć p50/p95 guardu i całego pipeline'u, cold/warm start, RAM, timeouty i wpływ równoczesności. Porównywać na tym samym sprzęcie, tych samych danych i udokumentowanych ustawieniach runtime/quantization.
-- Zapisać kryteria wyboru jakości i latencji przed końcową ewaluacją; odłożonego zbioru nie używać do strojenia. Wynik wyboru opisuje słabości na polskich danych i różnicę między wykryciem injection a ogólnym safety.
+- Krok 10 mierzy p50/p95 pełnego wywołania guardu (transport, walidacja, mapowanie), cold/warm start, RAM i błędy; 12B/11B dodają cały pipeline, rozliczenia i wpływ równoczesności. Porównywać na tym samym sprzęcie, tych samych danych i udokumentowanych ustawieniach runtime/quantization.
+- W 11B najpierw kwalifikować warianty z **FPR ≤ 5%** na negatywach safe + PII; potem maksymalizować średni recall direct/indirect, z remisem rozstrzyganym niższym p95. Odłożonego zbioru nie używać do strojenia. Brak kwalifikującego się wariantu pozostawia kryterium odbioru MVP niespełnione. Wynik wyboru opisuje słabości na polskich danych i różnicę między wykryciem injection a ogólnym safety.
 - Dodać powtarzalną komendę benchmarku w kroku 10, wywołującą sidecary przez `Req` i zapisującą raport JSONL/CSV według ID przypadków, bez surowej treści w logach. Standardowy CI używa mocków; testy rzeczywistych modeli i raport są wymagane przed odbiorem MVP.
 
 ### 5.2. Scenariusze demonstracyjne

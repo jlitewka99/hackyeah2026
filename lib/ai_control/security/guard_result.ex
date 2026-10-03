@@ -1,9 +1,9 @@
 defmodule AiControl.Security.GuardResult do
   @moduledoc "Guard measurements and findings. Enforcement belongs to Policy.Engine."
   alias AiControl.Budgets.Usage
-  alias AiControl.Security.{Detection, Validation}
+  alias AiControl.Security.{Detection, SemanticEvidence, Validation}
 
-  @fields [:guard, :status, :detections, :signals, :duration_us, :error_code, :usage]
+  @fields [:guard, :status, :detections, :signals, :duration_us, :error_code, :usage, :evidence]
   @signals ~w(risk_score injection_score pii_count secret_count exploit_count)
   @error_codes ~w(provider_unavailable provider_timeout provider_invalid_response guard_unavailable upstream_timeout upstream_unavailable upstream_rejected upstream_invalid_response)
   defstruct guard: nil,
@@ -12,7 +12,8 @@ defmodule AiControl.Security.GuardResult do
             signals: %{},
             duration_us: 0,
             error_code: nil,
-            usage: nil
+            usage: nil,
+            evidence: %{}
 
   @type t :: %__MODULE__{
           guard: String.t(),
@@ -21,20 +22,30 @@ defmodule AiControl.Security.GuardResult do
           signals: map(),
           duration_us: non_neg_integer(),
           error_code: String.t() | nil,
-          usage: map() | nil
+          usage: map() | nil,
+          evidence: map()
         }
 
   def new(attrs), do: Validation.build(__MODULE__, attrs, @fields, &valid?/1)
 
   def valid?(%__MODULE__{} = result) do
-    Validation.code?(result.guard) && result.status in [:ok, :error, :skipped] &&
+    Validation.code?(result.guard) && result_status?(result) &&
       detections?(result) &&
       signals?(result.signals) && Validation.duration?(result.duration_us) &&
-      error_code?(result) && (result.status == :ok || result.detections == []) &&
-      usage?(result.usage)
+      evidence?(result) && usage?(result.usage)
   end
 
   def valid?(_), do: false
+
+  defp result_status?(result),
+    do:
+      result.status in [:ok, :error, :skipped] && error_code?(result) &&
+        (result.status == :ok || result.detections == [])
+
+  defp evidence?(result),
+    do:
+      SemanticEvidence.valid?(result.evidence) &&
+        (result.evidence == %{} || result.guard in ~w(semantic moderation))
 
   defp usage?(nil), do: true
   defp usage?(value), do: match?({:ok, ^value}, Usage.normalize(value))
