@@ -3,14 +3,14 @@ defmodule AiControl.Organizations do
   import Ecto.Query
 
   alias AiControl.Accounts.{Scope, User}
+  alias AiControl.{Audit, Repo}
   alias AiControl.Organizations.{Grants, Invitation, Membership, Organization, ResourceResolver}
-  alias AiControl.Repo
 
   def change_organization(attrs \\ %{}), do: Organization.changeset(%Organization{}, attrs)
 
   def create_organization(scope, attrs) do
     with {:ok, user} <- caller(scope), true <- user.organizer do
-      result = Repo.insert(change_organization(attrs))
+      result = Repo.transact(fn -> create_with_audit(scope, attrs) end)
 
       if match?({:ok, _}, result),
         do:
@@ -23,6 +23,18 @@ defmodule AiControl.Organizations do
       result
     else
       _ -> {:error, :forbidden}
+    end
+  end
+
+  defp create_with_audit(scope, attrs) do
+    with {:ok, organization} <- Repo.insert(change_organization(attrs), log: false),
+         {:ok, current} <- fetch_scope(scope, organization.id),
+         {:ok, _} <-
+           Audit.record_admin(current, "organization.created", %{
+             target_id: organization.id,
+             after: %{status: "active"}
+           }) do
+      {:ok, organization}
     end
   end
 
@@ -149,8 +161,18 @@ defmodule AiControl.Organizations do
            proposed = Ecto.Changeset.apply_changes(changeset),
            :ok <- allowed_role(current, proposed.role),
            {:ok, grants} <- delegated_grants(current, member.grants, proposed.grants),
-           :ok <- validate_resources(current.organization.id, grants) do
-        changeset |> Ecto.Changeset.put_embed(:grants, Grants.attrs(grants)) |> Repo.update()
+           :ok <- validate_resources(current.organization.id, grants),
+           {:ok, updated} <-
+             changeset
+             |> Ecto.Changeset.put_embed(:grants, Grants.attrs(grants))
+             |> Repo.update(log: false),
+           {:ok, _} <-
+             Audit.record_admin(current, "member.access_changed", %{
+               target_id: member.id,
+               before: Audit.access_snapshot(current.organization.id, member),
+               after: Audit.access_snapshot(current.organization.id, updated)
+             }) do
+        {:ok, updated}
       else
         false -> {:error, Membership.changeset(%Membership{}, attrs)}
         {:error, reason} -> {:error, reason}
@@ -160,7 +182,15 @@ defmodule AiControl.Organizations do
 
   def remove_member(scope, id) do
     locked(scope, fn current ->
-      with {:ok, member} <- get_member(current, id), do: Repo.delete(member)
+      with {:ok, member} <- get_member(current, id),
+           {:ok, removed} <- Repo.delete(member, log: false),
+           {:ok, _} <-
+             Audit.record_admin(current, "member.removed", %{
+               target_id: member.id,
+               before: Audit.access_snapshot(current.organization.id, member)
+             }) do
+        {:ok, removed}
+      end
     end)
   end
 
@@ -172,24 +202,42 @@ defmodule AiControl.Organizations do
              Repo.get_by(Membership, id: id, organization_id: current.organization.id),
            %Membership{} = owner <-
              Repo.get_by(Membership, organization_id: current.organization.id, role: :superadmin),
-           {:ok, _} <- Repo.update(Ecto.Changeset.change(owner, role: :admin)),
-           {:ok, target} <- Repo.update(Membership.changeset(target, %{role: :superadmin})) do
+           {:ok, _} <- Repo.update(Ecto.Changeset.change(owner, role: :admin), log: false),
+           {:ok, target} <-
+             Repo.update(Membership.changeset(target, %{role: :superadmin}), log: false),
+           {:ok, _} <-
+             Audit.record_admin(current, "superadmin.transferred", %{
+               target_id: target.id,
+               after: %{previous_superadmin_id: owner.user_id, next_superadmin_id: target.user_id}
+             }) do
         {:ok, target}
       else
+        {:error, :audit_unavailable} -> {:error, :audit_unavailable}
         _ -> {:error, :forbidden}
       end
     end)
   end
 
   def set_status(scope, status) when status in [:active, :suspended] do
-    locked(scope, fn current ->
-      if current.access_mode == :organizer,
-        do: Repo.update(Ecto.Changeset.change(current.organization, status: status)),
-        else: {:error, :forbidden}
-    end)
+    locked(scope, &change_status(&1, status))
   end
 
   def set_status(_, _), do: {:error, :forbidden}
+
+  defp change_status(%Scope{access_mode: :organizer} = current, status) do
+    with {:ok, updated} <-
+           Repo.update(Ecto.Changeset.change(current.organization, status: status), log: false),
+         {:ok, _} <-
+           Audit.record_admin(current, "organization.status_changed", %{
+             target_id: updated.id,
+             before: %{status: Atom.to_string(current.organization.status)},
+             after: %{status: Atom.to_string(status)}
+           }) do
+      {:ok, updated}
+    end
+  end
+
+  defp change_status(_, _), do: {:error, :forbidden}
 
   def locked(%Scope{organization: %Organization{id: id}} = scope, fun) do
     result =

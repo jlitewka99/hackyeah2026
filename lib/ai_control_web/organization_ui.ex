@@ -23,6 +23,9 @@ defmodule AiControlWeb.OrganizationUI do
   def error_message(:delivery_failed),
     do: "The email could not be delivered. Please resend the invitation."
 
+  def error_message(:audit_unavailable),
+    do: "This change could not be saved securely. Please try again."
+
   def error_message(:already_member), do: "This account is already a member of the organization."
   def error_message(:pending_superadmin), do: "A superadmin invitation is already pending."
 

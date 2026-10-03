@@ -53,7 +53,7 @@ Checkboxy oznaczają potwierdzone zakończenie kroku, a nie samą obecność kod
 - [x] Krok 1 — Logowanie i konto organizatora
 - [x] Krok 2 — Organizacje, członkostwa i zaproszenia
 - [ ] Krok 3 — Agenci i klucze API
-- [ ] Krok 4 — Wspólna domena decyzji i podstawowy audyt
+- [x] Krok 4 — Wspólna domena decyzji i podstawowy audyt
 - [ ] Krok 5 — Centralny Policy Engine
 - [ ] Krok 6 — Gateway LLM i konfiguracja środowiska
 - [ ] Krok 7 — Deterministyczne guardy i sygnatury
@@ -189,6 +189,38 @@ w krokach 3, 5 i 6.
 - Zabezpieczyć również logowanie parametrów Phoenix i błędów HTTP.
 
 **Gotowe, gdy:** decyzję można wyjaśnić na podstawie audytu bez ujawnienia sprawdzanej treści.
+
+**Odbiór 2026-10-03:** ukończono na gałęzi `JL/step-4-security-audit`, na bazie
+scalonego kroku 2. Powstały walidowane kontrakty w
+`AiControl.Security`, minimalny czysty `AiControl.Policy.Engine`, snapshot
+z checksumem obliczanym z reguł oraz synchroniczny, tenant-scoped `AiControl.Audit`.
+Audyt przechowuje działania, progi, wymagane guardy, wykrycia bez wartości,
+kody przyczyn, czasy i fingerprinty HMAC, co pozwala wyjaśnić również dopuszczenie
+wykrycia poniżej progu bez pobierania sprawdzanej treści.
+
+Zmiany organizacji, członkostw, przekazania superadmina i zaproszeń są audytowane
+w tej samej transakcji. Błąd zapisu wycofuje zmianę; PubSub działa po zatwierdzeniu.
+Wydawanie zaproszeń zapisuje audyt przed wysłaniem emaila; błąd dostarczenia
+pozostawia audytowany odwołany token, a błąd tego audytu wycofuje nowe zaproszenie.
+Zapisy decyzji są idempotentne, a zmiana danych przy ponowieniu jest odrzucana.
+Odczyt odświeża `events.read` oraz izolację organizacji. Identyfikatory agentów
+i kluczy są opcjonalnymi UUID bez zależności od schematów kroku 3.
+
+Zastąpiono surowe logi HTTP bezpiecznymi metadanymi i serwerowymi UUID,
+wyłączono debugger oraz RequestLogger, logi wyjątków Bandita i domyślne logi
+ponowień/przekierowań Req. Rozwojowe i produkcyjne uruchomienie wymaga osobnego
+`AUDIT_FINGERPRINT_KEY`; konfigurację i kontrakty opisano w README.
+
+`mix precommit` przeszedł: 198 testów, brak ostrzeżeń kompilacji aplikacji i uwag
+Credo. `mix assets.build` przeszedł. Testy obejmują priorytet decyzji, granice
+progów, awarie guardów, integralność snapshotu, izolację i odebranie dostępu,
+idempotencję, rzeczywiste odrzucenia zapisu w PostgreSQL i rollback, błędy mailera,
+pojedynczy audyt przy współbieżnej akceptacji i przekazaniu roli oraz brak sekretów
+w rekordach, logach DEBUG i odpowiedziach rzeczywistego serwera Bandit.
+Użyto osobnej tymczasowej instancji PostgreSQL, bez zmian w lokalnej bazie
+użytkownika i bez usypiania procesów w testach. Pełne zarządzanie politykami,
+gateway, detektory, wykonanie redakcji, dashboard i eksport pozostają
+w odpowiednich kolejnych krokach.
 
 ### Krok 5. Centralny Policy Engine
 

@@ -30,8 +30,10 @@ config :ai_control, AiControlWeb.Endpoint,
   adapter: Bandit.PhoenixAdapter,
   render_errors: [
     formats: [html: AiControlWeb.ErrorHTML, json: AiControlWeb.ErrorJSON],
-    layout: false
+    layout: false,
+    log: false
   ],
+  debug_errors: false,
   pubsub_server: AiControl.PubSub,
   live_view: [signing_salt: "k45W6btl"]
 
@@ -78,7 +80,14 @@ config :logger, :default_formatter,
 
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
-config :phoenix, :filter_parameters, ["password", "password_confirmation", "token", "secret"]
+config :phoenix, :logger, false
+config :phoenix, :filter_parameters, {:keep, []}
+config :req, :default_options, retry_log_level: false, redirect_log_level: false
+
+config :ai_control, :http_log_options,
+  log_exceptions_with_status_codes: [],
+  log_protocol_errors: false,
+  log_client_closures: false
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.

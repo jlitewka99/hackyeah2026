@@ -4,17 +4,23 @@ defmodule AiControl.Organizations.Invitations do
   import Swoosh.Email, except: [from: 2]
 
   alias AiControl.Accounts.{Scope, User}
-  alias AiControl.{Mailer, Repo}
+  alias AiControl.{Audit, Mailer, Repo}
   alias AiControl.Organizations
   alias AiControl.Organizations.{Grants, Invitation, Membership, Organization}
 
   def change_invitation(attrs \\ %{}), do: Invitation.changeset(%Invitation{}, attrs)
 
   def issue(scope, attrs, url_fun) when is_function(url_fun, 1) do
-    result = Organizations.locked(scope, fn current -> create_invitation(current, attrs) end)
+    result =
+      Organizations.locked(scope, fn current ->
+        with {:ok, {invitation, token, name}} <- create_invitation(current, attrs) do
+          deliver(current, invitation, name, url_fun.(token))
+        end
+      end)
 
-    with {:ok, {invitation, token, name}} <- result do
-      deliver(invitation, name, url_fun.(token))
+    case result do
+      {:ok, {:delivery_failed, _invitation}} -> {:error, :delivery_failed}
+      other -> other
     end
   end
 
@@ -38,7 +44,12 @@ defmodule AiControl.Organizations.Invitations do
          :ok <- Organizations.validate_resources(scope.organization.id, proposed.grants),
          false <- member_email?(scope.organization.id, proposed.email),
          :ok <- no_pending_owner(scope, proposed.role),
-         {:ok, inserted} <- Repo.insert(changeset, log: false) do
+         {:ok, inserted} <- Repo.insert(changeset, log: false),
+         {:ok, _} <-
+           Audit.record_admin(scope, "invitation.issued", %{
+             target_id: inserted.id,
+             after: invitation_snapshot(inserted)
+           }) do
       {:ok, {inserted, Base.url_encode64(token, padding: false), scope.organization.name}}
     else
       false -> if(changeset.valid?, do: {:error, :forbidden}, else: {:error, changeset})
@@ -86,10 +97,14 @@ defmodule AiControl.Organizations.Invitations do
   def revoke(scope, id) do
     Organizations.locked(scope, fn current ->
       with {:ok, invitation} <- manageable_invitation(current, id),
-           true <- is_nil(invitation.accepted_at) do
-        Repo.update(Ecto.Changeset.change(invitation, revoked_at: DateTime.utc_now(:second)),
-          log: false
-        )
+           true <- is_nil(invitation.accepted_at),
+           {:ok, revoked} <-
+             Repo.update(Ecto.Changeset.change(invitation, revoked_at: DateTime.utc_now(:second)),
+               log: false
+             ),
+           {:ok, _} <-
+             Audit.record_admin(current, "invitation.revoked", %{target_id: invitation.id}) do
+        {:ok, revoked}
       else
         {:error, reason} -> {:error, reason}
         _ -> {:error, :invalid_invitation}
@@ -180,7 +195,18 @@ defmodule AiControl.Organizations.Invitations do
          {:ok, _} <-
            Repo.update(Ecto.Changeset.change(invitation, accepted_at: DateTime.utc_now(:second)),
              log: false
-           ) do
+           ),
+         {:ok, accepted_scope} <- Organizations.fetch_scope(Scope.for_user(user), organization_id),
+         {:ok, _} <-
+           Audit.record_admin(accepted_scope, "invitation.accepted", %{
+             target_id: invitation.id,
+             after:
+               Map.put(
+                 Audit.access_snapshot(organization_id, membership),
+                 :membership_id,
+                 membership.id
+               )
+           }) do
       {:ok, %{user: user, membership: membership, organization_id: organization_id}}
     else
       {:error, reason} -> {:error, reason}
@@ -227,7 +253,15 @@ defmodule AiControl.Organizations.Invitations do
 
   defp hash_token(_), do: {:error, :invalid_invitation}
 
-  defp deliver(invitation, name, url) do
+  defp invitation_snapshot(invitation),
+    do: %{
+      role: Atom.to_string(invitation.role),
+      permissions: Enum.sort(invitation.grants.permissions),
+      agent_count: length(invitation.grants.agents),
+      model_count: length(invitation.grants.models)
+    }
+
+  defp deliver(scope, invitation, name, url) do
     email =
       new()
       |> to(invitation.email)
@@ -242,12 +276,15 @@ defmodule AiControl.Organizations.Invitations do
         {:ok, invitation}
 
       {:error, _} ->
-        Repo.update!(Ecto.Changeset.change(invitation, revoked_at: DateTime.utc_now(:second)),
-          log: false
-        )
-
-        Organizations.notify(invitation.organization_id)
-        {:error, :delivery_failed}
+        with {:ok, revoked} <-
+               Repo.update(
+                 Ecto.Changeset.change(invitation, revoked_at: DateTime.utc_now(:second)),
+                 log: false
+               ),
+             {:ok, _} <-
+               Audit.record_admin(scope, "invitation.delivery_failed", %{target_id: invitation.id}) do
+          {:ok, {:delivery_failed, revoked}}
+        end
     end
   end
 end

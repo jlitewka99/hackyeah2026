@@ -1,5 +1,23 @@
 import Config
 
+if config_env() != :test do
+  encoded_key =
+    System.get_env("AUDIT_FINGERPRINT_KEY") || raise "AUDIT_FINGERPRINT_KEY is required"
+
+  key =
+    case Base.decode64(encoded_key) do
+      {:ok, value} when byte_size(value) >= 32 -> value
+      _ -> raise "AUDIT_FINGERPRINT_KEY must contain at least 32 random bytes encoded as base64"
+    end
+
+  key_id = System.get_env("AUDIT_FINGERPRINT_KEY_ID", "v1")
+
+  if !Regex.match?(~r/\A[a-z][a-z0-9_.-]{0,79}\z/, key_id),
+    do: raise("AUDIT_FINGERPRINT_KEY_ID must be a machine-readable identifier")
+
+  config :ai_control, AiControl.Security.Fingerprint, key: key, key_id: key_id
+end
+
 # config/runtime.exs is executed for all environments, including
 # during releases. It is executed after compilation and before the
 # system starts, so it is typically used to load production configuration
@@ -21,7 +39,10 @@ if System.get_env("PHX_SERVER") do
 end
 
 config :ai_control, AiControlWeb.Endpoint,
-  http: [port: String.to_integer(System.get_env("PORT", "4000"))]
+  http: [
+    port: String.to_integer(System.get_env("PORT", "4000")),
+    http_options: Application.fetch_env!(:ai_control, :http_log_options)
+  ]
 
 if config_env() == :dev do
   # Reload browser tabs when matching files change.

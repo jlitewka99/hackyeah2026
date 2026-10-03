@@ -8,7 +8,7 @@ config :ai_control, AiControl.Repo,
   port: String.to_integer(System.get_env("PGPORT", "5432")),
   database: "ai_control_dev",
   stacktrace: true,
-  show_sensitive_data_on_connection_error: true,
+  show_sensitive_data_on_connection_error: false,
   pool_size: 10
 
 # For development, we disable any cache and enable
@@ -23,7 +23,7 @@ config :ai_control, AiControlWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}],
   check_origin: false,
   code_reloader: true,
-  debug_errors: true,
+  debug_errors: false,
   secret_key_base: "W4vfQEE3hr7/C4xZsGQhMHTJXmNlxKUlIQrf2HpWOu+sBLSLxYVR3l1UNOkhRYNq",
   watchers: [
     esbuild: {Esbuild, :install_and_run, [:ai_control, ~w(--sourcemap=inline --watch)]},
