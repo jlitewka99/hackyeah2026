@@ -29,6 +29,7 @@ defmodule AiControlWeb.CoreComponents do
   use Phoenix.Component
   use Gettext, backend: AiControlWeb.Gettext
 
+  alias Phoenix.HTML.Form
   alias Phoenix.LiveView.JS
 
   @doc """
@@ -193,7 +194,7 @@ defmodule AiControlWeb.CoreComponents do
 
     assigns
     |> assign(field: nil, id: assigns.id || field.id)
-    |> assign(:errors, Enum.map(errors, &translate_error(&1)))
+    |> assign(:errors, Enum.map(errors, &translate_error/1))
     |> assign_new(:name, fn -> if assigns.multiple, do: field.name <> "[]", else: field.name end)
     |> assign_new(:value, fn -> field.value end)
     |> input()
@@ -208,7 +209,7 @@ defmodule AiControlWeb.CoreComponents do
   def input(%{type: "checkbox"} = assigns) do
     assigns =
       assign_new(assigns, :checked, fn ->
-        Phoenix.HTML.Form.normalize_value("checkbox", assigns[:value])
+        Form.normalize_value("checkbox", assigns[:value])
       end)
 
     ~H"""

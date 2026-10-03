@@ -19,15 +19,15 @@ defmodule AiControlWeb.ConnCase do
 
   using do
     quote do
-      # The default endpoint for testing
-      @endpoint AiControlWeb.Endpoint
-
       use AiControlWeb, :verified_routes
 
       # Import conveniences for testing with connections
-      import Plug.Conn
-      import Phoenix.ConnTest
       import AiControlWeb.ConnCase
+      import Phoenix.ConnTest
+      import Plug.Conn
+
+      # The default endpoint for testing
+      @endpoint AiControlWeb.Endpoint
     end
   end
 

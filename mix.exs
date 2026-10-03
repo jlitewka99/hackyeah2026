@@ -10,6 +10,11 @@ defmodule AiControl.MixProject do
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
+      dialyzer: [
+        plt_file: {:no_warn, "priv/plts/ai_control_test.plt"},
+        plt_core_path: "priv/plts",
+        plt_add_apps: [:mix, :ex_unit]
+      ],
       compilers: [:phoenix_live_view] ++ Mix.compilers(),
       listeners: [Phoenix.CodeReloader]
     ]
@@ -27,7 +32,13 @@ defmodule AiControl.MixProject do
 
   def cli do
     [
-      preferred_envs: [precommit: :test]
+      preferred_envs: [
+        check: :test,
+        "check.all": :test,
+        security: :test,
+        precommit: :test,
+        dialyzer: :test
+      ]
     ]
   end
 
@@ -72,7 +83,12 @@ defmodule AiControl.MixProject do
       {:gettext, "~> 1.0"},
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
-      {:bandit, "~> 1.5"}
+      {:bandit, "~> 1.5"},
+      {:quokka, "~> 2.13", only: [:dev, :test], runtime: false},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:sobelow, "~> 0.16", only: [:dev, :test], runtime: false},
+      {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false}
     ]
   end
 
@@ -95,7 +111,16 @@ defmodule AiControl.MixProject do
         "esbuild ai_control --minify",
         "phx.digest"
       ],
-      precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"]
+      check: [
+        "format --check-formatted",
+        "compile --warnings-as-errors",
+        "deps.unlock --check-unused",
+        "credo --strict",
+        "test --warnings-as-errors"
+      ],
+      security: ["sobelow --config", "deps.audit"],
+      "check.all": ["check", "dialyzer", "security"],
+      precommit: ["format", "check"]
     ]
   end
 end
