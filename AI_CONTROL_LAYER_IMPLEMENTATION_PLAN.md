@@ -101,7 +101,7 @@ Checkboxy oznaczają potwierdzone zakończenie kroku, a nie samą obecność kod
 - [x] Krok 6 — Gateway LLM i konfiguracja środowiska
 - [x] Krok 7 — Deterministyczne guardy, NER i sygnatury
 - [x] Krok 8 — Output filtering
-- [ ] Krok 9 — Budżety i rozliczanie użycia
+- [x] Krok 9 — Budżety i rozliczanie użycia
 - [ ] Krok 10 — Semantyczne wykrywanie prompt injection
 - [ ] Krok 11 — Dashboard i zamknięcie wymaganego MVP
 - [ ] Krok 12 — Tool firewall i ograniczenia zasobów
@@ -536,7 +536,7 @@ wizualnego; zastanego driftu nie naprawiano w tym rozszerzeniu.
 
 ### Krok 9. Budżety i rozliczanie użycia
 
-**Stan implementacji (2026-10-04):** trwałe liczniki, rezerwacje, rozliczanie usage/kosztów, tokenizer i integracja gatewaya są zaimplementowane na `JL/step-9-budgets`. `mix precommit`: 441 testów po integracji aktualnego `main` (8/12A); sidecar: 4 testy; rzeczywisty Ollama 0.35.1: zgodność czterech promptów (23/60/273/328 tokenów). Odbiór Policies obejmuje desktop/mobile, oba motywy i klawiaturę. [Wyniki odbioru](docs/acceptance/step9.md). Checkbox pozostaje otwarty do pomyślnego odbioru kontenera w CI. Wspólny test rzeczywistego Ollama i NER wyjścia z kroku 8 potwierdza rozliczenie przed redakcją (34 tokeny wejścia, 15 wyjścia). Integracja semantyki pozostaje do odbioru po scaleniu kroku 10; narzędzia/workflowy podłączają kroki 12 i 15.
+**Stan implementacji (2026-10-04):** trwałe liczniki, rezerwacje, rozliczanie usage/kosztów, tokenizer i integracja gatewaya są zaimplementowane na `JL/step-9-budgets`. `mix precommit`: 441 testów po integracji aktualnego `main` (8/12A); sidecar: 4 testy; rzeczywisty Ollama 0.35.1: zgodność czterech promptów (23/60/273/328 tokenów). Odbiór Policies obejmuje desktop/mobile, oba motywy i klawiaturę. [Wyniki odbioru](docs/acceptance/step9.md). [CI](https://github.com/jlitewka99/hackyeah2026/actions/runs/37158859316) potwierdziło kontener, testy, analizę typów, jakość i bezpieczeństwo; krok 9 spełnia kryteria odbioru. Wspólny test rzeczywistego Ollama i NER wyjścia z kroku 8 potwierdza rozliczenie przed redakcją (34 tokeny wejścia, 15 wyjścia). Integracja semantyki pozostaje do odbioru po scaleniu kroku 10; narzędzia/workflowy podłączają kroki 12 i 15.
 
 **Praca równoległa:** po ukończeniu 7 realizować równolegle z 8, 10 i 12A. Nie wymaga ukończenia 8 do budowy liczników i integracji z istniejącym gatewayem; wspólne scenariusze blokady wyjścia są sprawdzane po scaleniu.
 

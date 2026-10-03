@@ -13,7 +13,13 @@ OTP 29.1.1, Python 3.11 and isolated PostgreSQL 17. No production data used.
 | Policies LiveView | DOM-ID form test preserves null, zero, organization/agent hourly limits and workflow values through activation |
 | Browser review | 1365×900 and 390×844, light/dark; native summary activated with Enter, Tab enters request/token fields, visible focus; no horizontal page overflow |
 | Container script syntax | `bash -n docker/start docker/smoke`, `sh -n docker/healthcheck` passed |
-| Linux release/container acceptance | Pending GitHub CI; local Docker daemon unavailable |
+| Linux release/container acceptance | Passed in GitHub CI: image build, private offline services, 4 tokenizer tests, real NER, release tasks, three child failures and SIGTERM |
+| Migration lifecycle | Fresh install, rollback of Step 9 and reapplication passed in a separate PostgreSQL database |
+| GitHub CI | Quality, Security, Tests, Dialyzer and container all passed on `c4469fa` |
+
+[CI evidence](https://github.com/jlitewka99/hackyeah2026/actions/runs/37158859316)
+validated the final implementation. The local Docker daemon was unavailable;
+Linux container acceptance ran on the GitHub runner.
 
 ## Real tokenizer agreement
 
