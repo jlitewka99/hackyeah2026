@@ -4,6 +4,19 @@ defmodule AiControlWeb.PlatformPoliciesLiveTest do
   import AiControl.OrganizationsFixtures
   import Phoenix.LiveViewTest
 
+  test "organizer upgrades a global draft without activating it", %{conn: conn} do
+    scope = organizer_scope_fixture()
+    {:ok, view, _} = live(log_in_user(conn, scope.user), ~p"/platform/policies")
+    view |> element("#policy-new") |> render_click()
+    view |> element("#policy-upgrade") |> render_click()
+    assert has_element?(view, "#policy-draft-schema", "v2")
+    assert has_element?(view, "#policy-schema", "v1")
+    view |> form("#policy-form") |> render_submit()
+    assert has_element?(view, "#policy-diff-schema_version")
+    assert has_element?(view, "#policy-activate")
+    assert has_element?(view, "#policy-schema", "v1")
+  end
+
   test "only organizers can open and export platform policies", %{conn: conn} do
     scope = organizer_scope_fixture()
     conn = log_in_user(conn, scope.user)

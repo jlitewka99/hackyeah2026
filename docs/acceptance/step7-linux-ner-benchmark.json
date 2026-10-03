@@ -1,0 +1,1 @@
+{"model_set": "pl-nkjp.v1", "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.36", "python": "3.11.17", "cpu_threads": 2, "samples": 40, "load_ms": 7856.8, "p50_ms": 105.4, "p95_ms": 155.5, "peak_rss_bytes": 1049505792}

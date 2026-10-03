@@ -11,10 +11,20 @@ defmodule AiControlWeb.PolicyHTML do
     profile = if profile in Configuration.profiles(), do: profile, else: "balanced"
 
     {:ok, %{settings: settings}} =
-      Configuration.validate(Map.put(Configuration.default(), "profile", profile))
+      Configuration.validate(
+        Map.put(Configuration.default(schema_version(form)), "profile", profile)
+      )
 
     settings
   end
+
+  def schema_version(form), do: Ecto.Changeset.get_field(form.source, :schema_version)
+  def guard_catalog(form), do: Configuration.guards(schema_version(form))
+  def entity_types, do: Configuration.ner_entities()
+  def label("ner"), do: "Named entities"
+  def label("geographical_location"), do: "Geographical places"
+  def label("place"), do: "Localities"
+  def label("person"), do: "People"
 
   def label("pii"), do: "Personal data"
   def label("secret"), do: "Secrets"

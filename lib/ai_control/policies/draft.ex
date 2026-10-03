@@ -8,6 +8,9 @@ defmodule AiControl.Policies.Draft do
 
   @primary_key false
   embedded_schema do
+    field :schema_version, :integer, default: 1
+    field :detector_sets, :map, default: %{}
+    field :tools, :map, default: %{}
     field :profile, :string
     field :allowed_models, :string
     field :allowed_agents, {:array, :string}, default: []
@@ -17,10 +20,13 @@ defmodule AiControl.Policies.Draft do
     field :budgets, :map, default: %{}
   end
 
-  @fields ~w(profile allowed_models allowed_agents agent_models rules guards budgets)a
+  @fields ~w(schema_version detector_sets tools profile allowed_models allowed_agents agent_models rules guards budgets)a
 
   def from_source(source) do
     %__MODULE__{
+      schema_version: source["schema_version"],
+      detector_sets: Map.get(source, "detector_sets", %{}),
+      tools: Map.get(source, "tools", %{}),
       profile: source["profile"],
       allowed_models: Enum.join(source["allowed_models"], "\n"),
       allowed_agents: source["allowed_agents"],
@@ -44,7 +50,14 @@ defmodule AiControl.Policies.Draft do
               true -> ""
             end
 
-          {id, %{"mode" => mode, "stages" => Enum.join(Map.get(guard, "stages", []), ",")}}
+          config = %{"mode" => mode, "stages" => Enum.join(Map.get(guard, "stages", []), ",")}
+
+          config =
+            if Map.has_key?(guard, "entities"),
+              do: Map.put(config, "entities", guard["entities"]),
+              else: config
+
+          {id, config}
         end)
     }
     |> change()
@@ -65,8 +78,8 @@ defmodule AiControl.Policies.Draft do
   def source(changeset) do
     draft = apply_changes(changeset)
 
-    %{
-      "schema_version" => 1,
+    source = %{
+      "schema_version" => draft.schema_version,
       "profile" => draft.profile,
       "allowed_models" => lines(draft.allowed_models),
       "allowed_agents" => draft.allowed_agents,
@@ -75,7 +88,21 @@ defmodule AiControl.Policies.Draft do
       "agent_models" => agent_models(draft.agent_models),
       "budgets" => mapping(draft.budgets, &limits/1)
     }
+
+    if draft.schema_version == 2 do
+      Map.merge(source, %{
+        "detector_sets" => draft.detector_sets,
+        "tools" => normalize_tools(draft.tools)
+      })
+    else
+      source
+    end
   end
+
+  defp normalize_tools(%{"allowed_tools" => values} = tools) when is_list(values),
+    do: Map.put(tools, "allowed_tools", Enum.reject(values, &(&1 == "")))
+
+  defp normalize_tools(tools), do: tools
 
   defp mapping(map, callback) when is_map(map),
     do: Map.new(map, fn {key, value} -> {key, callback.(value)} end)
@@ -126,6 +153,11 @@ defmodule AiControl.Policies.Draft do
 
   defp guard(config) when is_map(config) do
     base = guard_mode(config["mode"])
+
+    base =
+      if Map.has_key?(config, "entities"),
+        do: Map.put(base, "entities", config["entities"]),
+        else: base
 
     case config["stages"] do
       value when value in ["", nil] -> base

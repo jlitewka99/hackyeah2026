@@ -1,6 +1,7 @@
 import Config
 
 config :ai_control, AiControl.Gateway.Config,
+  guards: %{},
   models: %{
     "qwen3.5:4b" => String.duplicate("a", 64),
     "catalog-model" => String.duplicate("b", 64)

@@ -1,0 +1,63 @@
+{
+  "model_set": "pl-nkjp.v1",
+  "stanza": "1.11.0",
+  "package": "nkjp",
+  "files": [
+    {
+      "path": "pl/backward_charlm/oscar.pt",
+      "url": "https://huggingface.co/stanfordnlp/stanza-pl/resolve/f1a2030be881086ced0b22587a286b8779e907c7/models/backward_charlm/oscar.pt",
+      "sha256": "12fedba040dcbaebb00679e3db3465d87bc0bff91599b0e0352d9527e69890d5",
+      "bytes": 28489571
+    },
+    {
+      "path": "pl/forward_charlm/oscar.pt",
+      "url": "https://huggingface.co/stanfordnlp/stanza-pl/resolve/f1a2030be881086ced0b22587a286b8779e907c7/models/forward_charlm/oscar.pt",
+      "sha256": "60bce5a5c33563b7b91939921ef454df3e79da1e453ba54324de1285255a440c",
+      "bytes": 28489570
+    },
+    {
+      "path": "pl/lemma/pdb_nocharlm.pt",
+      "url": "https://huggingface.co/stanfordnlp/stanza-pl/resolve/f1a2030be881086ced0b22587a286b8779e907c7/models/lemma/pdb_nocharlm.pt",
+      "sha256": "e1ee004fd93f4d1e207623dc550ec7b39f0fcbd36f380603b927ed4649029984",
+      "bytes": 5910925
+    },
+    {
+      "path": "pl/mwt/pdb.pt",
+      "url": "https://huggingface.co/stanfordnlp/stanza-pl/resolve/f1a2030be881086ced0b22587a286b8779e907c7/models/mwt/pdb.pt",
+      "sha256": "5ad87d7ea4a5db7169424250751585862f3cab3d5838d82185e69f2c9e5e3387",
+      "bytes": 517393
+    },
+    {
+      "path": "pl/ner/nkjp.pt",
+      "url": "https://huggingface.co/stanfordnlp/stanza-pl/resolve/f1a2030be881086ced0b22587a286b8779e907c7/models/ner/nkjp.pt",
+      "sha256": "9a2be448afbafd04082b56b3b913210f9ec6c93ab14d787bdde052fa1fc8805e",
+      "bytes": 96410276
+    },
+    {
+      "path": "pl/pos/pdb_charlm.pt",
+      "url": "https://huggingface.co/stanfordnlp/stanza-pl/resolve/f1a2030be881086ced0b22587a286b8779e907c7/models/pos/pdb_charlm.pt",
+      "sha256": "bdaa5fe4c1a50bc7d14b6f790269f10c17cf0be2e782f60177a9691100cdc384",
+      "bytes": 37444242
+    },
+    {
+      "path": "pl/pretrain/conll17.pt",
+      "url": "https://huggingface.co/stanfordnlp/stanza-pl/resolve/f1a2030be881086ced0b22587a286b8779e907c7/models/pretrain/conll17.pt",
+      "sha256": "086e275b2ea2031c01ca9ddc14f71e76b68aafce839a5025232bc30aa10de451",
+      "bytes": 107049792
+    },
+    {
+      "path": "pl/tokenize/pdb.pt",
+      "url": "https://huggingface.co/stanfordnlp/stanza-pl/resolve/f1a2030be881086ced0b22587a286b8779e907c7/models/tokenize/pdb.pt",
+      "sha256": "46baa72d2cd1c6cd14bcb6a18641e2f15aa47743ea062aec1bf8b7badc470a48",
+      "bytes": 637744
+    },
+    {
+      "path": "resources.json",
+      "url": "https://raw.githubusercontent.com/stanfordnlp/stanza-resources/main/resources_1.11.0.json",
+      "sha256": "e334b4e200aeaa5c1903223de2f3be066f69d3a50a33c70aa1691407628de1ef",
+      "bytes": 439068
+    }
+  ],
+  "license": "Apache-2.0",
+  "repository_commit": "f1a2030be881086ced0b22587a286b8779e907c7"
+}

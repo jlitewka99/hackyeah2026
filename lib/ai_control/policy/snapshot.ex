@@ -69,11 +69,11 @@ defmodule AiControl.Policy.Snapshot do
     |> Enum.map(&elem(&1, 0))
   end
 
-  def enabled?(%{settings: nil}, _guard, _stage), do: true
+  def enabled?(%{settings: nil}, guard, _stage), do: guard != "ner"
 
   def enabled?(policy, guard, stage) do
     case policy.settings["guards"][guard] do
-      nil -> true
+      nil -> false
       config -> config["enabled"] && Atom.to_string(stage) in config["stages"]
     end
   end

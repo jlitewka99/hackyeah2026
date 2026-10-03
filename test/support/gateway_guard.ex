@@ -3,7 +3,7 @@ defmodule AiControl.TestGatewayGuard do
   @behaviour AiControl.Gateway.Guard
 
   @impl true
-  def assess(fields, context, config), do: config[:test_guard].(fields, context)
+  def assess(fields, context, _snapshot, config), do: config[:test_guard].(fields, context)
   @impl true
   def ready?(_), do: true
 end
