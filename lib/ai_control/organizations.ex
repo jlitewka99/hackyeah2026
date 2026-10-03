@@ -28,6 +28,8 @@ defmodule AiControl.Organizations do
 
   defp create_with_audit(scope, attrs) do
     with {:ok, organization} <- Repo.insert(change_organization(attrs), log: false),
+         {:ok, _} <-
+           Repo.insert(%AiControl.Policies.Set{organization_id: organization.id}, log: false),
          {:ok, current} <- fetch_scope(scope, organization.id),
          {:ok, _} <-
            Audit.record_admin(current, "organization.created", %{

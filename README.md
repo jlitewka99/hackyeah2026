@@ -227,6 +227,79 @@ policy enforcement and the model registry remain subsequent work. The existing
 security and audit contracts remain available; auditing agent/key administration
 is outside this change.
 
+## Versioned policies
+
+Step 5 adds `/organizations/:organization_id/policies` for policy readers and
+managers, and `/platform/policies` for the organizer's global default. Saving
+creates an immutable, inactive version. Review its differences before activation
+or restoring a historical version. Returning to the global policy keeps local
+history. Organizations inherit the current global version until they activate a
+complete local replacement; local versions do not merge with global settings.
+HTTP routes, LiveView events and the context refresh current access. Reading
+requires `policies.read`; changes require `policies.manage`. Global operations
+require a current organizer account.
+
+The migration adds policy sets, immutable versions and activation history,
+creates a system-authored `balanced` global version, and initializes existing
+organizations to inheritance. New organizations also inherit. PostgreSQL enforces
+one global set, one set per organization and active-version ownership. Set locking
+and an expected revision prevent concurrent changes from silently overwriting
+each other. Activation, history and audit commit together; an audit failure rolls
+back the change. Global audit events use an explicit organizer-only platform
+scope; organization reads remain isolated. Policy audit stores IDs, checksums,
+authors and timestamps rather than source configuration or YAML.
+
+| Profile | Personal data | Secrets / exploits | Injection threshold | Semantic guard |
+| --- | --- | --- | --- | --- |
+| Relaxed | redact | block | 0.9 | optional |
+| Balanced | redact | block | 0.8 | required |
+| Strict | block | block | 0.65 | required |
+
+Deterministic guards default to required on input and output; semantic analysis
+defaults to input. Explicit rule and guard fields override profile defaults.
+The initial policy allows `qwen3.5:4b` and all active agents in the requesting
+organization. Budgets start unconfigured. Organization and agent requests/tokens
+per UTC hour and workflow tool calls can be configured now; budget accounting
+and enforcement arrive in step 9. Detectors, gateway and execution of redaction
+remain in their subsequent steps.
+
+Import [the example policy](priv/policies/balanced.yaml) by pasting YAML or uploading
+one file. Schema version 1 accepts one UTF-8 document up to 64 KiB. Unknown fields,
+duplicate keys, aliases, anchors and explicit tags are rejected. Forms and YAML
+share `AiControl.Policies.Configuration`; errors contain field paths without
+input values. Exports use the JSON-compatible YAML 1.2 subset to preserve empty
+collections, nulls and strings without ambiguous quoting. Selecting a profile
+recomputes unspecified defaults; clear an override to restore the profile value.
+
+```elixir
+alias AiControl.Policies
+
+{:ok, source} = Policies.import_yaml(File.read!("priv/policies/balanced.yaml"))
+{:ok, version} = Policies.create_version(current_scope, source)
+{:ok, current} = Policies.current(current_scope)
+{:ok, _activation} = Policies.activate(current_scope, version.id, current.set.revision)
+
+# Acquire once at the start of a future gateway request, then retain at all stages.
+{:ok, snapshot} = Policies.snapshot_for_request(verified_principal, %{model: "qwen3.5:4b"})
+```
+
+`Policies.rollback/4`, `inherit/2`, `list_versions/2`, `get_version/3` and
+`export_yaml/3` expose the corresponding operations; optional target `:global`
+selects the organizer's set. `activate/4` and `rollback/4` return
+`{:error, :stale_policy}` for an outdated revision. Each new request reads the
+effective version from PostgreSQL, then uses supervised ETS for that immutable
+version's snapshot. A delayed cache update, eviction or restart cannot select an
+older active version. In-flight requests retain their original snapshot. Its
+checksum includes all resolved rules, guards/stages, resource restrictions and
+budgets. PubSub refreshes the panel without discarding unsaved edits.
+
+Human AI access intersects current `ai.use`, owned agent/model grants and policy
+restrictions. The model resolver continues to deny unverified human model access
+until the registry in step 6. API principals keep their key-bound agent identity;
+credential revocation, expiration and agent/organization status are rechecked.
+Concrete policy agents must belong to the organization. Model names can be
+configured ahead of the registry; a model wildcard requires a verified catalog.
+
 ## Security decisions and audit
 
 Step 4 introduces `AiControl.Security.SecurityContext`, `Detection`, `GuardResult`,
@@ -274,8 +347,8 @@ uses `BLOCK > REDACT > ALLOW` with an inclusive confidence threshold. An absent,
 skipped, or failed required guard blocks. An unmapped finding blocks; redaction
 without a usable location also blocks. Optional failures remain audit evidence.
 The engine produces redaction locations; executing redaction and supplying real
-guards arrive in later steps. Policy persistence, activation, profiles, YAML,
-and cache arrive in step 5.
+guards arrive in later steps. Step 5 adds the versioned policy configuration
+described below; the legacy snapshot constructor remains supported.
 
 `AiControl.Security.Fingerprint.content/3` takes an organization UUID, stage,
 and binary content and returns a tenant- and stage-separated HMAC-SHA-256
@@ -289,7 +362,7 @@ timestamps, guard durations, and optional fingerprints. `duration_us` is the
 sum of guard durations. Evidence also includes evaluated rule actions and
 thresholds, required guards, and redaction locations. A finding below threshold
 can therefore be explained from the audit without retrieving checked content
-or depending on future policy storage. Writes are synchronous: `evaluate_and_audit/3` returns
+or depending on a mutable active policy. Writes are synchronous: `evaluate_and_audit/3` returns
 `{:ok, decision}` only after persistence. A write failure returns
 `{:error, :audit_unavailable}`; the future gateway maps it to HTTP 503 and starts
 no new downstream call. Retrying the same assessment is idempotent; changed

@@ -8,7 +8,7 @@ defmodule AiControl.Policy.Engine do
   def evaluate(context, assessment, policy) do
     if valid_inputs?(context, assessment, policy) do
       unavailable =
-        policy.required_guards --
+        Snapshot.required_guards(policy, context.stage) --
           (assessment.results |> Enum.filter(&(&1.status == :ok)) |> Enum.map(& &1.guard))
 
       initial =
@@ -17,7 +17,9 @@ defmodule AiControl.Policy.Engine do
           else: {:block, [], ["required_guard_unavailable"], []}
 
       {action, rules, reasons, redactions} =
-        Enum.reduce(assessment.detections, initial, &apply_detection(&1, &2, policy))
+        assessment.detections
+        |> Enum.filter(&Snapshot.enabled?(policy, &1.guard, context.stage))
+        |> Enum.reduce(initial, &apply_detection(&1, &2, policy))
 
       Decision.new(%{
         assessment_id: assessment.id,

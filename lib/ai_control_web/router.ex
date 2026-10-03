@@ -34,6 +34,10 @@ defmodule AiControlWeb.Router do
     plug :require_permission, "api_keys.read"
   end
 
+  pipeline :policies_read do
+    plug :require_permission, "policies.read"
+  end
+
   scope "/v1", AiControlWeb do
     pipe_through [:api, :agent_api]
     get "/auth", ApiAuthController, :show, log: false
@@ -125,8 +129,22 @@ defmodule AiControlWeb.Router do
     end
   end
 
+  scope "/organizations/:organization_id", AiControlWeb do
+    pipe_through [:browser, :require_authenticated_user, :require_organization, :policies_read]
+    get "/policies/versions/:version_id/export", PolicyExportController, :organization
+
+    live_session :policies,
+      on_mount: [
+        {AiControlWeb.OrganizationAuth, :require_organization},
+        {AiControlWeb.WorkspaceNavigation, :default}
+      ] do
+      live "/policies", OrganizationPoliciesLive, :index
+    end
+  end
+
   scope "/platform", AiControlWeb do
     pipe_through [:browser, :require_authenticated_user, :require_organizer]
+    get "/policies/versions/:version_id/export", PolicyExportController, :platform
 
     live_session :organizer,
       on_mount: [
@@ -134,6 +152,7 @@ defmodule AiControlWeb.Router do
         {AiControlWeb.WorkspaceNavigation, :default}
       ] do
       live "/organizations", PlatformOrganizationsLive, :index
+      live "/policies", PlatformPoliciesLive, :index
     end
   end
 
