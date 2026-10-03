@@ -21,10 +21,17 @@ defmodule AiControlWeb.InvitationController do
   def accept(conn, %{"user" => %{"token" => token} = attrs}) when is_binary(token) do
     case Invitations.accept(token, conn.assigns.current_scope, attrs) do
       {:ok, result} ->
-        conn
-        |> put_session(:user_return_to, ~p"/organizations/#{result.organization_id}")
-        |> put_flash(:info, "You have joined the organization.")
-        |> UserAuth.log_in_user(result.user)
+        conn = put_flash(conn, :info, "You have joined the organization.")
+
+        if conn.assigns.current_scope do
+          conn
+          |> delete_session(:user_return_to)
+          |> redirect(to: ~p"/organizations/#{result.organization_id}")
+        else
+          conn
+          |> put_session(:user_return_to, ~p"/organizations/#{result.organization_id}")
+          |> UserAuth.log_in_user(result.user)
+        end
 
       {:error, %Ecto.Changeset{}} ->
         retry(conn, token, "Password must be 12–72 characters and match its confirmation.")
