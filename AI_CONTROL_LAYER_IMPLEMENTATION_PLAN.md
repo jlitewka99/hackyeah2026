@@ -250,7 +250,8 @@ wyłączono debugger oraz RequestLogger, logi wyjątków Bandita i domyślne log
 ponowień/przekierowań Req. Rozwojowe i produkcyjne uruchomienie wymaga osobnego
 `AUDIT_FINGERPRINT_KEY`; konfigurację i kontrakty opisano w README.
 
-`mix precommit` przeszedł: 198 testów, brak ostrzeżeń kompilacji aplikacji i uwag
+`mix precommit` przeszedł: 203 testy po dołączeniu poprawek kroku 2 z `main`,
+brak ostrzeżeń kompilacji aplikacji i uwag
 Credo. `mix assets.build` przeszedł. Testy obejmują priorytet decyzji, granice
 progów, awarie guardów, integralność snapshotu, izolację i odebranie dostępu,
 idempotencję, rzeczywiste odrzucenia zapisu w PostgreSQL i rollback, błędy mailera,
