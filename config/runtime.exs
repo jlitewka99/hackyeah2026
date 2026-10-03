@@ -8,6 +8,8 @@ gateway_models =
   end
 
 gateway_config = [
+  semantic_url: System.get_env("SEMANTIC_BASE_URL", "http://127.0.0.1:8002"),
+  semantic_timeout: String.to_integer(System.get_env("GATEWAY_SEMANTIC_TIMEOUT_MS", "30000")),
   ner_url: System.get_env("NER_BASE_URL", "http://127.0.0.1:8001"),
   guard_timeout: String.to_integer(System.get_env("GATEWAY_GUARD_TIMEOUT_MS", "10000")),
   readiness_timeout: String.to_integer(System.get_env("GATEWAY_READINESS_TIMEOUT_MS", "5000")),

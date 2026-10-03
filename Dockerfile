@@ -12,6 +12,7 @@ RUN mix deps.get --only prod && mix deps.compile
 COPY lib lib
 COPY priv priv
 COPY assets assets
+COPY sidecar/semantic/models.v1.json sidecar/semantic/models.v1.json
 RUN mix compile && mix assets.deploy
 COPY config/runtime.exs config/
 COPY rel rel
@@ -24,6 +25,13 @@ RUN python -m venv /opt/ner && /opt/ner/bin/pip install --no-cache-dir --index-u
 COPY sidecar/ner ./
 RUN /opt/ner/bin/python models.py download /models
 
+FROM ${PYTHON_IMAGE} AS semantic-builder
+WORKDIR /build
+COPY sidecar/semantic/requirements.lock ./
+RUN python -m venv /opt/semantic && /opt/semantic/bin/pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.8.0 && /opt/semantic/bin/pip install --no-cache-dir -r requirements.lock
+COPY sidecar/semantic ./
+RUN /opt/semantic/bin/python models.py download /semantic-models
+
 FROM ${PYTHON_IMAGE} AS runner
 RUN apt-get update && apt-get install -y --no-install-recommends libstdc++6 libncurses6 libgomp1 openssl ca-certificates tini curl bash && rm -rf /var/lib/apt/lists/* && useradd --uid 10001 --create-home app
 WORKDIR /app
@@ -31,8 +39,11 @@ COPY --from=builder --chown=app:app /app/_build/prod/rel/ai_control ./
 COPY --from=ner-builder /opt/ner /opt/ner
 COPY --from=ner-builder /models /app/models
 COPY --chown=app:app sidecar/ner /app/ner
+COPY --from=semantic-builder /opt/semantic /opt/semantic
+COPY --from=semantic-builder /semantic-models /app/semantic-models
+COPY --chown=app:app sidecar/semantic /app/semantic
 COPY --chmod=755 docker/start docker/healthcheck /app/docker/
-ENV LANG=C.UTF-8 PHX_SERVER=true PORT=4000 NER_BASE_URL=http://127.0.0.1:8001 STANZA_RESOURCES_DIR=/app/models PYTHONDONTWRITEBYTECODE=1
+ENV LANG=C.UTF-8 PHX_SERVER=true PORT=4000 NER_BASE_URL=http://127.0.0.1:8001 SEMANTIC_BASE_URL=http://127.0.0.1:8002 STANZA_RESOURCES_DIR=/app/models SEMANTIC_MODELS_DIR=/app/semantic-models HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 PYTHONDONTWRITEBYTECODE=1
 USER app
 EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 CMD ["/app/docker/healthcheck"]

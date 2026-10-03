@@ -27,7 +27,10 @@ defmodule AiControl.Gateway do
          :ok <- authorize_again(current, policy, opts[:agent_id], params["model"]),
          {:ok, response} <- generate(safe),
          {:ok, response} <- Response.normalize(response, params["model"], request_id),
-         {:ok, response} <- Stages.evaluate(response, current, policy, request_id, :output) do
+         {:ok, response} <-
+           Stages.evaluate(response, current, policy, request_id, :output,
+             semantic_prompt: Jason.encode!(safe["messages"])
+           ) do
       Response.normalize(response, params["model"], request_id)
     end
   end

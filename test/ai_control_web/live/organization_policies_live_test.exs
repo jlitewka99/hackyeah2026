@@ -12,7 +12,7 @@ defmodule AiControlWeb.OrganizationPoliciesLiveTest do
     %{scope: scope, conn: log_in_user(conn, scope.user)}
   end
 
-  test "v2 upgrade keeps the active v1 policy until deliberate activation", %{
+  test "v3 upgrade keeps the active v1 policy until deliberate activation", %{
     conn: conn,
     scope: scope
   } do
@@ -20,7 +20,7 @@ defmodule AiControlWeb.OrganizationPoliciesLiveTest do
     assert has_element?(view, "#policy-schema", "v1")
     view |> element("#policy-new") |> render_click()
     view |> element("#policy-upgrade") |> render_click()
-    assert has_element?(view, "#policy-draft-schema", "v2")
+    assert has_element?(view, "#policy-draft-schema", "v3")
     assert has_element?(view, "#policy-detector-sets")
     view |> element("#policy-guards > summary") |> render_click()
     assert has_element?(view, "#policy-ner-entities option[value='person'][selected]")
@@ -37,7 +37,7 @@ defmodule AiControlWeb.OrganizationPoliciesLiveTest do
     assert {:ok, current} = Policies.current(scope)
     assert current.version.settings["schema_version"] == 1
     view |> element("#policy-activate") |> render_click()
-    assert has_element?(view, "#policy-schema", "v2")
+    assert has_element?(view, "#policy-schema", "v3")
     assert {:ok, active} = Policies.current(scope)
 
     assert active.version.settings["guards"]["ner"]["entities"] == [

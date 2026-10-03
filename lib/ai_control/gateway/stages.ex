@@ -6,9 +6,9 @@ defmodule AiControl.Gateway.Stages do
   alias AiControl.Policy.Snapshot
   alias AiControl.Security.{GuardResult, SecurityAssessment}
 
-  @phases [~w(pii secret signatures), ["ner"], ["semantic"]]
+  @phases [~w(pii secret signatures), ["ner"], ["semantic", "moderation"]]
 
-  def evaluate(value, identity, policy, request_id, stage) do
+  def evaluate(value, identity, policy, request_id, stage, opts \\ []) do
     Gateway.measure(stage, fn ->
       phases =
         Enum.filter(@phases, fn guards ->
@@ -16,19 +16,19 @@ defmodule AiControl.Gateway.Stages do
         end)
 
       if length(phases) < 2 do
-        complete(value, identity, policy, request_id, stage)
+        complete(value, identity, policy, request_id, stage, opts)
       else
-        layered(value, identity, policy, request_id, stage, phases)
+        layered(value, identity, policy, request_id, stage, phases, opts)
       end
     end)
   end
 
-  defp layered(value, identity, policy, request_id, stage, phases) do
+  defp layered(value, identity, policy, request_id, stage, phases, opts) do
     phases
     |> Enum.with_index()
     |> Enum.reduce_while({:ok, value, []}, fn {guards, index}, {:ok, current, previous} ->
       with {:ok, context} <- Gateway.context(identity, policy, request_id, stage),
-           {:ok, results} <- results(current, context, policy, guards),
+           {:ok, results} <- results(current, context, policy, guards, opts),
            {:ok, assessment} <- SecurityAssessment.new(context, previous ++ results),
            {:ok, decision} <-
              phase_decision(context, assessment, policy, guards, index == length(phases) - 1),
@@ -59,13 +59,13 @@ defmodule AiControl.Gateway.Stages do
     end
   end
 
-  defp complete(value, identity, policy, request_id, stage) do
+  defp complete(value, identity, policy, request_id, stage, opts) do
     guards =
       List.flatten(@phases)
-      |> Enum.reject(&(&1 == "ner" && !Snapshot.enabled?(policy, &1, stage)))
+      |> Enum.reject(&(&1 in ~w(ner moderation) && !Snapshot.enabled?(policy, &1, stage)))
 
     with {:ok, context} <- Gateway.context(identity, policy, request_id, stage),
-         {:ok, results} <- results(value, context, policy, guards),
+         {:ok, results} <- results(value, context, policy, guards, opts),
          {:ok, assessment} <- SecurityAssessment.new(context, results),
          {:ok, decision} <- Security.evaluate_and_audit(context, assessment, policy) do
       with {:ok, safe} <- enforce(value, decision),
@@ -88,11 +88,11 @@ defmodule AiControl.Gateway.Stages do
 
   defp classify_error(_), do: {:error, :guard_unavailable}
 
-  defp results(value, context, policy, guards) do
+  defp results(value, context, policy, guards, opts) do
     fields = Content.fields(value) |> Enum.map(& &1.text)
 
     Enum.reduce_while(guards, {:ok, []}, fn guard, {:ok, results} ->
-      case assess(guard, fields, value, context, policy) do
+      case assess(guard, fields, value, context, policy, opts) do
         {:error, {:capacity_exceeded, _}} = error ->
           {:halt, error}
 
@@ -122,25 +122,42 @@ defmodule AiControl.Gateway.Stages do
 
   defp safe_contract(_, _, :output), do: :ok
 
-  defp assess(guard, fields, value, context, policy) do
+  defp assess(guard, fields, value, context, policy, opts) do
     if Snapshot.enabled?(policy, guard, context.stage) do
-      configured_guard(Map.get(Config.get(:guards), guard), guard, fields, value, context, policy)
+      configured_guard(
+        Map.get(Config.get(:guards), guard),
+        guard,
+        fields,
+        value,
+        context,
+        policy,
+        opts
+      )
     else
       {:ok, result} = GuardResult.new(%{guard: guard, status: :skipped})
       result
     end
   end
 
-  defp configured_guard(nil, guard, _, _, _, _), do: unavailable(guard)
+  defp configured_guard(nil, guard, _, _, _, _, _), do: unavailable(guard)
 
-  defp configured_guard(module, guard, fields, value, context, policy) do
-    result = Gateway.measure(:guard, fn -> call_guard(module, fields, context, policy) end)
+  defp configured_guard(module, guard, fields, value, context, policy, opts) do
+    result =
+      Gateway.measure(:guard, fn -> call_guard(module, guard, fields, context, policy, opts) end)
+
     validate_result(result, guard, value)
   end
 
-  defp call_guard(module, fields, context, policy) do
-    Slots.run(:guard, Config.get(:guard_timeout), fn ->
-      module.assess(fields, context, policy, Config.get())
+  defp call_guard(module, guard, fields, context, policy, opts) do
+    timeout =
+      if guard in ~w(semantic moderation),
+        do: Config.get(:semantic_timeout),
+        else: Config.get(:guard_timeout)
+
+    config = Keyword.merge(Config.get(), Keyword.take(opts, [:semantic_prompt]))
+
+    Slots.run(:guard, timeout, fn ->
+      module.assess(fields, context, policy, config)
     end)
   end
 
