@@ -7,9 +7,6 @@ defmodule AiControlWeb.PlatformOrganizationsLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    if connected?(socket),
-      do: Phoenix.PubSub.subscribe(AiControl.PubSub, "platform:organizations")
-
     {:ok,
      socket
      |> assign(

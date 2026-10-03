@@ -16,5 +16,9 @@ defmodule AiControl.Organizations.Organization do
     |> update_change(:name, &String.trim/1)
     |> validate_required([:name])
     |> validate_length(:name, min: 2, max: 120)
+    |> unique_constraint(:name,
+      name: :organizations_name_unique_index,
+      message: "An organization with this name already exists."
+    )
   end
 end

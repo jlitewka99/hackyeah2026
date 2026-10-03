@@ -4,13 +4,6 @@ defmodule AiControlWeb.OrganizationsLive do
   alias AiControl.Organizations
 
   def mount(_, _, socket) do
-    if connected?(socket),
-      do:
-        Phoenix.PubSub.subscribe(
-          AiControl.PubSub,
-          "users:#{socket.assigns.current_scope.user.id}:organizations"
-        )
-
     {:ok, socket |> assign(:page_title, "Workspaces") |> refresh()}
   end
 

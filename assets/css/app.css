@@ -119,7 +119,18 @@ h2 { font-size: 1.0625rem; line-height: 1.4; font-weight: 600; letter-spacing: -
 .access-fieldset { padding: 1.5rem 0; border-top: 1px solid var(--line); margin-top: 1.5rem; }
 .access-fieldset legend { padding-right: .75rem; font-weight: 600; font-size: 1rem; }
 .permission-row { padding: .5rem 0; border-bottom: 1px solid var(--line); font-size: .875rem; }
-.workspace-label { padding: 1rem .625rem .5rem; font-size: .8125rem; color: var(--muted); overflow-wrap: anywhere; }
+.workspace-switcher { position: relative; min-width: 0; margin-bottom: 1rem; }
+.workspace-trigger { display: flex; align-items: center; gap: .625rem; width: 100%; min-height: 2.75rem; padding: .625rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--surface); font-size: .875rem; font-weight: 550; }
+.workspace-trigger:hover, .workspace-trigger[aria-expanded="true"] { background: var(--surface-hover); }
+.workspace-panel { position: absolute; top: calc(100% + .5rem); left: 0; width: 100%; min-width: 0; z-index: 30; border: 1px solid var(--line); border-radius: .5rem; background: var(--surface); }
+.workspace-search { padding: .625rem .625rem 0; }
+.workspace-search .field-group { margin-bottom: .625rem; }
+.workspace-options { max-height: min(20rem, 50dvh); overflow-y: auto; overscroll-behavior: contain; padding: .375rem; scrollbar-color: var(--muted) var(--surface); }
+.workspace-option { display: flex; align-items: center; gap: .625rem; min-height: 2.75rem; padding: .625rem; border-radius: .3125rem; font-size: .875rem; overflow-wrap: anywhere; }
+.workspace-option:hover, .workspace-option:focus, .workspace-option[aria-current="true"] { background: var(--surface-hover); }
+.workspace-option[aria-current="true"] { font-weight: 550; }
+.workspace-option:focus-visible { outline-offset: -2px; }
+.workspace-empty { padding: .75rem .625rem; color: var(--muted); font-size: .8125rem; }
 .field-input:disabled { opacity: .65; background: var(--surface-subtle); cursor: not-allowed; }
 .checkbox-label:has(input:disabled) { color: var(--muted); }
 .empty-workspace { border-top: 1px solid var(--line); margin-top: 2.5rem; padding-top: 3.5rem; }
@@ -138,6 +149,9 @@ h2 { font-size: 1.0625rem; line-height: 1.4; font-weight: 600; letter-spacing: -
   .sidebar { display: none; }
   .app-shell { display: block; }
   .mobile-header { display: block; border-bottom: 1px solid var(--line); padding: 1rem; }
+  .mobile-header nav { flex: 1; min-width: 0; }
+  .workspace-switcher { max-width: 24rem; }
+  .workspace-panel { min-width: min(18rem, calc(100vw - 2rem)); }
   .app-main { padding: 2rem 1.25rem; }
   .settings-section { grid-template-columns: 1fr; gap: 1.5rem; }
   .task-section, .permission-grid { grid-template-columns: 1fr; gap: 1.5rem; }

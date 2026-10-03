@@ -29,7 +29,7 @@ defmodule AiControl.Organizations do
   def list_organizations(scope) do
     case caller(scope) do
       {:ok, user} ->
-        query = from(o in Organization, order_by: [asc: o.name, asc: o.id])
+        query = from(o in Organization, order_by: [asc: fragment("lower(?)", o.name), asc: o.id])
 
         query =
           if user.organizer,

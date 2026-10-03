@@ -82,6 +82,11 @@ create, suspend, and restore organizations and invite their first superadmin fro
 `/platform/organizations`. An organization can wait for that invitation to be
 accepted before it has a superadmin.
 
+Organization names are globally unique, ignoring case and surrounding spaces.
+The migration repairs existing duplicate names with numbered suffixes without
+changing organization IDs. Use the searchable navigation dropdown in the
+desktop sidebar or mobile header to switch workspaces.
+
 | Role | Administrative access |
 | --- | --- |
 | Organizer | All organizations, organization status, and first-superadmin invitations |
