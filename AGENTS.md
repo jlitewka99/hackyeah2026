@@ -4,6 +4,7 @@ This is a web application written using the Phoenix web framework.
 
 - Use `mix precommit` alias when you are done with all changes and fix any pending issues
 - Use the already included and available `:req` (`Req`) library for HTTP requests, **avoid** `:httpoison`, `:tesla`, and `:httpc`. Req is included by default and is the preferred HTTP client for Phoenix apps
+- **Always** create pages using separate `.html.heex` templates paired with `.ex` modules. Keep page markup in `.html.heex` and Elixir logic, assigns, and event handlers in `.ex`. For LiveViews, use matching files such as `dashboard_live.ex` and `dashboard_live.html.heex` instead of embedding the full page in an inline `~H` sigil. Inline `~H` remains allowed for reusable function components.
 
 ### Phoenix v1.8 guidelines
 
