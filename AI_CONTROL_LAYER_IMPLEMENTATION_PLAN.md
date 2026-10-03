@@ -6,6 +6,8 @@ Plan opiera się na [AI_CONTROL_LAYER_REQUIREMENTS.md](AI_CONTROL_LAYER_REQUIREM
 
 **Aktualizacja 2026-10-03:** uwzględniono przesłany research „Executive Summary — Elixir-based AI Safety Gateway”. Kroki **1–7 są ukończone i scalone**, zgodnie z zapisanymi odbiorami; wyniki odbioru gatewaya zapisano przy kroku 6, a guardów, NER i kontenera przy kroku 7. Następna fala pracy to **8, 9, 10 i 12A równolegle → 12B i 11A równolegle → 11B (odbiór MVP)**. Podział i zależności opisuje sekcja 2.1. Numeracja, checkboxy i historia odbiorów pozostają zachowane; podstawowy NER i pełny tool firewall nadal wchodzą do MVP. Zmiana organizacji pracy nie oznacza wykonania nowych funkcji.
 
+**Aktualizacja 2026-10-04:** krok **8 ukończony i odebrany lokalnie** na `JL/step-8-output-filtering`, na bazie `origin/main` z krokami 1–7. Odbiór i zgodność API opisano przy kroku 8 oraz w [raporcie](docs/acceptance/step8.md). Rozliczenie zablokowanej odpowiedzi, rzeczywisty provider semantyczny i wykonanie narzędzi czekają na integrację odpowiednio z 9, 10 i 12; checkbox 8 nie oznacza scalenia brancha ani ukończenia tych zależności.
+
 Przykładowe zlecenie:
 
 > Wykonaj krok 9 z AI_CONTROL_LAYER_IMPLEMENTATION_PLAN.md na bazie ukończonego i scalonego kroku 7. Przeczytaj zasady pracy równoległej z sekcji 2.1, zaimplementuj budżety i rozliczenia bez ponownej implementacji NER, dodaj wymagane testy, uruchom mix precommit i opisz stan integracji w planie.
@@ -98,7 +100,7 @@ Checkboxy oznaczają potwierdzone zakończenie kroku, a nie samą obecność kod
 - [x] Krok 5 — Centralny Policy Engine
 - [x] Krok 6 — Gateway LLM i konfiguracja środowiska
 - [x] Krok 7 — Deterministyczne guardy, NER i sygnatury
-- [ ] Krok 8 — Output filtering
+- [x] Krok 8 — Output filtering
 - [ ] Krok 9 — Budżety i rozliczanie użycia
 - [ ] Krok 10 — Semantyczne wykrywanie prompt injection
 - [ ] Krok 11 — Dashboard i zamknięcie wymaganego MVP
@@ -522,11 +524,15 @@ wizualnego; zastanego driftu nie naprawiano w tym rozszerzeniu.
 - Ponownie zastosować PII, secret detection, sygnatury i osobny `ner`, konfigurowany również dla wyjścia.
 - Wykonać decyzję polityki przed zwróceniem odpowiedzi klientowi.
 - Zachować informację, czy naruszenie wystąpiło na wejściu, czy na wyjściu.
-- Buforować całą odpowiedź dla `stream: false`; żadna treść ani argumenty narzędzia nie trafiają do klienta przed oceną i wymaganym audytem. Redakcja argumentów musi zachować poprawny JSON i schemat; gdy nie może, blokować propozycję wywołania.
+- Buforować całą odpowiedź dla `stream: false`; żadna treść ani argumenty narzędzia nie trafiają do klienta przed oceną i wymaganym audytem. Redakcja argumentów musi zachować poprawny JSON i schemat; gdy nie może, odrzucać całą odpowiedź wraz ze wszystkimi propozycjami wywołań.
 - Przy blokadzie zwracać stały komunikat odmowy i identyfikator żądania, bez cytowania naruszenia. Nie ponawiać generacji ani nie przełączać modelu automatycznie. Usage naliczać również za zablokowaną odpowiedź po podłączeniu kroku 9.
 - Przygotować etap dla moderacji AI z kroku 10; klasyfikator prompt injection nie jest domyślnie klasyfikatorem szkodliwości odpowiedzi.
 
 **Gotowe, gdy:** sekret wygenerowany przez model zostaje zablokowany lub zredagowany zgodnie z polityką, audyt rozróżnia oba etapy, a tekst i argumenty narzędzi nie wyciekają przy blokadzie, błędzie guardu lub zapisu audytu. Bezpieczna odpowiedź zachowuje wspierany format API.
+
+**Odbiór 2026-10-04:** ukończono backend na `JL/step-8-output-filtering`. Projekcja obejmuje tekst assistant, identyfikatory i nazwy narzędzi oraz zdekodowane zagnieżdżone klucze i wartości argumentów z kontekstem pól i offsetami UTF-8. Redakcja zmienia tylko tekst i wartości string; rekonstruuje JSON przez Jason i waliduje kontrakt po każdej fazie. JSV 0.25.0 sprawdza Draft 2020-12 i jawny Draft 7, `format`, lokalne referencje i schematy z końcowego żądania; casting, atomy, odwołania do modułów i pobieranie schematów z sieci są wyłączone. Zduplikowane definicje, ID i klucze argumentów są odrzucane. Odmowa obejmuje całą odpowiedź, bez kolejnej generacji; terminalny audyt i telemetry zapisują rzeczywisty etap, bez treści i wartości argumentów. Zachowano `assess/4`, wywołania `Stages.evaluate/5`, wersje polityk, wymagane guardy, allowlistę providera i wspierane oryginalne usage.
+
+**Sprawdzenia:** 24 testy zakresu; `mix precommit` — 378 testów Elixir i 3 JavaScript, 3 opt-in wyłączone; Dialyzer — zero błędów; Sobelow i audyt zależności — sukces, istniejące znalezisko niskiej pewności bez zmian. Osobny odbiór z rzeczywistym sidecarem NER — 2 testy, w tym syntetyczne polskie nazwisko/adres w wyjściu oraz escaped argumentach narzędzia. Testy awarii guardów i obu rodzajów audytu potwierdzają brak wycieku do HTTP, logów, audytu i telemetry. Semantykę wyłączono jawnie tylko w wydzielonych politykach testowych. Frontend nie wymagał zmian. Szczegóły: [raport odbioru kroku 8](docs/acceptance/step8.md). Rozliczenie blokady wyjścia zostanie sprawdzone po scaleniu 9; provider AI i tool ACL/wykonanie pozostają w 10 i 12.
 
 ### Krok 9. Budżety i rozliczanie użycia
 
