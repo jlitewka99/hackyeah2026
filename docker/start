@@ -1,0 +1,28 @@
+#!/bin/bash
+set -euo pipefail
+cd /app
+pids=()
+cleanup() {
+  trap '' TERM INT
+  if ((${#pids[@]})); then
+    kill -TERM "${pids[@]}" 2>/dev/null || true
+    (sleep 15; kill -KILL "${pids[@]}" 2>/dev/null || true) &
+    deadline=$!
+    for pid in "${pids[@]}"; do wait "$pid" 2>/dev/null || true; done
+    kill "$deadline" 2>/dev/null || true
+    wait "$deadline" 2>/dev/null || true
+  fi
+}
+trap 'cleanup; exit 0' TERM INT
+# Run migrations on every start; Ecto serializes migration execution.
+./bin/ai_control eval 'AiControl.Release.migrate()'
+/opt/ner/bin/python -m uvicorn service:app --app-dir /app/ner --host 127.0.0.1 --port 8001 --workers 1 --timeout-graceful-shutdown 10 --no-access-log --log-level critical &
+pids+=("$!")
+./bin/ai_control start &
+pids+=("$!")
+status=0
+wait -n "${pids[@]}" || status=$?
+cleanup
+# A clean but unexpected child exit also stops the container with a failure.
+if ((status == 0)); then status=1; fi
+exit "$status"

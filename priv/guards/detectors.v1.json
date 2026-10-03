@@ -1,0 +1,96 @@
+{
+  "catalog_version": "builtin.v1",
+  "origin": "Original project-authored detectors. IBAN factual formats derived from the attributed python-stdnum/SWIFT catalog; no third-party regex copied.",
+  "rules": {
+    "exploit.eval.v1": {
+      "safe_alternative": "json.loads or a restricted parser with an explicit operation allowlist",
+      "unsafe": "eval / exec invocation"
+    },
+    "exploit.pickle.v1": {
+      "safe_alternative": "json.loads with validated schema; never deserialize untrusted pickle",
+      "unsafe": "pickle.load / pickle.loads"
+    },
+    "exploit.shell.v1": {
+      "safe_alternative": "subprocess.run with an argument list, shell=False and executable allowlist",
+      "unsafe": "os.system or subprocess with shell=True"
+    },
+    "exploit.yaml.v1": {
+      "safe_alternative": "yaml.safe_load",
+      "unsafe": "yaml.load without SafeLoader or CSafeLoader"
+    },
+    "pii.card.v1": {
+      "formats": [
+        "13-19 digits",
+        "4 character groups separated by space or hyphen",
+        "4-6-5 Amex grouping"
+      ],
+      "validation": "Luhn plus preceding payment context within 32 characters on the same line"
+    },
+    "pii.email.v1": {
+      "validation": "bounded Unicode email syntax; no deliverability verification"
+    },
+    "pii.iban.v1": {
+      "formats": [
+        "compact",
+        "4 character groups separated by ASCII space or NBSP; final short group"
+      ],
+      "validation": "pinned SWIFT release 101 length and BBAN structure, mod-97"
+    },
+    "pii.nip.v1": {
+      "formats": [
+        "10 digits",
+        "3-3-2-2",
+        "3-2-2-3"
+      ],
+      "validation": "weighted mod-11, reject remainder 10"
+    },
+    "pii.nrb.v1": {
+      "formats": [
+        "26 digits",
+        "2 then six groups of 4 separated by ASCII space or NBSP"
+      ],
+      "validation": "PL country BBAN structure and mod-97"
+    },
+    "pii.pesel.v1": {
+      "formats": [
+        "11 digits",
+        "6-5 digits separated by one ASCII space or hyphen"
+      ],
+      "validation": "PESEL checksum and real encoded Gregorian birth date, all five centuries"
+    },
+    "pii.regon.v1": {
+      "formats": [
+        "9 digits",
+        "14 digits"
+      ],
+      "validation": "weighted mod-11; 14 digit form also validates its 9 digit prefix"
+    },
+    "secret.aws.v1": {
+      "validation": "AKIA/ASIA access key identifier"
+    },
+    "secret.bearer.v1": {
+      "validation": "Bearer credential label"
+    },
+    "secret.connection.v1": {
+      "validation": "password in database/message-broker URI"
+    },
+    "secret.entropy.v1": {
+      "validation": "Shannon entropy >= 4 after token/credential/authorization label; generic UUID/hash values excluded"
+    },
+    "secret.github.v1": {
+      "validation": "gh[pousr]_ and github_pat_ formats"
+    },
+    "secret.google.v1": {
+      "validation": "AIza and ya29. formats"
+    },
+    "secret.jwt.v1": {
+      "validation": "three compact segments, base64url decoding, JSON header with alg; empty signature only for alg none"
+    },
+    "secret.password.v1": {
+      "validation": "credential assignments; excludes environment/code references and redaction marker"
+    },
+    "secret.pem.v1": {
+      "validation": "private-key PEM marker including incomplete PEM"
+    }
+  }
+}

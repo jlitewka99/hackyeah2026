@@ -78,6 +78,17 @@ defmodule AiControlWeb.PolicyLive do
      )}
   end
 
+  def event("upgrade", _, socket) do
+    source = socket.assigns.form.source |> Draft.source() |> Configuration.upgrade()
+
+    {:noreply,
+     assign(socket,
+       form: to_form(Draft.from_source(source), as: :policy),
+       preview: nil,
+       errors: []
+     )}
+  end
+
   def event("validate_yaml", %{"yaml" => attrs}, socket),
     do: {:noreply, assign(socket, :yaml_form, to_form(attrs, as: :yaml))}
 

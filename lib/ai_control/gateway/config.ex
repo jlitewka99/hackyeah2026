@@ -7,7 +7,13 @@ defmodule AiControl.Gateway.Config do
     provider: AiControl.Gateway.Ollama,
     ollama_reasoning_effort: "none",
     models: %{},
-    guards: %{},
+    guards: %{
+      "pii" => AiControl.Guards.Pii,
+      "secret" => AiControl.Guards.Secret,
+      "signatures" => AiControl.Guards.Signatures,
+      "ner" => AiControl.Guards.Ner
+    },
+    ner_url: "http://127.0.0.1:8001",
     input_bytes: 1_048_576,
     response_bytes: 4_194_304,
     connect_timeout: 2_000,
@@ -30,6 +36,8 @@ defmodule AiControl.Gateway.Config do
 
     if !catalog?(config[:models]),
       do: raise(ArgumentError, "gateway models require names and full SHA-256 digests")
+
+    if !origin?(config[:ner_url]), do: raise(ArgumentError, "ner_url must be an HTTP origin")
 
     validate_limits!(config)
 
@@ -64,7 +72,7 @@ defmodule AiControl.Gateway.Config do
     do:
       is_map(guards) &&
         Enum.all?(guards, fn {name, module} ->
-          name in Configuration.guards() && is_atom(module)
+          name in Configuration.guards(2) && is_atom(module)
         end)
 
   defp validate_limits!(config) do

@@ -1,5 +1,6 @@
 defmodule AiControl.Policies.Configuration do
   @moduledoc "Versioned authoring format and shared, content-free validation for forms and YAML."
+  alias AiControl.Policies.ConfigurationV1
   alias AiControl.Security.Validation
 
   @categories ~w(pii secret exploit prompt_injection)
@@ -12,13 +13,14 @@ defmodule AiControl.Policies.Configuration do
   }
 
   def categories, do: @categories
-  def guards, do: @guards
+  def guards(version \\ 1), do: if(version == 2, do: @guards ++ ["ner"], else: @guards)
+  def ner_entities, do: ~w(person address place geographical_location organization)
   def budget_fields, do: @budget_fields
   def profiles, do: ~w(relaxed balanced strict)
 
-  def default do
-    %{
-      "schema_version" => 1,
+  def default(version \\ 1) do
+    source = %{
+      "schema_version" => version,
       "profile" => "balanced",
       "allowed_models" => ["qwen3.5:4b"],
       "allowed_agents" => ["*"],
@@ -27,29 +29,52 @@ defmodule AiControl.Policies.Configuration do
       "guards" => %{},
       "budgets" => %{}
     }
+
+    if version == 2 do
+      Map.merge(source, %{
+        "detector_sets" => AiControl.Guards.Registry.sets(),
+        "tools" => %{"allowed_tools" => []}
+      })
+    else
+      source
+    end
+  end
+
+  def upgrade(source) do
+    default(2) |> Map.merge(source) |> Map.put("schema_version", 2)
   end
 
   def validate(source) when is_map(source) and not is_struct(source) do
+    if source["schema_version"] == 2,
+      do: validate_v2(source),
+      else: ConfigurationV1.validate(source)
+  end
+
+  def validate(_), do: {:error, [{"policy", "must be a mapping"}]}
+
+  defp validate_v2(source) do
+    version = source["schema_version"]
+    keys = if version == 2, do: @keys ++ ~w(detector_sets tools), else: @keys
+
     errors =
-      unknown(source, @keys, "policy") ++
-        check(source["schema_version"] == 1, "schema_version", "must be 1") ++
+      unknown(source, keys, "policy") ++
+        check(version in [1, 2], "schema_version", "must be 1 or 2") ++
         check(source["profile"] in profiles(), "profile", "choose a supported profile") ++
         selectors(source["allowed_models"], "allowed_models", &model?/1) ++
         selectors(source["allowed_agents"], "allowed_agents", &Validation.uuid?/1) ++
         rule_errors(Map.get(source, "rules", %{})) ++
-        guard_errors(Map.get(source, "guards", %{})) ++
+        guard_errors(Map.get(source, "guards", %{}), version) ++
         agent_errors(Map.get(source, "agent_models", %{})) ++
-        budget_errors(Map.get(source, "budgets", %{}))
+        budget_errors(Map.get(source, "budgets", %{})) ++
+        extension_errors(source, version)
 
     if errors == [] do
-      normalized = Map.merge(default(), source)
+      normalized = Map.merge(default(version), source)
       {:ok, %{source: normalized, settings: resolve(normalized)}}
     else
       {:error, errors}
     end
   end
-
-  def validate(_), do: {:error, [{"policy", "must be a mapping"}]}
 
   defp resolve(source) do
     profile = source["profile"]
@@ -67,12 +92,17 @@ defmodule AiControl.Policies.Configuration do
       end)
 
     guards =
-      Map.new(@guards, fn guard ->
+      Map.new(guards(source["schema_version"]), fn guard ->
         defaults = %{
           "enabled" => true,
-          "required" => guard != "semantic" || profile != "relaxed",
+          "required" => guard not in ["semantic", "ner"] || profile != "relaxed",
           "stages" => if(guard == "semantic", do: ["input"], else: ["input", "output"])
         }
+
+        defaults =
+          if guard == "ner",
+            do: Map.put(defaults, "entities", ["person", "address"]),
+            else: defaults
 
         {guard, Map.merge(defaults, Map.get(source["guards"], guard, %{}))}
       end)
@@ -102,14 +132,20 @@ defmodule AiControl.Policies.Configuration do
     end)
   end
 
-  defp guard_errors(guards) do
-    mappings(guards, @guards, "guards", fn guard, rule ->
+  defp guard_errors(guards, version) do
+    mappings(guards, guards(version), "guards", fn guard, rule ->
       path = "guards.#{guard}"
 
-      unknown(rule, ~w(enabled required stages), path) ++
+      keys =
+        if guard == "ner",
+          do: ~w(enabled required stages entities),
+          else: ~w(enabled required stages)
+
+      unknown(rule, keys, path) ++
         optional(rule, "enabled", path, &is_boolean/1, "must be true or false") ++
         optional(rule, "required", path, &is_boolean/1, "must be true or false") ++
         optional(rule, "stages", path, &stages?/1, "choose input and/or output") ++
+        optional(rule, "entities", path, &entities?/1, "choose supported entity types") ++
         check(
           rule["enabled"] != false || rule["required"] == false,
           path,
@@ -117,6 +153,36 @@ defmodule AiControl.Policies.Configuration do
         )
     end)
   end
+
+  defp extension_errors(_, version) when version != 2, do: []
+
+  defp extension_errors(source, 2) do
+    sets = Map.get(source, "detector_sets", AiControl.Guards.Registry.sets())
+    tools = Map.get(source, "tools", %{"allowed_tools" => []})
+
+    check(
+      sets == AiControl.Guards.Registry.sets(),
+      "detector_sets",
+      "choose the supported immutable detector sets"
+    ) ++
+      case tools do
+        %{"allowed_tools" => values} when map_size(tools) == 1 and is_list(values) ->
+          check(
+            length(values) <= 500 && length(Enum.uniq(values)) == length(values) &&
+              Enum.all?(values, &Validation.code?/1),
+            "tools.allowed_tools",
+            "use unique tool identifiers"
+          )
+
+        _ ->
+          [{"tools", "must contain an allowed_tools list"}]
+      end
+  end
+
+  defp entities?(values),
+    do:
+      is_list(values) && values != [] && Enum.all?(values, &(&1 in ner_entities())) &&
+        length(values) == length(Enum.uniq(values))
 
   defp agent_errors(agents) when is_map(agents) and not is_struct(agents) do
     check(map_size(agents) <= 500, "agent_models", "at most 500 agents") ++

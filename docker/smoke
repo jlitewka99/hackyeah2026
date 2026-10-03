@@ -1,0 +1,79 @@
+#!/bin/bash
+# Linux acceptance: real models, release transport, isolation and both child failures.
+set -euo pipefail
+image=${1:-ai-control:step7}
+network=ai-control-step7-ci
+container=ai-control-step7-ci
+cleanup() {
+  docker rm -f "$container" ai-control-step7-postgres >/dev/null 2>&1 || true
+  docker network rm "$network" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+docker network create "$network" >/dev/null
+docker run -d --name ai-control-step7-postgres --network "$network" \
+  -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=ai_control_ci \
+  postgres:17 >/dev/null
+for _ in $(seq 1 60); do
+  if docker exec ai-control-step7-postgres pg_isready -U postgres >/dev/null 2>&1; then break; fi
+  sleep 1
+done
+start_app() {
+  docker run -d --name "$container" --network "$network" -p 127.0.0.1:4017:4000 \
+    -e DATABASE_URL=ecto://postgres:postgres@ai-control-step7-postgres/ai_control_ci \
+    -e SECRET_KEY_BASE=synthetic-ci-secret-key-base-do-not-use-in-production-01234567890123456789 \
+    -e AUDIT_FINGERPRINT_KEY=c3ludGhldGljLWNpLWZpbmdlcnByaW50LWtleS0zMi1ieXRlcw== \
+    -e PHX_HOST=localhost "$image" >/dev/null
+  for _ in $(seq 1 180); do
+    if docker exec "$container" /app/docker/healthcheck >/dev/null 2>&1; then return; fi
+    if [[ $(docker inspect -f '{{.State.Running}}' "$container") != true ]]; then
+      docker logs "$container"; return 1
+    fi
+    sleep 1
+  done
+  docker logs "$container"; return 1
+}
+start_app
+[[ $(docker exec "$container" id -u) == 10001 ]]
+[[ $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4017/health) == 200 ]]
+[[ $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4017/ready) == 503 ]]
+[[ $(docker port "$container" 8001/tcp 2>/dev/null || true) == '' ]]
+docker exec "$container" /app/bin/ai_control rpc '
+  {:ok, %{settings: settings}} = AiControl.Policies.Configuration.validate(AiControl.Policies.Configuration.default(2))
+  text = "😀 Rozmawiałem z Janem Kowalskim przy ul. Długiej 12, 00-001 Warszawa."
+  config = AiControl.Gateway.Config.get()
+  true = AiControl.Guards.Ner.ready?(config)
+  {:ok, result} = AiControl.Guards.Ner.assess([text], nil, %{settings: settings}, config)
+  true = Enum.any?(result.detections, &(&1.rule_id == "ner.person.v1"))
+  true = Enum.any?(result.detections, &(&1.rule_id == "ner.address.v1"))
+  {:ok, safe} = AiControl.Gateway.Content.redact(text, Enum.map(result.detections, & &1.location))
+  false = String.contains?(safe, "Kowalskim")
+  false = String.contains?(safe, "Długiej")
+  IO.puts("Real NER release transport and UTF-8 redaction passed")'
+docker run --rm --entrypoint /opt/ner/bin/python -e NER_LIVE=1 -e PYTHONPATH=/app/ner \
+  -v "$PWD/tests/ner:/tests:ro" "$image" -m unittest discover -s /tests
+docker exec "$container" /opt/ner/bin/python /app/ner/benchmark.py | tee /tmp/step7-ner-benchmark.json
+docker exec -e AI_CONTROL_ORGANIZER_EMAIL=ci@example.test -e AI_CONTROL_ORGANIZER_PASSWORD=synthetic-ci-password \
+  "$container" /app/bin/ai_control eval 'AiControl.Release.bootstrap_organizer()'
+docker exec -e AI_CONTROL_ORGANIZER_EMAIL=ci@example.test -e AI_CONTROL_ORGANIZER_PASSWORD=synthetic-ci-password \
+  "$container" /app/bin/ai_control eval 'AiControl.Release.bootstrap_organizer()'
+for child in uvicorn beam.smp; do
+  docker exec "$container" /opt/ner/bin/python -c '
+import os, signal, sys
+from pathlib import Path
+target = sys.argv[1]
+for path in Path("/proc").glob("[0-9]*/cmdline"):
+    args = path.read_bytes().split(b"\0")
+    if any(arg.decode(errors="ignore").endswith(target) for arg in args) and int(path.parent.name) != os.getpid():
+        os.kill(int(path.parent.name), signal.SIGKILL)
+        break
+else:
+    raise SystemExit("child not found")' "$child"
+  code=$(timeout 30 docker wait "$container")
+  [[ $code != 0 ]]
+  [[ $(docker inspect -f '{{.State.Running}}' "$container") == false ]]
+  docker rm "$container" >/dev/null
+  start_app
+done
+docker stop --time 25 "$container" >/dev/null
+[[ $(docker inspect -f '{{.State.ExitCode}}' "$container") == 0 ]]
+echo 'Container health, offline NER, release tasks, child failures and SIGTERM passed'

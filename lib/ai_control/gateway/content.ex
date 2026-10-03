@@ -23,7 +23,7 @@ defmodule AiControl.Gateway.Content do
   def redact(value, locations) do
     fields = fields(value)
 
-    case Enum.all?(locations, &location?(&1, fields)) do
+    case Enum.all?(locations, &redactable_location?(&1, fields)) do
       true ->
         result =
           locations
@@ -45,7 +45,7 @@ defmodule AiControl.Gateway.Content do
   defp location?(%{field_index: index, start_byte: first, end_byte: last}, fields)
        when is_integer(index) and index >= 0 and is_integer(first) and is_integer(last) do
     case Enum.at(fields, index) do
-      %{path: path, text: text} when not is_nil(path) ->
+      %{text: text} ->
         utf8_range?(text, first, last)
 
       _ ->
@@ -54,6 +54,10 @@ defmodule AiControl.Gateway.Content do
   end
 
   defp location?(_, _), do: false
+
+  defp redactable_location?(location, fields) do
+    location?(location, fields) && !is_nil(Enum.at(fields, location.field_index).path)
+  end
 
   defp utf8_range?(text, first, last) do
     first >= 0 && last > first && last <= byte_size(text) &&

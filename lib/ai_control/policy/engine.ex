@@ -20,7 +20,7 @@ defmodule AiControl.Policy.Engine do
 
   @doc "Intermediate phase only; the gateway must complete every phase before downstream."
   def evaluate_phase(context, assessment, policy, guards) do
-    catalog = Configuration.guards()
+    catalog = Configuration.guards(2)
 
     if valid_inputs?(context, assessment, policy) && is_list(guards) && guards != [] &&
          Enum.all?(guards, &(&1 in catalog)) &&

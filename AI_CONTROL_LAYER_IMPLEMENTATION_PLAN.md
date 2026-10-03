@@ -463,6 +463,10 @@ wizualnego; zastanego driftu nie naprawiano w tym rozszerzeniu.
 
 **Gotowe, gdy:** każdy obsługiwany typ ma poprawny przykład i bezpieczny przypadek porównawczy; poprawny PESEL zostaje wykryty, błędna data lub checksum nie wywołuje wykrycia PESEL, a sekret nie pojawia się w logach. Podstawowy NER działa z rzeczywistym sidecarem na polskich odmianach i rozróżnia osoby, miejsca oraz organizacje; reguły uzupełniają adresy. Testy sprawdzają separatory, granice kandydatów, nakładające się zakresy, Unicode, treść faktycznie przesłaną po redakcji i zatrzymanie po awarii wymaganej warstwy. Nowa wersja polityki jest jawnie aktywowana; historyczne checksumy wersji 1 pozostają poprawne. Inne detektory mogą niezależnie zaklasyfikować ten sam tekst.
 
+**Implementacja i lokalny odbiór — 2026-10-03:** guardy `AiControl.Guards`, trzy fazy ze wspólnym snapshotem, walidacja zakresów i redakcja, lokalny Presidio/Stanza PL/NKJP, schemat v2 i rozszerzenie edytorów, katalogi offline z checksumami i licencjami oraz wieloetapowy kontener Phoenix + NER są zaimplementowane. PostgreSQL/Ollama pozostają zewnętrzne. `mix precommit`: 353 testy Elixir i 3 JavaScript; `mix check.all`, build assetów, 4 testy Python z rzeczywistymi modelami i osobny test gatewaya z rzeczywistym HTTP NER przechodzą. Pomiar 40 krótkich syntetycznych analiz na Mac ARM64: ładowanie 5142,5 ms, mediana 40,7 ms, p95 62,9 ms, szczyt RSS 1 031 028 736 B. Szczegóły: [odbiór kroku 7](docs/acceptance/step7.md).
+
+**Status odbioru kontenera:** oczekuje na Linux CI (build obrazu, rzeczywisty smoke NER, awarie obu procesów i SIGTERM). Lokalny daemon Docker jest niedostępny; krok pozostaje nieodhaczony do uzyskania tych wyników. Pełny output filtering, semantyczny guard, panel Signatures i wykonywanie narzędzi pozostają w krokach 8, 10, 11 i 12. Odświeżenie istniejącego `.impeccable/design.json` komendą `document` jest osobnym zadaniem.
+
 ### Krok 8. Output filtering
 
 - Przeskanować wszystkie pola odpowiedzi mogące zawierać treść: odpowiedzi tekstowe i argumenty proponowanych wywołań narzędzi.

@@ -17,6 +17,26 @@ env:
   MIX_ENV: test
 
 jobs:
+  container:
+    name: Phoenix and Polish NER container
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      DOCKER_BUILDKIT: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build CPU release with pinned offline models
+        run: docker build --tag ai-control:step7 .
+      - name: Real NER, release tasks and process supervision
+        run: bash docker/smoke ai-control:step7
+      - name: Preserve Linux NER measurements
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: step7-linux-ner-benchmark
+          path: /tmp/step7-ner-benchmark.json
+          if-no-files-found: warn
+
   quality:
     name: Quality
     runs-on: ubuntu-24.04

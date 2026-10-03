@@ -260,11 +260,11 @@ defaults to input. Explicit rule and guard fields override profile defaults.
 The initial policy allows `qwen3.5:4b` and all active agents in the requesting
 organization. Budgets start unconfigured. Organization and agent requests/tokens
 per UTC hour and workflow tool calls can be configured now; budget accounting
-and enforcement arrive in step 9. Detectors, gateway and execution of redaction
-remain in their subsequent steps.
+and enforcement arrive in step 9. Step 7 connects deterministic guards and NER;
+the complete output filtering acceptance remains in step 8.
 
 Import [the example policy](priv/policies/balanced.yaml) by pasting YAML or uploading
-one file. Schema version 1 accepts one UTF-8 document up to 64 KiB. Unknown fields,
+one file. Both schema versions accept one UTF-8 document up to 64 KiB. Unknown fields,
 duplicate keys, aliases, anchors and explicit tags are rejected. Forms and YAML
 share `AiControl.Policies.Configuration`; errors contain field paths without
 input values. Exports use the JSON-compatible YAML 1.2 subset to preserve empty
@@ -444,9 +444,9 @@ ranges, policy evidence and fixed terminal codes. Telemetry events
 microsecond durations and fixed stage/result codes, without content or identities
 as metric labels.
 
-**The existing balanced policy still requires its guards.** Step 6 supplies the
-adapter contracts, enforcement and redaction plumbing; actual deterministic,
-NER and semantic detectors arrive in later steps. Missing required adapters return
+**The existing balanced policy still requires its guards.** Deterministic
+adapters are connected. NER requires an explicitly activated v2 policy; the
+semantic adapter remains step 10. Missing required adapters return
 `503` and never call the LLM. A bare Ollama installation is not a ready protected
 service. Optional adapters may fail only under an explicit policy; their failure
 is retained in the assessment evidence.
@@ -457,6 +457,8 @@ is retained in the assessment evidence.
 | `GATEWAY_RESPONSE_BYTES` | 4194304 (4 MiB, including error bodies) |
 | `GATEWAY_CONNECT_TIMEOUT_MS` | 2000 |
 | `GATEWAY_LLM_TIMEOUT_MS` | 120000 (metadata and generation together) |
+| `GATEWAY_GUARD_TIMEOUT_MS` | 10000 |
+| `GATEWAY_READINESS_TIMEOUT_MS` | 5000 |
 | `GATEWAY_LLM_SLOTS` | 1 |
 | `GATEWAY_GUARD_SLOTS` | 2 |
 | `GATEWAY_REQUESTS_PER_MINUTE` | 60 per actor in an organization |
@@ -489,11 +491,154 @@ pinned real model, authenticated catalog, a Polish response and both stage audit
 It never changes the platform balanced policy. Ordinary `mix test` excludes the
 `:live_models` tag.
 
-The remaining MVP execution order is **7 with NER → 8 → 9 → 10 → full 12 → 11**.
-Presidio with Stanza PL/NKJP, versioned NER/tool policy settings, the Polish semantic
-benchmark and the complete tool ACL each retain their own acceptance criteria in
+The remaining MVP execution order after Step 7 acceptance is **8 → 9 → 10 → full 12 → 11**.
+The Polish semantic benchmark and the complete tool ACL retain their acceptance criteria in
 [the implementation roadmap](AI_CONTROL_LAYER_IMPLEMENTATION_PLAN.md). Granite
 remains step 14; RAG, memory and further PII work remain step 18.
+
+## Deterministic guards and Polish NER
+
+Guards receive the same immutable request snapshot through
+`assess(fields, context, snapshot, config)`. The pipeline evaluates PII, secrets
+and signatures, audits the decision and applies redaction, then repeats for NER,
+then runs semantic analysis. Every phase extracts fresh fields from the current
+text. A required failure or failed audit stops subsequent calls. Byte ranges
+use UTF-8 with an exclusive end; overlapping ranges are merged and replaced
+with `[REDACTED]`. Invalid ranges, immutable map keys, model-name changes or
+redaction that invalidates the request/tool-call JSON cannot reach the backend.
+Audit, telemetry and error messages contain no matched values or snippets.
+
+`builtin.v1` detects PESEL (checksum and real encoded birth date), NIP, REGON
+9/14, Polish NRB, domestic/foreign IBAN (country structure and mod-97), cards
+(13–19 digits, Luhn and preceding payment context) and email. Supported formats
+are listed in [the versioned catalog](priv/guards/detectors.v1.json): compact
+identifiers, specified NIP/PESEL groupings, space/NBSP bank groups and space/hyphen
+card groups. Newlines and arbitrary intervening text never join digit groups.
+The 89-country IBAN catalog pins SWIFT release 101; unsupported/newer country
+formats require a new catalog. Checksum validity does not prove ownership or
+that an identifier exists.
+
+Credential signatures cover private-key PEM (including incomplete keys),
+three-segment JWT/JWS with decoded header/base64url validation, AWS/GitHub/Google
+formats, Bearer values, credential assignments and connection-string passwords.
+Contextual entropy excludes generic UUID/hash values and does not scan every
+random string. Known credential labels still classify literal hashes as possible
+credentials. Detection never verifies a credential with its provider. Exploit
+signatures cover `pickle.load(s)`, unsafe `yaml.load`, `eval`/`exec`, `os.system`
+and subprocess calls with `shell=True`; safe alternatives and attribution are in
+[the catalog notices](priv/guards/NOTICE.md). These patterns detect text, not
+proof of execution, and do not replace a Python parser or tool firewall.
+
+The local Python service uses pinned CPU Presidio/Stanza PL/NKJP weights and
+project-authored Polish street-address rules. `persName` maps to `person`,
+`placeName` to `place`, `geogName` to `geographical_location` and `orgName` to
+`organization`; dates and times are excluded. Address patterns cover street
+prefixes, house/apartment numbers and optional Polish postcode/locality, not
+every postal-address form. Names are statistical findings: 0.85 is a recognizer
+score, not a calibrated probability or a guarantee of PII recall.
+
+`POST /analyze` accepts `{"fields":[{"field_index":0,"text":"…"}]}` and returns
+only the model-set ID and typed findings with index, score, stable detector ID
+and byte range. Elixir independently validates every finding. `GET /ready`
+requires loaded, checksum-verified models. Requests are capped at 1 MiB and
+20,000 fields; findings are capped at 20,000. One sidecar analysis runs at a
+time, with immediate overload rejection; gateway guard slots are bounded.
+Req uses timeouts, bounded response reception, no retries and no redirects.
+Neither startup nor inference downloads models.
+
+### Activating schema v2
+
+Historical v1 validation/normalization lives in the frozen
+`AiControl.Policies.ConfigurationV1`; its checksum contract is unchanged. Missing
+NER in v1 means disabled. **Upgrade to v2** in the organization or platform editor
+changes only the draft. Save it, review differences, then activate separately.
+The same process works through YAML. Default v2 protects `person` and `address`;
+localities, geographical places and organizations require explicit selection.
+NER is required in balanced/strict and optional in relaxed. Balanced redacts PII;
+strict blocks it. Explicit rule/guard overrides remain available.
+
+```yaml
+schema_version: 2
+profile: balanced
+allowed_models: [qwen3.5:4b]
+allowed_agents: ['*']
+guards:
+  ner:
+    entities: [person, address]
+detector_sets:
+  pii: builtin.v1
+  secret: builtin.v1
+  signatures: builtin.v1
+  ner: pl-nkjp.v1
+tools:
+  allowed_tools: []
+```
+
+Only the shipped immutable sets are accepted. `tools.allowed_tools` validates
+unique tool identifiers and defaults to empty; execution/enforcement is step 12.
+The separate Signatures dashboard remains step 11. Existing output plumbing can
+run these adapters, while the complete output-contract acceptance is step 8.
+
+### One container on Coolify
+
+Use Coolify's [Dockerfile build pack](https://coolify.io/docs/applications/builds/dockerfile)
+with `/Dockerfile`, build context `/`, port **4000**, and your HTTPS domain.
+PostgreSQL and Ollama are separate services reachable from the container.
+Phoenix binds `0.0.0.0:4000`; NER binds only `127.0.0.1:8001` and is not published.
+Models are fetched and checked at image build time, then verified and loaded
+offline on startup. The non-root container uses `tini` and a supervisor script
+that forwards termination, reaps children and exits when either service fails.
+Allow roughly 2 GiB memory initially and measure on the deployment CPU;
+[acceptance measurements](docs/acceptance/step7.md) are synthetic smoke figures.
+
+Set these runtime variables using Coolify's secrets UI:
+
+| Variable | Value |
+| --- | --- |
+| `DATABASE_URL` | `ecto://USER:PASSWORD@POSTGRES_HOST/DATABASE` |
+| `SECRET_KEY_BASE` | A fresh secret generated with `mix phx.gen.secret` |
+| `AUDIT_FINGERPRINT_KEY` | At least 32 random bytes encoded as base64 |
+| `AUDIT_FINGERPRINT_KEY_ID` | Rotation ID, default `v1` |
+| `PHX_HOST` | Public hostname without scheme |
+| `OLLAMA_BASE_URL` | Reachable external Ollama HTTP origin |
+| `GATEWAY_MODELS` | JSON map of model names to verified full SHA-256 digests |
+| `NER_BASE_URL` | Keep `http://127.0.0.1:8001` for this container |
+| `NER_CPU_THREADS` | CPU inference threads, default `2` |
+| `POOL_SIZE` | PostgreSQL connections, default `10` |
+
+`PHX_SERVER=true`, `PORT=4000` and the model directory are image defaults.
+The database must already exist. Migrations run at container startup and can
+also be run manually through the release. Bootstrap the organizer once in the
+container console after setting temporary organizer credentials:
+
+```sh
+/app/bin/ai_control eval 'AiControl.Release.migrate()'
+/app/bin/ai_control eval 'AiControl.Release.bootstrap_organizer()'
+```
+
+Bootstrap reads `AI_CONTROL_ORGANIZER_EMAIL` and `AI_CONTROL_ORGANIZER_PASSWORD`;
+it is idempotent for the existing organizer and never prints credentials.
+Remove those temporary variables afterward. The image healthcheck checks
+Phoenix `/health` and NER `/ready`; Coolify can use that Dockerfile healthcheck.
+Gateway `/ready` also checks every required security control and can remain
+**503 until step 10** supplies semantic analysis. Health is not permission to
+send traffic under an incomplete required policy. Deployment is a separate step.
+
+For local real NER acceptance (models must already be downloaded):
+
+```sh
+python3.11 -m venv /tmp/ai-control-ner
+/tmp/ai-control-ner/bin/pip install -r sidecar/ner/requirements.lock
+/tmp/ai-control-ner/bin/python sidecar/ner/models.py download /tmp/ai-control-models
+STANZA_RESOURCES_DIR=/tmp/ai-control-models /tmp/ai-control-ner/bin/python -m uvicorn \
+  service:app --app-dir sidecar/ner --host 127.0.0.1 --port 8001 --no-access-log --log-level critical
+```
+
+Run `NER_LIVE=1 STANZA_RESOURCES_DIR=/tmp/ai-control-models /tmp/ai-control-ner/bin/python
+-m unittest discover -s tests/ner` and `mix test test/ai_control/gateway/live_ner_test.exs
+--include live_ner` against an isolated PostgreSQL test database. The live gateway
+test disables the unimplemented semantic guard only in its temporary organization
+and uses a backend stub to inspect the actual redacted request.
 
 ## Tests and quality checks
 
@@ -528,12 +673,14 @@ mix assets.build
 ## Continuous integration
 
 GitHub Actions runs on pull requests, pushes to `main`, and manual dispatches.
-The four checks are Quality, Tests, Dialyzer, and Security. CI uses Ubuntu 24.04,
+Checks are Quality, Tests, Dialyzer, Security, and Phoenix and Polish NER container. CI uses Ubuntu 24.04,
 reads the pinned BEAM versions from `.tool-versions`, starts PostgreSQL 17 for
 tests, and builds frontend assets. The Tests job also installs the pinned Node.js
 version. Dependencies, compiled files, and PLTs are cached per platform and tool
 version; a run without a cache builds them from scratch. Actions are pinned to
-commit SHAs.
+commit SHAs. The container job builds the production image, runs Python unit/live
+NER fixtures, tests the release transport, health, bootstrap and process failures,
+and uploads Linux latency/memory measurements. No image is published or deployed.
 
 Dependabot checks Mix dependencies and GitHub Actions every Monday at 09:00
 Europe/Warsaw. Minor and patch updates are grouped separately for each ecosystem;

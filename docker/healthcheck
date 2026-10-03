@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+curl --fail --silent --max-time 2 http://127.0.0.1:${PORT:-4000}/health >/dev/null
+curl --fail --silent --max-time 2 http://127.0.0.1:8001/ready >/dev/null

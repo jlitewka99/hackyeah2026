@@ -12,6 +12,71 @@ defmodule AiControlWeb.OrganizationPoliciesLiveTest do
     %{scope: scope, conn: log_in_user(conn, scope.user)}
   end
 
+  test "v2 upgrade keeps the active v1 policy until deliberate activation", %{
+    conn: conn,
+    scope: scope
+  } do
+    {:ok, view, _} = live(conn, ~p"/organizations/#{scope.organization.id}/policies")
+    assert has_element?(view, "#policy-schema", "v1")
+    view |> element("#policy-new") |> render_click()
+    view |> element("#policy-upgrade") |> render_click()
+    assert has_element?(view, "#policy-draft-schema", "v2")
+    assert has_element?(view, "#policy-detector-sets")
+    view |> element("#policy-guards > summary") |> render_click()
+    assert has_element?(view, "#policy-ner-entities option[value='person'][selected]")
+    assert has_element?(view, "#policy-ner-entities option[value='address'][selected]")
+    refute has_element?(view, "#policy-ner-entities option[value='organization'][selected]")
+
+    view
+    |> form("#policy-form",
+      policy: %{guards: %{ner: %{entities: ["person", "address", "organization"]}}}
+    )
+    |> render_submit()
+
+    assert has_element?(view, "#policy-diff-schema_version")
+    assert {:ok, current} = Policies.current(scope)
+    assert current.version.settings["schema_version"] == 1
+    view |> element("#policy-activate") |> render_click()
+    assert has_element?(view, "#policy-schema", "v2")
+    assert {:ok, active} = Policies.current(scope)
+
+    assert active.version.settings["guards"]["ner"]["entities"] == [
+             "person",
+             "address",
+             "organization"
+           ]
+  end
+
+  test "v2 YAML preserves optional entities and the tool allowlist through forms and export", %{
+    conn: conn,
+    scope: scope
+  } do
+    {:ok, view, _} = live(conn, ~p"/organizations/#{scope.organization.id}/policies")
+
+    source =
+      Configuration.default(2)
+      |> Map.put("guards", %{"ner" => %{"entities" => ["address", "place"], "required" => false}})
+      |> Map.put("tools", %{"allowed_tools" => ["read_document"]})
+
+    view |> form("#policy-import-form", yaml: %{text: YAML.encode(source)}) |> render_submit()
+    assert has_element?(view, "#policy-tool-read_document[value='read_document']")
+    view |> form("#policy-form") |> render_submit()
+    assert {:ok, [version]} = Policies.list_versions(scope)
+    assert {:ok, expected} = Configuration.validate(source)
+    assert version.settings == expected.settings
+    assert version.configuration["tools"] == source["tools"]
+
+    exported =
+      get(
+        conn,
+        ~p"/organizations/#{scope.organization.id}/policies/versions/#{version.id}/export"
+      )
+
+    assert {:ok, yaml} = exported |> response(200) |> YAML.decode()
+    assert {:ok, %{settings: settings}} = Configuration.validate(yaml)
+    assert settings == expected.settings
+  end
+
   test "saving, reviewing, activation and returning to global are separate actions", %{
     conn: conn,
     scope: scope

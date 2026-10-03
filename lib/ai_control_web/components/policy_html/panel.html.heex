@@ -43,6 +43,9 @@
         <.icon name="hero-arrow-down-tray" class="size-4" /> Export YAML
       </.link>
     </div>
+    <p id="policy-schema" class="muted mt-3">
+      Schema v{@current.version.settings["schema_version"]}
+    </p>
     <dl class="policy-summary mt-6">
       <div>
         <dt>Personal data</dt><dd>
@@ -68,7 +71,7 @@
       Version {short(@current.version.id)} · SHA-256 {@current.version.checksum}
     </p>
     <p class="muted mt-3">
-      Controls are configured here. Detection and budget accounting will become available as those services are connected.
+      Deterministic detection follows these settings. Budget accounting is configured for a later stage.
     </p>
     <details
       class="mt-4"
@@ -95,7 +98,13 @@
               settings["required"] -> "Required"
               true -> "Optional"
             end} · {Enum.join(settings["stages"], ", ")}
+            <span :if={guard == "ner"}> · {Enum.map_join(settings["entities"], ", ", &label/1)}</span>
           </dd>
+        </div>
+        <div :for={
+          {guard, version} <- Enum.sort(Map.get(@current.version.settings, "detector_sets", %{}))
+        }>
+          <dt class="font-medium">{label(guard)} detector set</dt><dd class="muted">{version}</dd>
         </div>
         <div>
           <dt class="font-medium">Allowed agents</dt><dd class="muted break-all">
@@ -223,6 +232,50 @@
       Profile defaults fill unspecified fields. Explicit overrides stay in place when you change the profile. Saving leaves the active policy unchanged.
     </p>
     <.form for={@form} id="policy-form" phx-change="validate" phx-submit="save" class="mt-6">
+      <.input field={@form[:schema_version]} type="hidden" />
+      <div class="policy-heading mb-6">
+        <p id="policy-draft-schema" class="font-medium">Schema v{schema_version(@form)}</p>
+        <button
+          :if={schema_version(@form) == 1}
+          id="policy-upgrade"
+          type="button"
+          class="button-secondary"
+          phx-click="upgrade"
+          phx-disable-with="Upgrading…"
+        >Upgrade to v2</button>
+      </div>
+      <p :if={schema_version(@form) == 1} class="muted mb-6">
+        Upgrade this draft to configure named entities. Saving and activation remain separate steps.
+      </p>
+      <section :if={schema_version(@form) == 2} id="policy-detector-sets" class="mb-6">
+        <h3 class="font-medium">Detector sets</h3>
+        <p class="muted mt-2">
+          Immutable sets keep detection reproducible. Tool execution is configured in a later step.
+        </p>
+        <div :for={{guard, version} <- Enum.sort(@form[:detector_sets].value)} class="mt-2">
+          <span>{label(guard)} · {version}</span>
+          <.input
+            name={"policy[detector_sets][#{guard}]"}
+            id={"policy-set-#{guard}"}
+            value={version}
+            type="hidden"
+          />
+        </div>
+        <.input
+          :if={@form[:tools].value["allowed_tools"] == []}
+          name="policy[tools][allowed_tools][]"
+          id="policy-tools-empty"
+          type="hidden"
+          value=""
+        />
+        <.input
+          :for={tool <- @form[:tools].value["allowed_tools"]}
+          name="policy[tools][allowed_tools][]"
+          id={"policy-tool-#{tool}"}
+          type="hidden"
+          value={tool}
+        />
+      </section>
       <.input
         field={@form[:profile]}
         type="select"
@@ -279,7 +332,10 @@
         <p class="muted mt-3">
           An unavailable required guard blocks the request. Select Profile default to remove an override.
         </p>
-        <div :for={guard <- @guards} class="policy-rule-row">
+        <p :if={schema_version(@form) == 2} id="policy-phase-order" class="muted text-sm mt-2">
+          Evaluation order: PII, secrets and signatures → decision and redaction → named entities → decision and redaction → semantic guard.
+        </p>
+        <div :for={guard <- guard_catalog(@form)} class="policy-rule-row">
           <p class="font-medium">{label(guard)}</p>
           <.input
             name={"policy[guards][#{guard}][mode]"}
@@ -309,6 +365,30 @@
               {"Input and output", "input,output"}
             ]}
           />
+          <div :if={guard == "ner"} class="md:col-start-2 md:col-span-2">
+            <.input
+              name="policy[guards][ner][entities][]"
+              id="policy-ner-entities"
+              type="select"
+              multiple
+              size="5"
+              label="Protected entity types"
+              value={
+                nested(
+                  @form,
+                  :guards,
+                  "ner",
+                  "entities",
+                  draft_defaults["guards"]["ner"]["entities"]
+                )
+              }
+              options={Enum.map(entity_types(), &{label(&1), &1})}
+              errors={field_errors(@errors, "guards.ner.entities")}
+            />
+            <p class="muted text-sm mt-2">
+              People and addresses are protected by default. Select places or organizations when their names are sensitive in your context.
+            </p>
+          </div>
         </div>
       </details>
       <details

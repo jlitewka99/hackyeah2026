@@ -8,6 +8,9 @@ gateway_models =
   end
 
 gateway_config = [
+  ner_url: System.get_env("NER_BASE_URL", "http://127.0.0.1:8001"),
+  guard_timeout: String.to_integer(System.get_env("GATEWAY_GUARD_TIMEOUT_MS", "10000")),
+  readiness_timeout: String.to_integer(System.get_env("GATEWAY_READINESS_TIMEOUT_MS", "5000")),
   ollama_reasoning_effort:
     case System.get_env("OLLAMA_REASONING_EFFORT", "none") do
       "default" -> nil
@@ -133,7 +136,7 @@ if config_env() == :prod do
       # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.
       # See the documentation on https://bandit.hexdocs.pm/Bandit.html#t:options/0
       # for details about using IPv6 vs IPv4 and loopback vs public addresses.
-      ip: {0, 0, 0, 0, 0, 0, 0, 0}
+      ip: {0, 0, 0, 0}
     ],
     secret_key_base: secret_key_base
 

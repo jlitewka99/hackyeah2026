@@ -135,7 +135,7 @@ defmodule AiControl.Audit do
 
   def record_phase_decision(context, assessment, decision, guards) do
     if is_list(guards) && guards != [] &&
-         Enum.all?(guards, &(&1 in Configuration.guards())),
+         Enum.all?(guards, &(&1 in Configuration.guards(2))),
        do: decision_event(context, assessment, decision, guards),
        else: {:error, :invalid_audit_data}
   end

@@ -52,3 +52,9 @@ npm-debug.log
 
 # Expert language server logs.
 **/.expert/expert.log
+
+# Local Python environments and model downloads.
+__pycache__/
+*.pyc
+.venv/
+/sidecar/ner/models/
