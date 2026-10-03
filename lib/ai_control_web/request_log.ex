@@ -3,5 +3,6 @@ defmodule AiControlWeb.RequestLog do
 
   def level(%{path_info: ["users", "log-in", _token]}), do: false
   def level(%{path_info: ["users", "settings", "confirm-email", _token]}), do: false
+  def level(%{path_info: ["invitations" | _]}), do: false
   def level(_conn), do: :info
 end

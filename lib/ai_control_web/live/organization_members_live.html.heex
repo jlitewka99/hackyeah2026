@@ -1,0 +1,111 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} active_page="members">
+  <div class="page-content" id="organization-members">
+    <h1>Members</h1><p class="page-description">
+      Manage access to {@current_scope.organization.name}. Each member has an individual role and permissions.
+    </p>
+    <section class="list-section" aria-labelledby="members-heading">
+      <h2 id="members-heading">Organization members</h2>
+      <div id="member-list" phx-update="stream">
+        <p id="members-empty" class="hidden only:block muted py-8">
+          No members yet. Invite a superadmin from the organizer workspace.
+        </p>
+        <div :for={{id, member} <- @streams.members} id={id} class="resource-row">
+          <div class="min-w-0">
+            <p class="font-medium break-all">{member.user.email}</p><p class="muted text-sm mt-1">
+              {OrganizationUI.role_name(member.role)} · {if member.role == :superadmin,
+                do: "All function permissions",
+                else: "#{length(member.grants.permissions)} assigned function permissions"}
+            </p>
+          </div>
+          <div class="row-actions">
+            <.link
+              :if={AiControl.Organizations.editable_member(@current_scope, member) == :ok}
+              id={"edit-#{member.id}"}
+              navigate={
+                ~p"/organizations/#{@current_scope.organization.id}/members/#{member.id}/access"
+              }
+              class="button-secondary"
+            >Edit access</.link>
+            <button
+              :if={AiControl.Organizations.editable_member(@current_scope, member) == :ok}
+              id={"remove-#{member.id}"}
+              type="button"
+              phx-click="remove"
+              phx-value-id={member.id}
+              phx-disable-with="Removing…"
+              data-confirm="Remove this member? Their access will end immediately."
+              class="button-secondary"
+            >Remove</button>
+            <button
+              :if={AiControl.Organizations.privileged?(@current_scope) && member.role == :admin}
+              id={"transfer-#{member.id}"}
+              type="button"
+              phx-click="transfer"
+              phx-value-id={member.id}
+              phx-disable-with="Transferring…"
+              data-confirm="Transfer the superadmin role to this admin? The current superadmin will become an admin."
+              class="button-secondary"
+            >Transfer ownership</button>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="list-section" aria-labelledby="invite-member-heading">
+      <h2 id="invite-member-heading">Invite a member</h2><p class="muted text-sm mt-2">
+        Invite by email and choose their access before they join.
+      </p>
+      <.form for={@invitation_form} id="member-invitation-form" class="mt-6" phx-submit="invite">
+        <div class="permission-grid">
+          <.input field={@invitation_form[:email]} label="Email address" type="email" required /><.input
+            field={@invitation_form[:role]}
+            label="Administrative role"
+            type="select"
+            options={@role_options}
+          />
+        </div>
+        <OrganizationUI.grant_fields
+          form={@access_form}
+          allowed={@current_scope.grants}
+          id="invite-access"
+        />
+        <.button id="invite-member" class="button-primary" phx-disable-with="Sending…">Send invitation
+        <.icon name="hero-envelope" class="size-4" /></.button>
+      </.form>
+    </section>
+    <section class="list-section" aria-labelledby="invitations-heading">
+      <h2 id="invitations-heading">Invitations</h2>
+      <div id="invitation-list" phx-update="stream">
+        <p id="invitations-empty" class="hidden only:block muted py-8">
+          Sent invitations will appear here.
+        </p>
+        <div :for={{id, invitation} <- @streams.invitations} id={id} class="resource-row">
+          <div class="min-w-0">
+            <p class="font-medium break-all">{invitation.email}</p><p class="muted text-sm mt-1">
+              {OrganizationUI.role_name(invitation.role)} · {OrganizationUI.invitation_status(
+                invitation
+              )}
+            </p>
+          </div>
+          <div :if={!invitation.accepted_at} class="row-actions">
+            <button
+              id={"resend-#{invitation.id}"}
+              type="button"
+              class="button-secondary"
+              phx-click="resend"
+              phx-value-id={invitation.id}
+              phx-disable-with="Sending…"
+            >Resend</button><button
+              :if={!invitation.revoked_at}
+              id={"revoke-#{invitation.id}"}
+              type="button"
+              class="button-secondary"
+              phx-click="revoke"
+              phx-value-id={invitation.id}
+              phx-disable-with="Revoking…"
+            >Revoke</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</Layouts.app>

@@ -53,8 +53,8 @@ constraint also enforces the single-organizer rule.
 
 Sign in at `/users/log-in`. The organizer lands at `/platform/organizations`;
 `/users/settings` contains separate email and password forms. Organization
-management and invitations are implemented in the next step. Account changes
-require authentication within the last 10 minutes, both when opening settings
+management and invitations are available from the organizer panel. Account
+changes require authentication within the last 10 minutes, both when opening settings
 and submitting changes. If that window expires while the page is open, submitting
 either form redirects to sign-in without applying the change. Changing a password
 revokes existing sessions; the submitting browser receives a fresh session. Remember-me cookies last 14
@@ -74,6 +74,68 @@ restricted to an authenticated organizer. Configure `AiControl.Mailer` with a
 production delivery adapter and set a real sender in `AiControl.Accounts.UserNotifier`
 before relying on email recovery
 outside development; the generated local adapter does not send external mail.
+
+## Organizations and member access
+
+Run `mix ecto.migrate` when updating an existing installation. The organizer can
+create, suspend, and restore organizations and invite their first superadmin from
+`/platform/organizations`. An organization can wait for that invitation to be
+accepted before it has a superadmin.
+
+| Role | Administrative access |
+| --- | --- |
+| Organizer | All organizations, organization status, and first-superadmin invitations |
+| Superadmin | Full organization access; manage admins and users; transfer the role to an existing admin |
+| Admin | Manage ordinary users and delegate access within their own grants |
+| User | Organization overview, own account settings, and explicitly granted functions and resources |
+
+Each organization has at most one superadmin. A transfer is atomic and leaves
+the former superadmin as an admin with their previous explicit grants. Admins
+cannot edit admins, promote users, or change their own access. Their role does
+not automatically grant AI or configuration access. Read-only members use the
+`user` role with selected read permissions.
+
+Function grants are independent: `ai.use`, `agents.read`, `agents.manage`,
+`api_keys.read`, `api_keys.manage`, `policies.read`, `policies.manage`,
+`events.read`, `events.export`, `budgets.read`, `budgets.manage`,
+`signatures.read`, and `signatures.manage`. An empty grant denies access.
+Resource grants contain specific agent IDs or model names, or the explicit
+`["*"]` selector for all organization resources of that type. The member editor
+currently offers the all-resource selectors. Admin edits preserve grants they
+do not have permission to manage.
+
+`AiControl.Organizations.Access.authorize/3` refreshes database access before
+checking capabilities and resources. Concrete selectors require an ownership
+adapter implementing `AiControl.Organizations.ResourceResolver`, configured
+under `:ai_control, :organization_resource_resolver`. Without that adapter,
+specific assignments and AI resource checks fail closed. Agent/model registries,
+policy restrictions, and runtime enforcement connect in roadmap steps 3, 5,
+and 6; this step supplies their access model and authorization boundary.
+
+Members choose a workspace at `/organizations`; a single available organization
+opens automatically after sign-in. Active organization context comes from the
+URL, so browser tabs remain independent. The overview shows assigned access;
+managers use `/organizations/:organization_id/members` to invite members,
+edit access, revoke invitations, or resend them. Removing membership, changing
+access, or suspending an organization refreshes or closes its open LiveViews
+while preserving the account session and access to other organizations.
+
+### Invitations
+
+Invitations use a one-time token with 32 random bytes, stored only as a SHA-256
+hash and valid for 24 hours. Opening the link displays a form. Acceptance uses
+a CSRF-protected POST. A new member sets and confirms their password; account
+creation, email confirmation, membership, grants, and token consumption commit
+together. Existing accounts must sign in with the invited email and keep their
+password and other memberships.
+
+Acceptance checks the organization status and the author's current authority
+and grants again. Suspension blocks acceptance without extending expiration.
+Resending revokes the previous token; failed delivery leaves a revoked
+invitation that can be retried. Delivery uses the configured Swoosh adapter.
+Configure the production adapter and invitation sender in
+`AiControl.Organizations.Invitations` as well as the account notifier. Token
+routes suppress request logs.
 
 Hammer with ETS applies shared limits to password sign-in and recovery requests:
 5 attempts per normalized email and 20 per actual peer IP, in a 15-minute window

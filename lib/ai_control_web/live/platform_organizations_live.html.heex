@@ -1,24 +1,81 @@
 <Layouts.app flash={@flash} current_scope={@current_scope} active_page="organizations">
   <div class="page-content" id="organizer-panel">
     <h1>Organizations</h1>
-    <p class="page-description">Manage access to AiControl from your organizer workspace.</p>
-    <section
-      id="organizations-unavailable"
-      class="empty-workspace"
-      aria-labelledby="organizations-next-heading"
-    >
-      <div class="flex items-start gap-5">
-        <div class="muted pt-1"><.icon name="hero-building-office-2" class="size-8" /></div>
-        <div class="max-w-lg">
-          <h2 id="organizations-next-heading">Your organizer account is ready</h2>
-          <p class="muted mt-3">
-            Organization creation, memberships, and administrator invitations will be available in the next implementation step.
-          </p>
-          <.link
-            navigate={~p"/users/settings"}
-            id="panel-account-settings"
-            class="text-link inline-flex items-center gap-2 mt-6 text-sm"
-          >Manage your account <.icon name="hero-arrow-right" class="size-4" /></.link>
+    <p class="page-description">
+      Create workspaces, appoint their superadmins, and control organization access.
+    </p>
+    <section class="task-section" aria-labelledby="create-organization-heading">
+      <div>
+        <h2 id="create-organization-heading">Create an organization</h2><p class="muted text-sm mt-2">
+          Each workspace keeps its members and access separate.
+        </p>
+      </div>
+      <.form for={@form} id="organization-create-form" phx-submit="create">
+        <.input field={@form[:name]} label="Organization name" required maxlength="120" />
+        <.button id="create-organization" class="button-primary" phx-disable-with="Creating…">Create organization
+        <.icon name="hero-plus" class="size-4" /></.button>
+      </.form>
+    </section>
+    <section class="task-section" aria-labelledby="invite-owner-heading">
+      <div>
+        <h2 id="invite-owner-heading">Invite the first superadmin</h2><p class="muted text-sm mt-2">
+          The invitation expires in 24 hours. Only one superadmin can own each organization.
+        </p>
+      </div>
+      <.form for={@invitation_form} id="owner-invitation-form" phx-submit="invite-owner">
+        <.input
+          name="invitation[organization_id]"
+          id="owner-organization"
+          type="select"
+          value={nil}
+          options={@organization_options}
+          prompt="Select an organization"
+          label="Organization"
+          required
+        />
+        <.input field={@invitation_form[:email]} label="Superadmin email" type="email" required />
+        <.button id="invite-superadmin" class="button-secondary" phx-disable-with="Sending…">Send invitation
+        <.icon name="hero-envelope" class="size-4" /></.button>
+      </.form>
+    </section>
+    <section class="list-section" aria-labelledby="organization-list-heading">
+      <h2 id="organization-list-heading">Your organizations</h2>
+      <div id="organization-list" phx-update="stream">
+        <p id="organizations-empty" class="hidden only:block muted py-8">
+          Create your first organization to start inviting members.
+        </p>
+        <div :for={{id, organization} <- @streams.organizations} id={id} class="resource-row">
+          <div class="min-w-0">
+            <.link
+              navigate={~p"/organizations/#{organization.id}"}
+              class="text-link font-medium break-all"
+            >{organization.name}</.link><p class="muted text-sm mt-1">
+              {if organization.status == :active, do: "Active", else: "Suspended"}
+            </p>
+          </div>
+          <div class="row-actions">
+            <.link
+              navigate={~p"/organizations/#{organization.id}/members"}
+              class="button-secondary"
+            >Members</.link><button
+              id={"status-#{organization.id}"}
+              type="button"
+              class="button-secondary"
+              phx-click="status"
+              phx-value-id={organization.id}
+              phx-value-status={
+                if organization.status == :active, do: "suspended", else: "active"
+              }
+              phx-disable-with={
+                if organization.status == :active, do: "Suspending…", else: "Restoring…"
+              }
+              data-confirm={
+                if organization.status == :active,
+                  do: "Suspend this organization? All members will lose access.",
+                  else: nil
+              }
+            >{if organization.status == :active, do: "Suspend", else: "Restore"}</button>
+          </div>
         </div>
       </div>
     </section>

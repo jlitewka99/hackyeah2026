@@ -21,7 +21,7 @@ Zasady dla agenta implementującego:
 ## 1. Ustalone założenia
 
 - **Wiele organizacji:** oddzielne polityki, agenci, klucze API, budżety i audyt.
-- **Jedno konto organizatora:** tworzy organizacje w panelu i zaprasza ich administratorów.
+- **Jedno konto organizatora:** tworzy, zawiesza i przywraca organizacje oraz zaprasza ich pierwszych superadminów.
 - **Konta firm:** użytkownicy logują się emailem i hasłem; aplikacje oraz agenci używają kluczy API.
 - **Polityki:** PostgreSQL jako źródło prawdy, edycja w dashboardzie, import i eksport YAML.
 - **Modele lokalne:** Ollama oraz lokalny sidecar klasyfikatora.
@@ -29,20 +29,29 @@ Zasady dla agenta implementującego:
 - Interfejs aplikacji, dokumentacja projektu dla użytkowników i komunikaty API pozostają po angielsku. Ten plan roboczy zachowuje język ustalony w rozmowie.
 - Pierwsze demo działa na jednej instancji aplikacji. Skalowanie do klastra nie jest warunkiem ukończenia planu.
 
-Przyjmujemy prosty model uprawnień:
+Role administracyjne są oddzielone od indywidualnych przydziałów funkcji i zasobów:
 
 | Rola | Uprawnienia |
 | --- | --- |
-| Organizator | Tworzenie organizacji, zapraszanie administratorów, jawny dostęp administracyjny do wszystkich organizacji |
-| Administrator organizacji | Zarządzanie jej użytkownikami, agentami, kluczami, politykami i konfiguracją |
-| Obserwator organizacji | Podgląd dashboardu, zdarzeń, polityk i budżetów oraz eksport audytu |
+| Organizator | Tworzenie, zawieszanie i przywracanie organizacji, zaproszenie pierwszego superadmina, jawny pełny dostęp do wszystkich organizacji |
+| Superadmin | Jeden na organizację; pełny dostęp, zarządzanie adminami i użytkownikami oraz atomowe przekazanie roli istniejącemu adminowi |
+| Admin | Zarządzanie zwykłymi użytkownikami i delegowanie uprawnień w granicach własnych jawnych przydziałów; bez zmiany własnego dostępu i promowania adminów |
+| User | Podstawowy ekran organizacji, ustawienia konta i indywidualnie przyznane funkcje oraz zasoby |
+
+Obserwator to `user` z przydziałami odczytu. Rola admina nie przyznaje automatycznie
+dostępu do AI, polityk ani pozostałych funkcji. Zamknięty katalog obejmuje
+`ai.use`, `agents.read/manage`, `api_keys.read/manage`, `policies.read/manage`,
+`budgets.read/manage`, `signatures.read/manage`, `events.read` i `events.export`.
+Brak przydziału oznacza odmowę. Przydziały zasobów obejmują identyfikatory agentów,
+nazwy modeli albo jawny wybór wszystkich zasobów danego typu (`["*"]`).
+Korzystanie z AI wymaga dostępu do agenta, modelu i spełnienia polityki organizacji.
 
 ## 2. Status realizacji
 
 Checkboxy oznaczają potwierdzone zakończenie kroku, a nie samą obecność kodu.
 
 - [x] Krok 1 — Logowanie i konto organizatora
-- [ ] Krok 2 — Organizacje, członkostwa i zaproszenia
+- [x] Krok 2 — Organizacje, członkostwa i zaproszenia
 - [ ] Krok 3 — Agenci i klucze API
 - [ ] Krok 4 — Wspólna domena decyzji i podstawowy audyt
 - [ ] Krok 5 — Centralny Policy Engine
@@ -113,17 +122,57 @@ Oba testy współbieżności przeszły również przy jednym schedulerze BEAM.
 
 ### Krok 2. Organizacje, członkostwa i zaproszenia
 
-- Dodać organizacje, członkostwa i jednorazowe zaproszenia ważne 24 godziny.
-- Zbudować panel organizatora: utworzenie organizacji, zaproszenie administratora, zawieszenie organizacji.
-- Administrator firmy zarządza członkostwami wyłącznie we własnej organizacji. Użytkownik może należeć do kilku organizacji.
-- Rozszerzyć `current_scope` o aktywną organizację i członkostwo.
-- Weryfikować dostęp w kontekstach domenowych, routerze oraz obsłudze zdarzeń LiveView. Usunięcie członkostwa odbiera również dostęp przez istniejące połączenie.
+- Dodać kontekst `AiControl.Organizations`, organizacje `active/suspended`, unikalne członkostwa, indywidualne przydziały i jednorazowe zaproszenia ważne 24 godziny. Zachować UUID i istniejące konta.
+- Zbudować panel organizatora: utworzenie, zawieszenie i przywrócenie organizacji oraz zaproszenie pierwszego superadmina. Przed akceptacją organizacja może nie mieć superadmina; baza wymusza maksymalnie jednego.
+- Rozdzielić superadmina, admina i usera zgodnie z tabelą. Przekazanie roli do istniejącego admina jest atomowe; poprzedni superadmin zachowuje jawne przydziały jako admin.
+- Admin zarządza tylko userami, nie może promować adminów ani zmieniać własnego dostępu. Deleguje funkcje i zasoby w granicach własnych przydziałów; zachowuje pozostały dostęp edytowanego użytkownika.
+- Token zaproszenia ma 32 losowe bajty i jest przechowywany jako hash. GET pokazuje formularz, POST z CSRF atomowo tworzy nowe konto z hasłem i potwierdzeniem emaila, członkostwo, przydziały oraz zużywa token. Istniejące konto wymaga logowania na zaproszony email i zachowuje dane oraz inne członkostwa.
+- Akceptacja ponownie sprawdza autora i status organizacji. Odwołanie oraz ponowienie unieważniają token; błąd Swoosh pozostawia odwołane zaproszenie do ponowienia. Zawieszenie nie przedłuża 24 godzin. Trasy tokenów nie trafiają do logów.
+- Rozszerzyć `current_scope` o organizację z URL, członkostwo, przydziały i jawny tryb organizatora. Konto może należeć do wielu organizacji; karty przeglądarki działają niezależnie.
+- Wspólny `Access` odświeża stan z bazy i sprawdza funkcje oraz zasoby. Operacje zmieniające dostęp blokują organizację w transakcji; PubSub publikuje po zatwierdzeniu w tematach organizacji i użytkownika.
+- Sprawdzać dostęp w kontekstach, plugach HTTP oraz hookach LiveView przy parametrach, zdarzeniach i aktualizacjach. Usunięcie członkostwa, odebranie prawa lub zawieszenie odbiera dostęp w otwartym widoku, zachowując sesję i pozostałe organizacje.
+- Dodać wybór organizacji, overview, członków i edycję dostępu. Zachować obecny system wizualny, angielski UI, oba motywy, responsywność, osobne `.ex`/`.html.heex`, `to_form`, `<.input>`, streams i stabilne DOM ID; przeprowadzić odbiór `impeccable`.
+- Dostarczyć model zasobów i adapter `ResourceResolver`; konkretny przydział wymaga potwierdzenia przynależności do organizacji. Rejestry i egzekwowanie runtime pozostają w krokach 3, 5 i 6.
 
-**Gotowe, gdy:** użytkownik organizacji A nie odczyta ani nie zmieni danych organizacji B przez podmianę URL lub identyfikatora.
+**Gotowe, gdy:** testy potwierdzają izolację URL i identyfikatorów, hierarchię oraz
+ograniczenia delegacji, domyślną odmowę, granicę ważności i jednorazowość zaproszeń,
+odwołanie i błąd mailera, nowe oraz istniejące konto, równoczesną akceptację i
+przekazanie superadmina, odebranie dostępu w LiveView i regresje kont. Przechodzą
+`mix precommit`, `mix assets.build` i odbiór desktop/mobile, jasnego/ciemnego motywu,
+klawiatury oraz stanów formularzy na osobnej bazie testowej, bez usypiania testów.
+
+**Odbiór 2026-10-03:** ukończono na gałęzi `JL/step-2-organizations-access`,
+utworzonej z aktualnej `main` po `git fetch origin` i aktualizacji fast-forward.
+Baza zawiera scalony krok 1 z [PR #2](https://github.com/jlitewka99/hackyeah2026/pull/2).
+Wdrożono organizacje, role, przydziały, zaproszenia i panel opisane powyżej.
+
+`mix precommit` przeszedł: 161 testów, brak ostrzeżeń kompilacji i uwag Credo.
+`mix assets.build` przeszedł. Testy obejmują izolację i delegację, akceptację,
+wygaśnięcie, ponowienie i błąd dostarczenia zaproszeń, równoczesne przyjęcie
+tokenu oraz przekazanie superadmina na osobnych połączeniach PostgreSQL,
+odebranie dostępu w otwartym LiveView oraz regresje ustawień i logowania.
+Granice czasu są ustawiane w danych testowych; synchronizacja współbieżności
+wykorzystuje blokady i wiadomości, bez usypiania procesów.
+
+Przegląd `impeccable` objął sześć ekranów, desktop 1440 px i mobile 390 px,
+oba motywy oraz fokus klawiatury. Detektor nie wykazał problemów blokujących;
+pozostała zastana uwaga o kroju wielkości `1rem`. Niezależny reviewer wskazał
+brak stanu oczekiwania w czterech rodzajach akcji; po poprawce i ponownych
+24 zrzutach potwierdził rozwiązanie tej listy werdyktem `ship`.
+README opisuje migrację, role, zaproszenia i adapter zasobów. Zachowano
+istniejący system wizualny. Testy i podgląd korzystały z osobnej, tymczasowej
+instancji PostgreSQL; końcowe testy użyły wydzielonej bazy bez danych podglądu.
+
+Przydziały konkretnych agentów i modeli wymagają przyszłych rejestrów oraz
+adaptera potwierdzającego przynależność do organizacji. Do tego czasu UI
+udostępnia jawne selektory wszystkich zasobów; wywołania AI i niezweryfikowane
+konkretne przydziały są odrzucane. Integracja polityki i gatewaya pozostaje
+w krokach 3, 5 i 6.
 
 ### Krok 3. Agenci i klucze API
 
 - Dodać rejestr agentów: nazwa, identyfikator, organizacja, status.
+- Podłączyć `ResourceResolver` do rejestru agentów i filtrować panel według przydziałów `agents.*` oraz `api_keys.*`; każde działanie ponownie sprawdza scope i przynależność zasobu.
 - Klucz API przypisać do jednej organizacji i jednego agenta.
 - Generować losowy sekret o co najmniej 256 bitach entropii; pokazywać go tylko przy utworzeniu. Przechowywać hash, identyfikator i bezpieczny prefiks.
 - Obsłużyć wygaśnięcie, odwołanie i rotację klucza.
@@ -145,6 +194,7 @@ Oba testy współbieżności przeszły również przy jednym schedulerze BEAM.
 
 - Dodać niezmienne wersje polityk i jedną aktywną wersję na organizację.
 - Polityka obejmuje guardy, działania dla kategorii wykryć, progi, dozwolone modele, uprawnienia agentów i budżety.
+- Połączyć indywidualne przydziały agenta/modelu z ograniczeniami polityki; żaden przydział nie uchyla zakazu organizacji.
 - Dodać profile `relaxed`, `balanced`, `strict`; jawne ustawienie konkretnej reguły nadpisuje domyślne ustawienie profilu.
 - Import YAML oraz formularze panelu wykorzystują ten sam walidator.
 - Po walidacji atomowo aktywować wersję i aktualizować cache ETS. Zapisać checksum, autora i czas aktywacji; umożliwić rollback.
@@ -159,6 +209,7 @@ Oba testy współbieżności przeszły również przy jednym schedulerze BEAM.
 - Użyć `Req` do komunikacji z Ollama; ustawić timeouty, limity rozmiaru oraz brak automatycznych ponowień generacji.
 - Docelowy adres backendu pochodzi z konfiguracji operatora.
 - Dodać sprawdzanie model allowlist przed wywołaniem modelu.
+- Podłączyć katalog modeli do `ResourceResolver` i egzekwować dostęp do AI oraz obu wymiarów zasobów dla wywołań użytkownika przed polityką i downstream. Klucze agentów podlegają osobnemu zakresowi klucza i polityce.
 - Domyślny model demo: `qwen3.5:4b`. Zapisać używany digest modelu w konfiguracji demo. [Model](https://ollama.com/library/qwen3.5:4b), [kompatybilność API Ollama](https://docs.ollama.com/api/openai-compatibility).
 
 **Gotowe, gdy:** klient z kluczem API otrzymuje odpowiedź lokalnego modelu, a niedozwolony model nie zostaje wywołany.

@@ -1,0 +1,60 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} auth>
+  <h1>Join {@preview.organization.name}</h1>
+  <p class="auth-description">
+    You were invited as {OrganizationUI.role_name(@preview.invitation.role)} using <span class="font-medium break-all">{@preview.invitation.email}</span>.
+  </p>
+  <%= cond do %>
+    <% @current_scope && @current_scope.user.email != @preview.invitation.email -> %>
+      <div id="invitation-wrong-account">
+        <p class="muted">
+          You are signed in with a different email. Log out, then reopen this invitation with the invited account.
+        </p><.link href={~p"/users/log-out"} method="delete" class="button-secondary mt-6">Log out</.link>
+      </div>
+    <% @preview.existing_account? && !@current_scope -> %>
+      <div id="invitation-sign-in">
+        <p class="muted">
+          Sign in to your existing account to accept this invitation. Your password will remain the same.
+        </p><.link
+          href={~p"/invitations/#{@token}/sign-in"}
+          id="invitation-login"
+          class="button-primary w-full mt-6"
+        >Sign in to accept <.icon name="hero-arrow-right" class="size-4" /></.link>
+      </div>
+    <% true -> %>
+      <.form
+        for={@form}
+        id="invitation-accept-form"
+        action={~p"/invitations/accept"}
+        method="post"
+        phx-change="validate"
+      >
+        <.input type="hidden" name="user[token]" id="invitation-token" value={@token} />
+        <%= if !@preview.existing_account? do %>
+          <.input
+            field={@form[:password]}
+            type="password"
+            label="Set your password"
+            autocomplete="new-password"
+            required
+            minlength="12"
+            maxlength="72"
+          />
+          <.input
+            name="user[password_confirmation]"
+            id="invitation-password-confirmation"
+            type="password"
+            value={nil}
+            label="Confirm password"
+            autocomplete="new-password"
+            required
+          />
+        <% end %>
+        <.button
+          id="accept-invitation"
+          class="button-primary w-full mt-4"
+          phx-disable-with="Joining…"
+        >Accept invitation <.icon name="hero-arrow-right" class="size-4" /></.button>
+      </.form>
+  <% end %>
+  <p class="auth-footer">This invitation can be used once and expires after 24 hours.</p>
+</Layouts.app>

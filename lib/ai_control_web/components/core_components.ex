@@ -175,6 +175,7 @@ defmodule AiControlWeb.CoreComponents do
 
   attr :errors, :list, default: []
   attr :checked, :boolean, doc: "the checked flag for checkbox inputs"
+  attr :checkbox_value, :string, default: "true"
   attr :prompt, :string, default: nil, doc: "the prompt for select inputs"
   attr :options, :list, doc: "the options to pass to Phoenix.HTML.Form.options_for_select/2"
   attr :multiple, :boolean, default: false, doc: "the multiple flag for select inputs"
@@ -223,7 +224,7 @@ defmodule AiControlWeb.CoreComponents do
             type="checkbox"
             id={@id}
             name={@name}
-            value="true"
+            value={@checkbox_value}
             checked={@checked}
             class={@class || "field-checkbox"}
             {@rest}

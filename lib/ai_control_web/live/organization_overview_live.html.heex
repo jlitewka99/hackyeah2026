@@ -1,0 +1,58 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} active_page="overview">
+  <div class="page-content" id="organization-overview">
+    <h1 class="break-words">{@current_scope.organization.name}</h1>
+    <p class="page-description">
+      Your organization workspace. Access is assigned separately for each function and resource.
+    </p>
+    <section class="task-section" aria-labelledby="your-role-heading">
+      <div>
+        <h2 id="your-role-heading">Your role</h2><p class="muted text-sm mt-2">
+          Administrative roles control who can manage members.
+        </p>
+      </div><div>
+        <p id="current-membership-role" class="font-medium">
+          {OrganizationUI.role_name(@current_scope.membership && @current_scope.membership.role)}
+        </p><p :if={@current_scope.access_mode == :organizer} class="muted text-sm mt-2">
+          You are accessing this workspace as the platform organizer.
+        </p><.link
+          :if={AiControl.Organizations.managers?(@current_scope)}
+          navigate={~p"/organizations/#{@current_scope.organization.id}/members"}
+          id="open-members"
+          class="button-secondary mt-4"
+        >Manage members <.icon name="hero-user-group" class="size-4" /></.link>
+      </div>
+    </section>
+    <section class="task-section" aria-labelledby="your-access-heading">
+      <div>
+        <h2 id="your-access-heading">Your function access</h2><p class="muted text-sm mt-2">
+          Capabilities are listed here as they are assigned. AI and reporting features become available as they are enabled.
+        </p>
+      </div><div id="permission-list" phx-update="stream">
+        <p id="permissions-empty" class="hidden only:block muted">
+          No function permissions assigned. Contact your organization administrator.
+        </p><p :for={{id, permission} <- @streams.permissions} id={id} class="permission-row">
+          {permission.label}
+        </p>
+      </div>
+    </section>
+    <section class="task-section" aria-labelledby="your-resources-heading">
+      <div>
+        <h2 id="your-resources-heading">Your resource access</h2><p class="muted text-sm mt-2">
+          Both agent and model access are required to use AI.
+        </p>
+      </div><div class="space-y-3">
+        <p>
+          Agents:
+          <span class="muted">{if "*" in @current_scope.grants.agents,
+            do: "All organization agents",
+            else: "#{length(@current_scope.grants.agents)} assigned"}</span>
+        </p><p>
+          Models:
+          <span class="muted">{if "*" in @current_scope.grants.models,
+            do: "All organization models",
+            else: "#{length(@current_scope.grants.models)} assigned"}</span>
+        </p>
+      </div>
+    </section>
+  </div>
+</Layouts.app>
