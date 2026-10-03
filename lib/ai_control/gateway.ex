@@ -4,7 +4,7 @@ defmodule AiControl.Gateway do
   alias AiControl.ApiKeys.Principal
   alias AiControl.{Audit, Budgets, Policies}
   alias AiControl.Budgets.Usage
-  alias AiControl.Gateway.{Config, Limiter, Models, Request, Response, Slots, Stages}
+  alias AiControl.Gateway.{Config, Limiter, Models, Request, Response, Slots, Stages, ToolSchemas}
   alias AiControl.Security.SecurityContext
 
   def chat(identity, params, opts \\ []) do
@@ -12,11 +12,10 @@ defmodule AiControl.Gateway do
       with :ok <- input_size(params),
            {:ok, params} <- Request.validate(params),
            {:ok, policy, current} <- Policies.snapshot_for_models(current, opts[:agent_id]) do
-        result = process_chat(current, params, policy, request_id, opts)
-
-        {result, policy}
+        {result, stage} = process_chat(current, params, policy, request_id, opts)
+        {result, policy, stage}
       else
-        error -> {error, nil}
+        error -> {error, nil, :input}
       end
     end)
   end
@@ -27,25 +26,40 @@ defmodule AiControl.Gateway do
            measure(:budget_admission, fn ->
              Budgets.admit(current, opts[:agent_id], params["model"], policy, request_id)
            end) do
-      result =
+      {result, stage} =
         try do
           run_chat(current, params, policy, request_id, opts, receipt)
         after
           Budgets.abandon(receipt)
         end
 
-      {:accounted, result, receipt}
+      {{:accounted, result, receipt}, stage}
+    else
+      error -> {error, :input}
     end
   end
 
   defp run_chat(current, params, policy, request_id, opts, receipt) do
     with {:ok, safe} <- Stages.evaluate(params, current, policy, request_id, :input),
          {:ok, safe} <- Request.validate(safe),
-         :ok <- authorize_again(current, policy, opts[:agent_id], params["model"]),
-         {:ok, response} <- generate(safe, receipt, current, policy, opts),
-         {:ok, response} <- Response.normalize(response, params["model"], request_id),
-         {:ok, response} <- Stages.evaluate(response, current, policy, request_id, :output) do
-      Response.normalize(response, params["model"], request_id)
+         {:ok, contract} <- ToolSchemas.prepare(safe),
+         :ok <- authorize_again(current, policy, opts[:agent_id], params["model"]) do
+      case generate(safe, receipt, current, policy, opts) do
+        {:ok, response} ->
+          {filter_output(response, current, policy, request_id, safe["model"], contract), :output}
+
+        error ->
+          {error, :output}
+      end
+    else
+      error -> {error, :input}
+    end
+  end
+
+  defp filter_output(response, current, policy, request_id, model, contract) do
+    with {:ok, response} <- Response.normalize(response, model, request_id),
+         :ok <- Response.validate(response, contract) do
+      Stages.evaluate(response, current, policy, request_id, :output, tool_contract: contract)
     end
   end
 
@@ -63,10 +77,10 @@ defmodule AiControl.Gateway do
               &%{"id" => &1, "object" => "model", "created" => 0, "owned_by" => "operator"}
             )
 
-          {{:ok, %{"object" => "list", "data" => data}}, policy}
+          {{:ok, %{"object" => "list", "data" => data}}, policy, :input}
 
         error ->
-          {error, nil}
+          {error, nil, :input}
       end
     end)
   end
@@ -77,13 +91,13 @@ defmodule AiControl.Gateway do
 
     case Policies.refresh_identity(identity) do
       {:ok, current} ->
-        {result, policy} =
+        {result, policy, stage} =
           case ingress(current, opts) do
             :ok -> callback.(current, request_id)
-            error -> {error, nil}
+            error -> {error, nil, :input}
           end
 
-        finish(current, request_id, result, policy, started)
+        finish(current, request_id, result, policy, started, stage)
 
       {:error, :forbidden} = error ->
         # These are trusted adapters whose previously verified access was revoked.
@@ -99,7 +113,7 @@ defmodule AiControl.Gateway do
     :exit, _ -> {:error, :upstream_unavailable}
   end
 
-  defp finish(identity, request_id, result, policy, started) do
+  defp finish(identity, request_id, result, policy, started, stage \\ :input) do
     {result, evidence} =
       case result do
         {:accounted, outcome, receipt} -> {outcome, Budgets.evidence(receipt)}
@@ -116,10 +130,11 @@ defmodule AiControl.Gateway do
     duration = duration(started)
 
     :telemetry.execute([:ai_control, :gateway, :request], %{duration_us: duration}, %{
-      code: code
+      code: code,
+      stage: stage
     })
 
-    case Audit.record_gateway(identity, request_id, code, duration, policy, evidence) do
+    case Audit.record_gateway(identity, request_id, code, duration, policy, stage, evidence) do
       {:ok, _} -> result
       _ -> {:error, :audit_unavailable}
     end

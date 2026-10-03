@@ -6,6 +6,8 @@ Plan opiera się na [AI_CONTROL_LAYER_REQUIREMENTS.md](AI_CONTROL_LAYER_REQUIREM
 
 **Aktualizacja 2026-10-03:** uwzględniono przesłany research „Executive Summary — Elixir-based AI Safety Gateway”. Kroki **1–7 są ukończone i scalone**, zgodnie z zapisanymi odbiorami; wyniki odbioru gatewaya zapisano przy kroku 6, a guardów, NER i kontenera przy kroku 7. Następna fala pracy to **8, 9, 10 i 12A równolegle → 12B i 11A równolegle → 11B (odbiór MVP)**. Podział i zależności opisuje sekcja 2.1. Numeracja, checkboxy i historia odbiorów pozostają zachowane; podstawowy NER i pełny tool firewall nadal wchodzą do MVP. Zmiana organizacji pracy nie oznacza wykonania nowych funkcji.
 
+**Aktualizacja 2026-10-04:** krok **8 ukończony i odebrany lokalnie** na `JL/step-8-output-filtering`, na bazie `origin/main` z krokami 1–7. Odbiór i zgodność API opisano przy kroku 8 oraz w [raporcie](docs/acceptance/step8.md). Rozliczenie zablokowanej odpowiedzi, rzeczywisty provider semantyczny i wykonanie narzędzi czekają na integrację odpowiednio z 9, 10 i 12; checkbox 8 nie oznacza scalenia brancha ani ukończenia tych zależności.
+
 Przykładowe zlecenie:
 
 > Wykonaj krok 9 z AI_CONTROL_LAYER_IMPLEMENTATION_PLAN.md na bazie ukończonego i scalonego kroku 7. Przeczytaj zasady pracy równoległej z sekcji 2.1, zaimplementuj budżety i rozliczenia bez ponownej implementacji NER, dodaj wymagane testy, uruchom mix precommit i opisz stan integracji w planie.
@@ -98,7 +100,7 @@ Checkboxy oznaczają potwierdzone zakończenie kroku, a nie samą obecność kod
 - [x] Krok 5 — Centralny Policy Engine
 - [x] Krok 6 — Gateway LLM i konfiguracja środowiska
 - [x] Krok 7 — Deterministyczne guardy, NER i sygnatury
-- [ ] Krok 8 — Output filtering
+- [x] Krok 8 — Output filtering
 - [ ] Krok 9 — Budżety i rozliczanie użycia
 - [ ] Krok 10 — Semantyczne wykrywanie prompt injection
 - [ ] Krok 11 — Dashboard i zamknięcie wymaganego MVP
@@ -522,15 +524,19 @@ wizualnego; zastanego driftu nie naprawiano w tym rozszerzeniu.
 - Ponownie zastosować PII, secret detection, sygnatury i osobny `ner`, konfigurowany również dla wyjścia.
 - Wykonać decyzję polityki przed zwróceniem odpowiedzi klientowi.
 - Zachować informację, czy naruszenie wystąpiło na wejściu, czy na wyjściu.
-- Buforować całą odpowiedź dla `stream: false`; żadna treść ani argumenty narzędzia nie trafiają do klienta przed oceną i wymaganym audytem. Redakcja argumentów musi zachować poprawny JSON i schemat; gdy nie może, blokować propozycję wywołania.
+- Buforować całą odpowiedź dla `stream: false`; żadna treść ani argumenty narzędzia nie trafiają do klienta przed oceną i wymaganym audytem. Redakcja argumentów musi zachować poprawny JSON i schemat; gdy nie może, odrzucać całą odpowiedź wraz ze wszystkimi propozycjami wywołań.
 - Przy blokadzie zwracać stały komunikat odmowy i identyfikator żądania, bez cytowania naruszenia. Nie ponawiać generacji ani nie przełączać modelu automatycznie. Usage naliczać również za zablokowaną odpowiedź po podłączeniu kroku 9.
 - Przygotować etap dla moderacji AI z kroku 10; klasyfikator prompt injection nie jest domyślnie klasyfikatorem szkodliwości odpowiedzi.
 
 **Gotowe, gdy:** sekret wygenerowany przez model zostaje zablokowany lub zredagowany zgodnie z polityką, audyt rozróżnia oba etapy, a tekst i argumenty narzędzi nie wyciekają przy blokadzie, błędzie guardu lub zapisu audytu. Bezpieczna odpowiedź zachowuje wspierany format API.
 
+**Odbiór 2026-10-04:** ukończono backend na `JL/step-8-output-filtering`. Projekcja obejmuje tekst assistant, identyfikatory i nazwy narzędzi oraz zdekodowane zagnieżdżone klucze i wartości argumentów z kontekstem pól i offsetami UTF-8. Redakcja zmienia tylko tekst i wartości string; rekonstruuje JSON przez Jason i waliduje kontrakt po każdej fazie. JSV 0.25.0 sprawdza Draft 2020-12 i jawny Draft 7, `format`, lokalne referencje i schematy z końcowego żądania; casting, atomy, odwołania do modułów i pobieranie schematów z sieci są wyłączone. Zduplikowane definicje, ID i klucze argumentów są odrzucane. Odmowa obejmuje całą odpowiedź, bez kolejnej generacji; terminalny audyt i telemetry zapisują rzeczywisty etap, bez treści i wartości argumentów. Zachowano `assess/4`, wywołania `Stages.evaluate/5`, wersje polityk, wymagane guardy, allowlistę providera i wspierane oryginalne usage.
+
+**Sprawdzenia:** 24 testy zakresu; `mix precommit` — 378 testów Elixir i 3 JavaScript, 3 opt-in wyłączone; Dialyzer — zero błędów; Sobelow i audyt zależności — sukces, istniejące znalezisko niskiej pewności bez zmian. Osobny odbiór z rzeczywistym sidecarem NER — 2 testy, w tym syntetyczne polskie nazwisko/adres w wyjściu oraz escaped argumentach narzędzia. Testy awarii guardów i obu rodzajów audytu potwierdzają brak wycieku do HTTP, logów, audytu i telemetry. Semantykę wyłączono jawnie tylko w wydzielonych politykach testowych. Frontend nie wymagał zmian. Szczegóły: [raport odbioru kroku 8](docs/acceptance/step8.md). Rozliczenie blokady wyjścia zostanie sprawdzone po scaleniu 9; provider AI i tool ACL/wykonanie pozostają w 10 i 12.
+
 ### Krok 9. Budżety i rozliczanie użycia
 
-**Stan implementacji (2026-10-04):** trwałe liczniki, rezerwacje, rozliczanie usage/kosztów, tokenizer i integracja gatewaya są zaimplementowane na `JL/step-9-budgets`. `mix precommit`: 383 testy; sidecar: 4 testy; rzeczywisty Ollama 0.35.1: zgodność czterech promptów (23/60/273/328 tokenów). Odbiór Policies obejmuje desktop/mobile, oba motywy i klawiaturę. [Wyniki odbioru](docs/acceptance/step9.md). Checkbox pozostaje otwarty do pomyślnego odbioru kontenera w CI. Wspólna integracja rzeczywistego output filtering i semantyki jest odbierana po scaleniu kroków 8 i 10; narzędzia/workflowy podłączają kroki 12 i 15.
+**Stan implementacji (2026-10-04):** trwałe liczniki, rezerwacje, rozliczanie usage/kosztów, tokenizer i integracja gatewaya są zaimplementowane na `JL/step-9-budgets`. `mix precommit`: 441 testów po integracji aktualnego `main` (8/12A); sidecar: 4 testy; rzeczywisty Ollama 0.35.1: zgodność czterech promptów (23/60/273/328 tokenów). Odbiór Policies obejmuje desktop/mobile, oba motywy i klawiaturę. [Wyniki odbioru](docs/acceptance/step9.md). Checkbox pozostaje otwarty do pomyślnego odbioru kontenera w CI. Wspólny test rzeczywistego Ollama i NER wyjścia z kroku 8 potwierdza rozliczenie przed redakcją (34 tokeny wejścia, 15 wyjścia). Integracja semantyki pozostaje do odbioru po scaleniu kroku 10; narzędzia/workflowy podłączają kroki 12 i 15.
 
 **Praca równoległa:** po ukończeniu 7 realizować równolegle z 8, 10 i 12A. Nie wymaga ukończenia 8 do budowy liczników i integracji z istniejącym gatewayem; wspólne scenariusze blokady wyjścia są sprawdzane po scaleniu.
 
@@ -587,6 +593,60 @@ wizualnego; zastanego driftu nie naprawiano w tym rozszerzeniu.
 ### Krok 12. Tool firewall i ograniczenia zasobów
 
 **Praca równoległa:** 12A (katalog, autoryzacja, walidatory i sandboxowe adaptery) realizować po ukończeniu 7 równolegle z 8–10. 12B łączy te moduły z endpointem, budżetami, kontrolami wyników i semantyką po scaleniu pierwszej fali; dopiero wtedy odbierać pełny krok 12.
+
+**Plan implementacji 12A — 2026-10-03:**
+
+1. Dodać zamknięty katalog identyfikatorów operacji i schematów argumentów oraz
+   `AiControl.Tools.ToolRequest`. Przyjmować wyłącznie nazwę narzędzia i argumenty;
+   organizację/agenta/klucz przypisywać ze zweryfikowanego `Principal`.
+2. Przygotować żądanie na jednym snapshotcie istniejącej polityki v2. Przeciąć
+   `allowed_agents` i `tools.allowed_tools` z zasobami dopuszczonymi przez operatora
+   sandboxa dla konkretnego agenta. Polityka v1 i brak przydziału oznaczają odmowę.
+3. Walidować kanoniczne ścieżki, symlinki, dokładne adresy HTTP z przypiętym IP,
+   operacje/tabele bazy, pojedynczych odbiorców i zamknięte komendy bez powłoki.
+   HTTP przez `Req`, bez redirectów, retry, proxy ani rozwiązywania DNS podczas
+   połączenia; prywatne IP tylko przy jawnym wyjątku operatora dla endpointu demo.
+4. Dodać izolowany sandbox per organizacja: wirtualne pliki, tabele demo,
+   lokalna skrzynka i komendy zaimplementowane w Elixirze. Pliki/baza/email/komendy
+   nie korzystają z zasobów hosta. Jedynym zewnętrznym I/O jest jawny endpoint HTTP.
+5. Testować dozwolone wykonania, odmowy bez efektów, podmianę tożsamości,
+   unieważnienie klucza/agenta/organizacji, snapshot, schematy i ataki na zasoby.
+   Uruchomić `mix precommit`, zapisać odbiór i stworzyć PR z opisem po angielsku.
+
+12A nie wprowadza zmian frontendowych ani publicznej ścieżki wykonywania narzędzi.
+Sandbox jest adapterem demo dla zaufanego kodu; produkcyjne wykonanie, trwałe
+liczniki, wymagane guardy, audyt i filtrowanie wyników pozostają w 12B. Checkbox
+całego kroku 12 pozostaje niezaznaczony do odbioru 12B.
+
+**Odbiór 12A — 2026-10-04:** zaimplementowano `AiControl.Tools`, `ToolRequest`,
+zamknięty katalog siedmiu operacji i schematy argumentów, autoryzację na istniejącym
+snapshotcie v2 oraz dokładne przydziały zasobów operatora per organizacja/agent.
+Sandbox udostępnia wirtualne pliki, odczyt tabel demo, lokalną skrzynkę, komendy
+Elixira bez powłoki i rzeczywisty HTTP przez `Req` z przypiętym IP. Walidatory
+odmawiają traversal, symlinków, SSRF, redirectów i nieuprawnionych operacji;
+klucz, agent i organizacja są ponownie sprawdzane przed efektem. Argumenty
+i polityka nie są ujawniane przez `Inspect` żądania. Instrukcje i granice integracji:
+[sandbox narzędzi](docs/tools.md).
+
+Przeszło **30 testów 12A** oraz `mix precommit`: **384 testy Elixir i 3 JavaScript**,
+bez uwag Credo i ostrzeżeń kompilacji aplikacji. Dwa istniejące testy rzeczywistych
+modeli/NER pozostają standardowo wyłączone z tego zestawu; 12A ich nie zmienia.
+Testy obejmują odmowy bez efektów, podmianę tożsamości, wygaśnięcie/unieważnienie
+klucza, zawieszenie, snapshot przy zmianie polityki, Unicode/limity rozmiaru
+i rzeczywisty lokalny HTTP również przez pełną ścieżkę sandboxa. Bez zmian
+frontendu, migracji ani zależności. **12A jest ukończone; 12B i pełny krok 12
+pozostają nieukończone**: endpoint, trwałe liczniki, wymagane guardy, audyt wykonania
+i filtrowanie wyników wymagają osobnej integracji po scaleniu 8–10.
+
+**Ponowny przegląd 12A — 2026-10-04:** odtworzono i poprawiono dwie luki:
+ponowna autoryzacja zmienionych argumentów nie sprawdzała całkowitego limitu JSON,
+a globalne opcje `Req` mogły dołączyć dane uwierzytelniające/parametry lub podmienić
+transport. Limit 64 KiB jest teraz sprawdzany przed efektem; surowe żądanie `Req`
+pomija globalne opcje i middleware. Dodano trzy testy regresji oraz rzeczywisty
+test HTTPS dla przypiętego IP, poprawnego CA/hosta i odmowy obcego CA/błędnego
+hosta. `mix precommit` przeszedł: **388 testów Elixir (w tym 34 testy 12A) i 3
+JavaScript**, bez uwag Credo i ostrzeżeń kompilacji aplikacji; dwa istniejące testy
+modeli/NER pozostają wyłączone. Granica 12B pozostaje bez zmian.
 
 - Dodać `ToolRequest`, katalog narzędzi ze schematami argumentów i `POST /v1/tool_calls`. Organizacja i agent pochodzą wyłącznie ze zweryfikowanej tożsamości; domyślna odmowa jest niezależna od oceny modelu.
 - Dodać tenant-scoped identyfikator wykonania i trwały licznik wywołań narzędzi z kroku 9. Pełna orkiestracja workflowów pozostaje w kroku 15.
