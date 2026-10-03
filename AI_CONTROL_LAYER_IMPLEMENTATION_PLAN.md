@@ -4,17 +4,18 @@
 
 Plan opiera się na [AI_CONTROL_LAYER_REQUIREMENTS.md](AI_CONTROL_LAYER_REQUIREMENTS.md), przesłanej propozycji architektury i decyzjach ustalonych w rozmowie. Zachowujemy namespace `AiControl` i rozwijamy istniejącą aplikację Phoenix etapami.
 
-**Aktualizacja 2026-10-03:** uwzględniono przesłany research „Executive Summary — Elixir-based AI Safety Gateway”. Kroki **1–7 są ukończone**, zgodnie z zapisanymi odbiorami; wyniki odbioru gatewaya zapisano przy kroku 6, a guardów, NER i kontenera przy kroku 7. Następny etap to **krok 8 — output filtering**. Uzgodniona kolejność realizacji MVP to **6 → 7 wraz z NER → 8 → 9 → 10 → pełny 12 → 11 (odbiór MVP)**. Numeracja i historia odbiorów pozostają zachowane; podstawowy NER i pełny tool firewall wchodzą do MVP. Doprecyzowanie przyszłych etapów nie oznacza ich wykonania.
+**Aktualizacja 2026-10-03:** uwzględniono przesłany research „Executive Summary — Elixir-based AI Safety Gateway”. Kroki **1–7 są ukończone i scalone**, zgodnie z zapisanymi odbiorami; wyniki odbioru gatewaya zapisano przy kroku 6, a guardów, NER i kontenera przy kroku 7. Następna fala pracy to **8, 9, 10 i 12A równolegle → 12B i 11A równolegle → 11B (odbiór MVP)**. Podział i zależności opisuje sekcja 2.1. Numeracja, checkboxy i historia odbiorów pozostają zachowane; podstawowy NER i pełny tool firewall nadal wchodzą do MVP. Zmiana organizacji pracy nie oznacza wykonania nowych funkcji.
 
 Przykładowe zlecenie:
 
-> Wykonaj krok 6 z AI_CONTROL_LAYER_IMPLEMENTATION_PLAN.md. Sprawdź aktualny stan repozytorium, zaimplementuj zakres tego kroku, dodaj wymagane testy, uruchom mix precommit i zaktualizuj jego status w planie.
+> Wykonaj krok 9 z AI_CONTROL_LAYER_IMPLEMENTATION_PLAN.md na bazie ukończonego i scalonego kroku 7. Przeczytaj zasady pracy równoległej z sekcji 2.1, zaimplementuj budżety i rozliczenia bez ponownej implementacji NER, dodaj wymagane testy, uruchom mix precommit i opisz stan integracji w planie.
 
 Zasady dla agenta implementującego:
 
 - Realizuj wskazany krok; kolejne kroki wymagają osobnego zlecenia.
 - Przed pracą przeczytaj `AGENTS.md`, wymagania i aktualny kod. Nie generuj ponownie funkcji, które już istnieją.
 - Sprawdź zależności od wcześniejszych kroków. Jeśli brakuje istotnej podstawy, wskaż konkretny brak przed rozpoczęciem zależnej implementacji.
+- Numery kroków nie wyznaczają już sekwencyjnej kolejności pracy po kroku 7. Korzystaj z zależności i podziału odpowiedzialności w sekcji 2.1; testy z mockiem potwierdzają kontrakt, ale nie zastępują końcowych testów integracji i rzeczywistych modeli.
 - Każdy krok kończy się działającym zachowaniem, odpowiednimi testami i spełnieniem opisanych kryteriów odbioru.
 - Oznacz krok jako ukończony dopiero po spełnieniu tych kryteriów. Częściowe wykonanie lub zablokowane sprawdzenie opisz pod danym krokiem, pozostawiając checkbox niezaznaczony.
 - Po zmianach uruchom `mix precommit` zgodnie z `AGENTS.md`; po zmianach frontendowych także build assetów. Nie twórz commitów ani PR-ów bez osobnego zlecenia.
@@ -67,7 +68,7 @@ Gateway ma dwa obszary: **data plane** pośredniczy w komunikacji klient → LLM
 Priorytety researchu odnosimy do **pozostałej pracy**, bez rozpoczynania projektu od nowa:
 
 - **P0 — kroki 6–9:** gateway, deterministyczne kontrole wejścia/wyjścia, NER, limity i rezerwacje. To działający etap pośredni; wymagane MVP nadal potrzebuje semantycznego enforcement.
-- **P1 — kroki 10 → 12 → 11:** rzeczywista kontrola AI, polski benchmark, pełny tool firewall, dashboard, eksport i komplet testów. **Wymagane MVP kończy się po kroku 11.**
+- **P1 — kroki 10, 12 i 11:** rzeczywista kontrola AI, polski benchmark, pełny tool firewall, dashboard, eksport i komplet testów. Provider semantyczny i rdzeń narzędzi powstają równolegle z P0; pełny krok 12 musi być odebrany przed końcowym odbiorem 11. **Wymagane MVP kończy się po kroku 11.**
 - **P2 — kroki 13–20:** MCP, Granite, workflowy, Oban, streaming, RAG i dalsze rozszerzenia PII oraz zatwierdzanie działań. Minimalne scenariusze demo i instrukcje uruchomienia powstają już wraz z P0/P1; krok 20 scala pełną roadmapę.
 
 Nie przenosimy wprost siedmiodniowego harmonogramu z researchu: auth, organizacje, klucze, audyt i polityki są już gotowe, a terminów pozostałych etapów nie potwierdzono.
@@ -110,6 +111,52 @@ Checkboxy oznaczają potwierdzone zakończenie kroku, a nie samą obecność kod
 - [ ] Krok 18 — RAG, pamięć i rozszerzone PII
 - [ ] Krok 19 — Zatwierdzanie działań przez człowieka
 - [ ] Krok 20 — Przygotowanie kompletnego demo
+
+### 2.1. Praca równoległa po ukończeniu kroku 7
+
+Zmiana dotyczy pracy **po ukończeniu i scaleniu kroku 7**. Nie zmienia zakresu ukończonych detektorów, NER i wersjonowania polityki. Cztery branche pierwszej fali startują z tego samego commita obejmującego kroki 1–7, a każdy ma osobny worktree i bazę testową.
+
+```text
+1–7 — ukończone i scalone
+8, 9, 10, 12A — cztery równoległe branche
+12B, 11A — integracja narzędzi i dashboard równolegle
+11B — wspólny odbiór MVP
+13, 15, 16, 17, 18 — kolejne niezależne obszary po MVP
+14, 19 — analiza z kontekstem workflow/RAG i zatwierdzanie
+20 — końcowy odbiór pełnej roadmapy
+```
+
+`A` i `B` oznaczają części istniejącego kroku, nie nowe funkcje ani dodatkowe checkboxy. Krok 12 pozostaje nieukończony do odbioru 12B, a krok 11 do odbioru 11B. Grupy opisują zalecane fale; implementacja funkcji i końcowy odbiór całego MVP są osobnymi punktami synchronizacji.
+
+| Branch / zakres | Co można wykonać niezależnie po 7 | Zależność końcowa |
+| --- | --- | --- |
+| `JL/step-8-output-filtering` — 8 | Kontrola wszystkich pól odpowiedzi i argumentów narzędzi, NER wyjścia, walidacja JSON po redakcji, bezpieczna odmowa i audyt | Własny odbiór używa detektorów z 7; wspólny test rozliczenia zablokowanego wyjścia po scaleniu 9 |
+| `JL/step-9-budgets` — 9 | Trwałe liczniki i rezerwacje, tokenizer, rozliczenie usage, koszty, restart, współbieżność i obsługa niepewnego wykonania | W testach awarii wyjścia używa kontraktu guardu; rzeczywiste output filtering z 8 i semantyka z 10 są sprawdzane po integracji |
+| `JL/step-10-semantic-guards` — 10 | Provider injection i opcjonalnej moderacji odpowiedzi, sidecary, fragmentacja, polski benchmark i wersjonowane rozszerzenia polityki | Wykorzystuje kontrakt guardu gatewaya z 6 oraz aktualną treść po redakcji z 7; moderacja wszystkich pól odpowiedzi jest sprawdzana wspólnie z 8 |
+| `JL/step-12-tool-firewall` — 12A | `ToolRequest`, katalog i schematy argumentów, autoryzacja polityką, walidatory zasobów i sandboxowe adaptery | Endpoint i pełne wykonanie z budżetem oraz filtrowaniem wyników dopiero w 12B po scaleniu 8, 9 i 10 |
+
+Nie ma twardej zależności **8 → 9 → 10** dla implementacji tych modułów. Gateway z 6, rozszerzony w 7, ma już `AiControl.Gateway.Guard.assess/4`, `ready?/1`, typowane wyniki, snapshot i ocenę obu etapów. Krok 8 rozwija kontrolę odpowiedzi, 9 utrwala zużycie, a 10 dostarcza sygnały AI; żaden z nich nie powinien ponownie implementować pozostałych.
+
+#### Wspólne kontrakty i odpowiedzialność
+
+- Zachować kontrakt `assess(fields, context, policy_snapshot, config)` z kroku 7 oraz `GuardResult`, `Detection`, indeksy pól i offsety UTF-8. Każdy guard dostaje ten sam snapshot polityki i analizuje bieżącą wersję tekstu; brak obowiązkowej kontroli nadal kończy żądanie odmową.
+- Wykonawca 8 odpowiada za kontrolę i reprezentację wyjścia w `Gateway.Stages`, `Response` i `Content`. Wykonawca 10 dostarcza adaptery semantyczne przez ten kontrakt; uzgodnione zmiany rejestracji guardów scala wykonawca 8, bez tworzenia drugiego pipeline'u.
+- Wykonawca 9 odpowiada za kontekst `Budgets`, migracje liczników oraz punkty naliczania, rezerwacji i rozliczenia w `Gateway`. Rezerwacja tokenów korzysta z treści po kontrolach wejścia, a usage jest rozliczane także przy późniejszej blokadzie wyjścia. NER wyjścia należy wyłącznie do 8.
+- Nowe kategorie/moderacja z 10 zachowują zgodność z wersjami polityki ukończonymi w 7; rozszerzenie walidatora, formularzy i checksumów ma jednego właściciela na branchu 10. Krok 12 korzysta z przygotowanego w 7 schematu narzędzi.
+- Każdy branch rozwija własne testy i fixtures. Zmiany wspólnej konfiguracji, supervisora, zależności i routera scalać pojedynczo; nie przenosić globalnego formatowania ani zmian należących do innego kroku.
+- Mocki używane do izolacji testów przestrzegają produkcyjnego kontraktu. Testowa polityka może jawnie wyłączać kontrolę spoza badanego zakresu; nie zmienia to domyślnych profili, gotowości ani kryteriów odbioru rzeczywistych modeli.
+
+Po pierwszej fali scalać kolejno **8 → 9 → 10 → 12A**, sprawdzając integrację wspólnego gatewaya; jest to kolejność scalania, nie wykonywania pracy. Wykonawca 12 kontynuuje 12B, a osobny branch `JL/step-11-dashboard` realizuje 11A. Przy konflikcie etapów gatewaya właścicielem integracji pozostaje wykonawca 8.
+
+| Część | Zakres | Warunek zakończenia |
+| --- | --- | --- |
+| 12B | `POST /v1/tool_calls`, trwały tenant-scoped licznik wykonania, autoryzacja przed wykonaniem, kontrole treści/semantyki, filtrowanie wyników, audyt i wszystkie sandboxowe scenariusze | Pełne kryteria odbioru kroku 12; żadnego wykonania przed kontrolą tożsamości, polityki, zasobu, budżetu i wymaganych guardów |
+| 11A | Rozbudowa istniejących stron, metryki z 8–10, Events, eksport JSONL, filtry i PubSub oraz prezentacja dostępnych wyników narzędzi | Testy stron i eksportu używają rzeczywistych kontekstów i fixtures; końcowa matryca narzędzi czeka na 12B |
+| 11B | Integracja 12B z dashboardem, skrypt testów bezpieczeństwa, mapowanie wymagań, pełne scenariusze i testy rzeczywistych modeli | Ukończone 8, 9, 10, pełny 12 oraz wszystkie kryteria MVP; dopiero wtedy zaznaczyć checkbox 11 |
+
+Testy po scaleniu obejmują także interakcje między branchami: tokenizację treści po redakcji, rozliczenie zablokowanej odpowiedzi, timeout NER/semantyki bez downstream, poprawność JSON argumentów po redakcji, snapshot podczas zmiany polityki oraz liczniki narzędzi przy równoczesnych wykonaniach. Każdy zakres kończy się `mix precommit`; frontend także `mix assets.build`, a 11B rzeczywistymi modelami i testami bezpieczeństwa z sekcji 5.
+
+Po MVP grupy nie znoszą wspólnych kontraktów: 14 korzysta z kontekstu workflowów z 15 i RAG z 18, a przed równoległą implementacją 14 i 19 trzeba uzgodnić obsługę `REVIEW` w kontrakcie decyzji. Krok 20 ma końcowy odbiór po wszystkich rozszerzeniach; jego dokumentację można uzupełniać wraz z funkcjami.
 
 ## 3. Kolejność implementacji
 
@@ -469,6 +516,8 @@ wizualnego; zastanego driftu nie naprawiano w tym rozszerzeniu.
 
 ### Krok 8. Output filtering
 
+**Praca równoległa:** po ukończeniu 7 realizować równolegle z 9, 10 i 12A. Ten krok jest właścicielem NER wyjścia, reprezentacji odpowiedzi i walidacji redagowanych argumentów; rozliczenia i provider AI należą do osobnych branchy.
+
 - Przeskanować wszystkie pola odpowiedzi mogące zawierać treść: odpowiedzi tekstowe i argumenty proponowanych wywołań narzędzi.
 - Ponownie zastosować PII, secret detection, sygnatury i osobny `ner`, konfigurowany również dla wyjścia.
 - Wykonać decyzję polityki przed zwróceniem odpowiedzi klientowi.
@@ -481,6 +530,8 @@ wizualnego; zastanego driftu nie naprawiano w tym rozszerzeniu.
 
 ### Krok 9. Budżety i rozliczanie użycia
 
+**Praca równoległa:** po ukończeniu 7 realizować równolegle z 8, 10 i 12A. Nie wymaga ukończenia 8 do budowy liczników i integracji z istniejącym gatewayem; wspólne scenariusze blokady wyjścia są sprawdzane po scaleniu.
+
 - Wprowadzić limity żądań i tokenów na godzinę dla organizacji i agentów oraz wywołań narzędzi na workflow. Pełne rozliczanie narzędzi i workflowów zostaje podłączone w krokach 12 i 15.
 - Okna godzinowe liczyć w UTC. Zmiana polityki nie zeruje zużycia.
 - Zachować schema budżetów kroku 5; konfiguracje minutowe/per-user z researchu są ewentualnym późniejszym rozszerzeniem, a nie zmianą istniejących jednostek.
@@ -492,12 +543,14 @@ wizualnego; zastanego driftu nie naprawiano w tym rozszerzeniu.
 - Przykład: przy limicie 5000 i rezerwacji 4000 równoczesne żądanie wymagające kolejnych 4000 dostaje 429; po usage 2200 zwrócić 1800. Rozliczenie jest idempotentne i zwalnia tylko niewykorzystaną część. Żądanie odrzucone przed generacją nie zużywa tokenów, ale nadal podlega limiterowi wejściowemu.
 - Na potwierdzonym braku wysłania żądania zwalniać rezerwację; przy timeout/anulowaniu po wysłaniu lub braku usage utrzymać bezpieczne obciążenie do uzgodnienia. Restart/TTL nie zwraca automatycznie tokenów za potencjalnie wykonaną generację. Jeśli usage przekroczy rezerwację, zapisać całe użycie i zatrzymać kolejne żądania; nie ukrywać przekroczenia.
 - Rezerwacja należy do okna rozpoczęcia także po zmianie godziny. Obniżenie limitu poniżej zużycia blokuje nowe rezerwacje, nie zeruje liczników. Rozdzielić liczniki żądań, tokenów i aktywnych wywołań; 429 zawiera `Retry-After` zgodny z przyczyną odmowy.
-- Podłączyć również NER dla wyjścia, z walidacją zakresów i reguł adresowych z kroku 7.
+- Rozliczać usage niezależnie od końcowej decyzji output filtering; NER i reguły adresowe wyjścia należą do kroku 8, nie do kontekstu budżetów.
 - Dodać rozliczanie kosztów według skonfigurowanego cennika. Bez cennika pokazywać „not configured”.
 
 **Gotowe, gdy:** równoczesne rezerwacje nie przekraczają limitu organizacji ani agenta, a restart aplikacji nie odnawia wykorzystanego budżetu. Testy obejmują podwójne rozliczenie, timeout przed/po wysłaniu, brak usage, blokadę outputu, zmianę okna i obniżenie limitu. Wynik estymacji i warunki twardego limitu są opisane, a zużycie guardów AI mierzone oddzielnie od usage modelu docelowego.
 
 ### Krok 10. Semantyczne wykrywanie prompt injection
+
+**Praca równoległa:** po ukończeniu 7 realizować równolegle z 8, 9 i 12A przez istniejący kontrakt guardu z 6. Wspólna integracja moderacji wyjścia korzysta z reprezentacji utrzymywanej w 8; benchmark providera nie czeka na budżety ani narzędzia.
 
 - Wprowadzić zachowanie providera oraz implementacje lokalnego klasyfikatora i mocka.
 - Porównać `Llama-Prompt-Guard-2-86M` i `Qwen3Guard-Gen-0.6B` na wspólnym polskim zbiorze z sekcji 5.1. Najpierw sprawdzić dostępność wag, licencję i uruchomienie lokalne. Prompt Guard 22M jest opcjonalnym wariantem wydajnościowym, nie zamiennikiem o potwierdzonej jakości polskiego.
@@ -515,6 +568,8 @@ wizualnego; zastanego driftu nie naprawiano w tym rozszerzeniu.
 
 **Zależności odbioru:** kroki 6–10, podstawowy NER z 7–8 i pełny krok 12 muszą być ukończone. Krok 12 wykonujemy przed tym odbiorem.
 
+**Praca równoległa:** 11A (strony, metryki i eksport) realizować po scaleniu 8–10 równolegle z 12B. 11B obejmuje wspólny odbiór po pełnym 12; budowa dashboardu nie wymaga czekania na ukończenie firewalla.
+
 - Zbudować strony: Overview, Events, Policies, Budgets, Agents i Signatures.
 - Pokazywać rzeczywiste decyzje, aktywne kontrole, wersję polityki, zużycie i zmierzone opóźnienia.
 - Rozdzielić opóźnienia guardów, rezerwacji, upstream i całego żądania; pokazywać p50/p95, wykrycia według guardu/etapu, odmowy budżetowe i błędy usług. Nie tworzyć nieuzasadnionego „security score”.
@@ -528,6 +583,8 @@ wizualnego; zastanego driftu nie naprawiano w tym rozszerzeniu.
 **Kamień milowy MVP:** działają auth, izolacja organizacji, proxy LLM, centralne polityki, kontrole deterministyczne, NER i AI, input/output filtering, budżety, pełny tool ACL, audyt, dashboard i testy.
 
 ### Krok 12. Tool firewall i ograniczenia zasobów
+
+**Praca równoległa:** 12A (katalog, autoryzacja, walidatory i sandboxowe adaptery) realizować po ukończeniu 7 równolegle z 8–10. 12B łączy te moduły z endpointem, budżetami, kontrolami wyników i semantyką po scaleniu pierwszej fali; dopiero wtedy odbierać pełny krok 12.
 
 - Dodać `ToolRequest`, katalog narzędzi ze schematami argumentów i `POST /v1/tool_calls`. Organizacja i agent pochodzą wyłącznie ze zweryfikowanej tożsamości; domyślna odmowa jest niezależna od oceny modelu.
 - Dodać tenant-scoped identyfikator wykonania i trwały licznik wywołań narzędzi z kroku 9. Pełna orkiestracja workflowów pozostaje w kroku 15.
