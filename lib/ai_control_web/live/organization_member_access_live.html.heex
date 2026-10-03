@@ -20,6 +20,7 @@
         form={@form}
         allowed={@current_scope.grants}
         id="member-access"
+        agent_options={@agent_options}
       />
       <p :if={!AiControl.Organizations.privileged?(@current_scope)} class="muted text-sm mb-6">
         You can edit access within your own permissions. Other existing grants are preserved.

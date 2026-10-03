@@ -32,6 +32,11 @@ defmodule AiControlWeb.OrganizationUI do
   def error_message(:unknown_resource),
     do: "The selected resource is unavailable in this organization."
 
+  def error_message(:inactive_agent), do: "Choose an active agent in an active organization."
+
+  def error_message(:inactive_key),
+    do: "This key is expired or revoked. Create a new key instead."
+
   def error_message(_), do: "This change is not allowed. Refresh the page and check your access."
 
   def grant_params(params) do
@@ -43,9 +48,16 @@ defmodule AiControlWeb.OrganizationUI do
 
     %{
       "permissions" => permissions,
-      "agents" => if(params["all_agents"] == "true", do: ["*"], else: []),
+      "agents" => if(params["all_agents"] == "true", do: ["*"], else: selected_agents(params)),
       "models" => if(params["all_models"] == "true", do: ["*"], else: [])
     }
+  end
+
+  defp selected_agents(params) do
+    case Map.get(params, "agents", []) do
+      values when is_list(values) -> Enum.reject(values, &(&1 in ["", "false"]))
+      invalid -> invalid
+    end
   end
 
   def access_form(grants, role \\ :user) do
@@ -63,6 +75,7 @@ defmodule AiControlWeb.OrganizationUI do
   attr :form, :any, required: true
   attr :allowed, :any, required: true
   attr :id, :string, required: true
+  attr :agent_options, :list, default: []
 
   def grant_fields(assigns) do
     assigns = assign(assigns, :permissions, Grants.permissions())
@@ -89,7 +102,7 @@ defmodule AiControlWeb.OrganizationUI do
     <fieldset class="access-fieldset">
       <legend>Resource access</legend>
       <p class="muted text-sm mb-4">
-        No resources are allowed by default. All-resource access also covers resources added later. Specific agents and models can be assigned when their registries are available.
+        No resources are allowed by default. Choose specific agents or allow all organization agents, including agents registered later. The model registry is not available yet.
       </p>
       <div class="permission-grid">
         <.input
@@ -107,6 +120,21 @@ defmodule AiControlWeb.OrganizationUI do
           label="Allow all organization models"
         />
       </div>
+      <fieldset :if={@agent_options != []} class="specific-agent-options mt-4">
+        <legend>Specific agents</legend>
+        <.input
+          :for={{name, id} <- @agent_options}
+          type="checkbox"
+          name="access[agents][]"
+          id={"#{@id}-agent-#{id}"}
+          checkbox_value={id}
+          checked={id in (@form[:agents].value || [])}
+          label={name}
+        />
+        <p class="muted text-sm">
+          Choose any number of agents. The all-agents option takes precedence.
+        </p>
+      </fieldset>
     </fieldset>
     """
   end

@@ -126,6 +126,22 @@ defmodule AiControlWeb.Layouts do
         <.icon name="hero-building-office-2" class="size-4 shrink-0" /> Organization
       </.link>
       <.link
+        :if={@current_scope.organization && "agents.read" in @current_scope.grants.permissions}
+        navigate={~p"/organizations/#{@current_scope.organization.id}/agents"}
+        class="nav-link"
+        aria-current={@active_page == "agents" && "page"}
+      >
+        <.icon name="hero-cpu-chip" class="size-4 shrink-0" /> Agents
+      </.link>
+      <.link
+        :if={@current_scope.organization && "api_keys.read" in @current_scope.grants.permissions}
+        navigate={~p"/organizations/#{@current_scope.organization.id}/api-keys"}
+        class="nav-link"
+        aria-current={@active_page == "api-keys" && "page"}
+      >
+        <.icon name="hero-key" class="size-4 shrink-0" /> API keys
+      </.link>
+      <.link
         :if={@current_scope.organization && AiControl.Organizations.managers?(@current_scope)}
         navigate={~p"/organizations/#{@current_scope.organization.id}/members"}
         class="nav-link"
