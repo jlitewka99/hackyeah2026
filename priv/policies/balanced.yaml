@@ -1,0 +1,21 @@
+# Authoring format, not an active policy. Import, save, review, then activate.
+schema_version: 1
+profile: balanced
+allowed_models:
+  - "qwen3.5:4b"
+allowed_agents:
+  - "*"
+# Empty mappings inherit profile defaults. Explicit fields override them.
+rules: {}
+guards: {}
+agent_models: {}
+# Counters and enforcement are introduced in step 9.
+budgets:
+  organization:
+    requests_per_hour: null
+    tokens_per_hour: null
+  agent:
+    requests_per_hour: null
+    tokens_per_hour: null
+  workflow:
+    tool_calls: null

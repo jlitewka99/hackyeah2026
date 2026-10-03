@@ -1,0 +1,527 @@
+<% draft_defaults = defaults(@form) %>
+<div class="page-content" id="policy-page">
+  <div class="policy-heading">
+    <div>
+      <h1>{if @target == :global, do: "Global policy", else: "Policies"}</h1>
+      <p class="page-description">
+        {if @target == :global,
+          do: "Set the default protection for organizations that inherit your policy.",
+          else: "Review the protection your organization uses and publish changes deliberately."}
+      </p>
+    </div>
+    <button
+      :if={@manage? && !@editing?}
+      id="policy-new"
+      type="button"
+      class="button-primary"
+      phx-click="new"
+      phx-disable-with="Opening…"
+    >
+      <.icon name="hero-plus" class="size-4" /> Create a version
+    </button>
+  </div>
+
+  <section class="list-section" aria-labelledby="effective-policy-heading" id="effective-policy">
+    <div class="policy-heading">
+      <div>
+        <h2 id="effective-policy-heading">Active policy</h2>
+        <p class="muted mt-2" id="policy-source">
+          {cond do
+            @target == :global -> "Global default"
+            @current.inherited? -> "Inherited from the global policy"
+            true -> "Organization policy"
+          end}
+          <span class="mx-2" aria-hidden="true">·</span>
+          {String.capitalize(@current.version.settings["profile"])}
+        </p>
+      </div>
+      <.link
+        id="policy-effective-export"
+        href={export_path(@target, @current_scope, @current.version.id)}
+        class="button-secondary"
+      >
+        <.icon name="hero-arrow-down-tray" class="size-4" /> Export YAML
+      </.link>
+    </div>
+    <dl class="policy-summary mt-6">
+      <div>
+        <dt>Personal data</dt><dd>
+          {String.capitalize(@current.version.settings["rules"]["pii"]["action"])}
+        </dd>
+      </div>
+      <div>
+        <dt>Prompt injection</dt><dd>
+          {String.capitalize(@current.version.settings["rules"]["prompt_injection"]["action"])} from {@current.version.settings[
+            "rules"
+          ]["prompt_injection"]["threshold"]}
+        </dd>
+      </div>
+      <div>
+        <dt>Allowed models</dt><dd>
+          {if @current.version.settings["allowed_models"] == [],
+            do: "None",
+            else: Enum.join(@current.version.settings["allowed_models"], ", ")}
+        </dd>
+      </div>
+    </dl>
+    <p class="muted text-sm mt-4 break-all">
+      Version {short(@current.version.id)} · SHA-256 {@current.version.checksum}
+    </p>
+    <p class="muted mt-3">
+      Controls are configured here. Detection and budget accounting will become available as those services are connected.
+    </p>
+    <details
+      class="mt-4"
+      id="policy-effective-details"
+      open={MapSet.member?(@open_sections, "effective")}
+    >
+      <summary
+        class="text-link cursor-pointer py-2"
+        phx-click="toggle_section"
+        phx-value-section="effective"
+      >
+        View all active settings
+      </summary>
+      <dl class="mt-3 space-y-3">
+        <div :for={{category, rule} <- Enum.sort(@current.version.settings["rules"])}>
+          <dt class="font-medium">{label(category)}</dt><dd class="muted">
+            {String.capitalize(rule["action"])} from {rule["threshold"]} · {rule["id"]}
+          </dd>
+        </div>
+        <div :for={{guard, settings} <- Enum.sort(@current.version.settings["guards"])}>
+          <dt class="font-medium">{label(guard)}</dt><dd class="muted">
+            {cond do
+              !settings["enabled"] -> "Disabled"
+              settings["required"] -> "Required"
+              true -> "Optional"
+            end} · {Enum.join(settings["stages"], ", ")}
+          </dd>
+        </div>
+        <div>
+          <dt class="font-medium">Allowed agents</dt><dd class="muted break-all">
+            {case @current.version.settings["allowed_agents"] do
+              ["*"] -> "All agents in the organization"
+              [] -> "None"
+              agents -> Enum.join(agents, ", ")
+            end}
+          </dd>
+        </div>
+        <div :for={{agent, models} <- Enum.sort(@current.version.settings["agent_models"])}>
+          <dt class="font-medium break-all">Agent {agent}</dt><dd class="muted break-all">
+            {if models == [], do: "No models", else: Enum.join(models, ", ")}
+          </dd>
+        </div>
+        <div :for={{scope, limits} <- Enum.sort(@current.version.settings["budgets"])}>
+          <dt class="font-medium">{label(scope)} limits</dt><dd
+            :for={{field, limit} <- Enum.sort(limits)}
+            class="muted"
+          >
+            {label(field)}: {if is_nil(limit), do: "Not configured", else: limit}
+          </dd>
+        </div>
+      </dl>
+    </details>
+    <button
+      :if={@manage? && @target == :organization && !@current.inherited?}
+      id="policy-inherit"
+      type="button"
+      class="button-secondary mt-4"
+      phx-click="inherit"
+      phx-disable-with="Restoring…"
+      data-confirm="Use the current global policy? New requests will inherit future global changes. Your organization versions will be kept."
+    >Use global policy</button>
+    <p :if={@changed_elsewhere?} class="policy-notice mt-4" id="policy-updated" role="status">
+      The policy changed while this page was open. Your unsaved edits are preserved. Review the current policy before activating a version.
+    </p>
+  </section>
+
+  <section
+    :if={@preview}
+    class="list-section"
+    id="policy-preview"
+    aria-labelledby="preview-heading"
+  >
+    <div class="policy-heading">
+      <div>
+        <h2 id="preview-heading">Review version {short(@preview.id)}</h2><p class="muted mt-2">
+          Created {Calendar.strftime(@preview.inserted_at, "%d %b %Y, %H:%M UTC")} · {if @preview.origin ==
+                                                                                           "system",
+                                                                                         do:
+                                                                                           "System default",
+                                                                                         else:
+                                                                                           "Author #{@preview.author_id}"}
+        </p>
+      </div>
+      <.link href={export_path(@target, @current_scope, @preview.id)} class="button-secondary">Export YAML</.link>
+    </div>
+    <p :if={@changes == []} class="muted mt-4">These settings match the active policy.</p>
+    <div :if={@changes != []} class="policy-diff mt-4" id="policy-diff">
+      <div
+        :for={change <- @changes}
+        class="policy-diff-row"
+        id={"policy-diff-#{String.replace(change.path, ".", "-")}"}
+      >
+        <p class="font-medium break-all">{change.path}</p>
+        <p><span class="muted">Current: </span><span class="break-all">{change.before}</span></p>
+        <p><span class="muted">New: </span><span class="break-all">{change.after}</span></p>
+      </div>
+    </div>
+    <div :if={@manage? && @preview.id != @current.version.id} class="row-actions mt-6">
+      <button
+        :if={@review_stale?}
+        id="policy-refresh-review"
+        type="button"
+        class="button-secondary"
+        phx-click="refresh_review"
+        phx-disable-with="Refreshing…"
+      >Review latest changes</button>
+      <button
+        id="policy-activate"
+        type="button"
+        class="button-primary"
+        phx-click={to_string(@preview_operation)}
+        phx-value-id={@preview.id}
+        disabled={@review_stale?}
+        phx-disable-with="Activating…"
+        data-confirm="Activate this version for new requests? Requests already in progress keep their current policy."
+      >{if @preview_operation == :rollback,
+        do: "Restore this version",
+        else: "Activate this version"}</button>
+      <button
+        id="policy-preview-copy"
+        type="button"
+        class="button-secondary"
+        phx-click="copy"
+        phx-value-id={@preview.id}
+        phx-disable-with="Opening…"
+      >Edit as a new version</button>
+    </div>
+  </section>
+
+  <section
+    :if={@errors != []}
+    class="policy-notice policy-errors mt-6"
+    id="policy-errors"
+    role="alert"
+  >
+    <h2>Review the configuration</h2>
+    <ul class="mt-2 space-y-1">
+      <li :for={{path, message} <- @errors}>
+        <span class="font-medium">{path}</span>: {message}
+      </li>
+    </ul>
+  </section>
+
+  <section
+    :if={@editing? && @manage?}
+    class="list-section"
+    id="policy-editor"
+    aria-labelledby="editor-heading"
+  >
+    <h2 id="editor-heading">Create an immutable version</h2>
+    <p class="muted mt-2">
+      Profile defaults fill unspecified fields. Explicit overrides stay in place when you change the profile. Saving leaves the active policy unchanged.
+    </p>
+    <.form for={@form} id="policy-form" phx-change="validate" phx-submit="save" class="mt-6">
+      <.input
+        field={@form[:profile]}
+        type="select"
+        label="Protection profile"
+        options={[Relaxed: "relaxed", Balanced: "balanced", Strict: "strict"]}
+        errors={field_errors(@errors, "profile")}
+      />
+      <div class="mt-6" id="policy-rules">
+        <h3 class="font-medium">Detection rules</h3>
+        <div :for={category <- @categories} class="policy-rule-row">
+          <p class="font-medium">{label(category)}</p>
+          <.input
+            name={"policy[rules][#{category}][action]"}
+            id={"policy-rule-#{category}-action"}
+            value={nested(@form, :rules, category, "action")}
+            type="select"
+            label="Action override"
+            options={[
+              {"Profile default · #{label(draft_defaults["rules"][category]["action"])}", ""},
+              {"Allow", "allow"},
+              {"Redact", "redact"},
+              {"Block", "block"}
+            ]}
+            errors={field_errors(@errors, "rules.#{category}.action")}
+          />
+          <.input
+            name={"policy[rules][#{category}][threshold]"}
+            id={"policy-rule-#{category}-threshold"}
+            value={nested(@form, :rules, category, "threshold")}
+            type="number"
+            min="0"
+            max="1"
+            step="0.01"
+            label="Threshold override"
+            placeholder={to_string(draft_defaults["rules"][category]["threshold"])}
+            errors={field_errors(@errors, "rules.#{category}.threshold")}
+          />
+          <.input
+            name={"policy[rules][#{category}][id]"}
+            id={"policy-rule-#{category}-id"}
+            value={nested(@form, :rules, category, "id")}
+            type="hidden"
+          />
+        </div>
+      </div>
+      <details
+        class="policy-details"
+        id="policy-guards"
+        open={MapSet.member?(@open_sections, "guards")}
+      >
+        <summary phx-click="toggle_section" phx-value-section="guards">
+          Guard requirements and stages
+        </summary>
+        <p class="muted mt-3">
+          An unavailable required guard blocks the request. Select Profile default to remove an override.
+        </p>
+        <div :for={guard <- @guards} class="policy-rule-row">
+          <p class="font-medium">{label(guard)}</p>
+          <.input
+            name={"policy[guards][#{guard}][mode]"}
+            id={"policy-guard-#{guard}-mode"}
+            value={nested(@form, :guards, guard, "mode")}
+            type="select"
+            label="Requirement override"
+            options={[
+              {"Profile default · #{if draft_defaults["guards"][guard]["required"], do: "required", else: "optional"}",
+               ""},
+              {"Required", "required"},
+              {"Optional", "optional"},
+              {"Disabled", "disabled"}
+            ]}
+          />
+          <.input
+            name={"policy[guards][#{guard}][stages]"}
+            id={"policy-guard-#{guard}-stages"}
+            value={nested(@form, :guards, guard, "stages")}
+            type="select"
+            label="Stage override"
+            options={[
+              {"Profile default · #{Enum.join(draft_defaults["guards"][guard]["stages"], ", ")}",
+               ""},
+              {"Input", "input"},
+              {"Output", "output"},
+              {"Input and output", "input,output"}
+            ]}
+          />
+        </div>
+      </details>
+      <details
+        class="policy-details"
+        id="policy-resources"
+        open={MapSet.member?(@open_sections, "resources")}
+      >
+        <summary phx-click="toggle_section" phx-value-section="resources">
+          Models and agents
+        </summary>
+        <div class="mt-4">
+          <.input
+            field={@form[:allowed_models]}
+            type="textarea"
+            rows="3"
+            label="Allowed models"
+            errors={field_errors(@errors, "allowed_models")}
+          />
+          <p class="muted text-sm mt-2">
+            One model name per line. An empty list denies all models; * allows models verified by the model catalog.
+          </p>
+          <.input
+            field={@form[:allowed_agents]}
+            type="select"
+            multiple
+            label="Allowed agents"
+            options={[
+              {"All agents in this organization", "*"} | Enum.map(@agents, &{&1.name, &1.id})
+            ]}
+            errors={field_errors(@errors, "allowed_agents")}
+          />
+          <p class="muted text-sm mt-2">
+            Choose all agents or specific agents. Selecting none denies all agents. Individual user grants still apply.
+          </p>
+        </div>
+        <div :for={agent <- @agents} class="policy-rule-row">
+          <p class="font-medium break-words">{agent.name}</p>
+          <.input
+            name={"policy[agent_models][#{agent.id}][mode]"}
+            id={"policy-agent-#{agent.id}-mode"}
+            value={nested(@form, :agent_models, agent.id, "mode", "inherit")}
+            type="select"
+            label="Model access"
+            options={[
+              {"Use allowed models", "inherit"},
+              {"Restrict models", "restrict"},
+              {"Deny all models", "deny"}
+            ]}
+          />
+          <.input
+            name={"policy[agent_models][#{agent.id}][models]"}
+            id={"policy-agent-#{agent.id}-models"}
+            value={nested(@form, :agent_models, agent.id, "models")}
+            type="textarea"
+            rows="2"
+            label="Restricted models"
+          />
+        </div>
+      </details>
+      <details
+        class="policy-details"
+        id="policy-budgets"
+        open={MapSet.member?(@open_sections, "budgets")}
+      >
+        <summary phx-click="toggle_section" phx-value-section="budgets">Budget limits</summary>
+        <p class="muted mt-3">
+          Configuration only; accounting is not connected yet. Leave a limit empty for not configured. Zero denies usage once accounting is connected. Hourly windows use UTC.
+        </p>
+        <fieldset :for={{scope, fields} <- @budget_fields} class="mt-4">
+          <legend class="font-medium">{label(scope)}</legend>
+          <div class="policy-budget-grid mt-3">
+            <.input
+              :for={field <- fields}
+              name={"policy[budgets][#{scope}][#{field}]"}
+              id={"policy-budget-#{scope}-#{field}"}
+              value={nested(@form, :budgets, scope, field)}
+              type="number"
+              min="0"
+              step="1"
+              label={label(field)}
+              placeholder="Not configured"
+              errors={field_errors(@errors, "budgets.#{scope}.#{field}")}
+            />
+          </div>
+        </fieldset>
+      </details>
+      <div class="row-actions mt-6">
+        <.button id="policy-save" class="button-primary" phx-disable-with="Saving…">Save version</.button>
+        <button id="policy-cancel" type="button" class="button-secondary" phx-click="cancel">Cancel</button>
+      </div>
+    </.form>
+  </section>
+
+  <section :if={@manage?} class="list-section" aria-labelledby="import-heading">
+    <details id="policy-import-panel" open={MapSet.member?(@open_sections, "import")}>
+      <summary
+        class="font-medium"
+        id="import-heading"
+        phx-click="toggle_section"
+        phx-value-section="import"
+      >
+        Import YAML
+      </summary>
+      <p class="muted mt-3">
+        Paste a policy or upload one file up to 64 KiB. Import validates the settings and opens the editor; it does not activate them.
+      </p>
+      <.form
+        for={@yaml_form}
+        id="policy-import-form"
+        phx-change="validate_yaml"
+        phx-submit="import"
+        class="mt-4"
+      >
+        <.input
+          field={@yaml_form[:text]}
+          type="textarea"
+          rows="8"
+          label="Policy YAML"
+          class={["field-input policy-yaml", @yaml_errors != [] && "field-invalid"]}
+          aria-invalid={if @yaml_errors != [], do: "true", else: "false"}
+          aria-describedby={if @yaml_errors != [], do: "policy-import-errors"}
+        />
+        <div
+          :if={@yaml_errors != []}
+          id="policy-import-errors"
+          role="alert"
+          class="field-error mt-2"
+        >
+          <p :for={{path, message} <- @yaml_errors}>
+            <span class="font-medium">{path}</span>: {message}
+          </p>
+          <p class="mt-2">
+            Correct the policy and validate it again. Your editor changes are preserved.
+          </p>
+        </div>
+        <label for={@uploads.policy_yaml.ref} class="font-medium block mt-4">Or choose a YAML file</label>
+        <.live_file_input upload={@uploads.policy_yaml} class="policy-file-input mt-2" />
+        <p :for={error <- upload_errors(@uploads.policy_yaml)} class="field-error" role="alert">
+          {label(Atom.to_string(error))}
+        </p>
+        <div :for={entry <- @uploads.policy_yaml.entries} class="mt-2">
+          <span>{entry.client_name} · {entry.progress}%</span>
+          <button
+            id={"cancel-upload-#{entry.ref}"}
+            type="button"
+            phx-click="cancel_upload"
+            phx-value-ref={entry.ref}
+            class="text-link ml-3"
+          >Remove file</button>
+          <p
+            :for={error <- upload_errors(@uploads.policy_yaml, entry)}
+            class="field-error"
+            role="alert"
+          >
+            {label(Atom.to_string(error))}
+          </p>
+        </div>
+        <.button id="policy-import" class="button-secondary mt-4" phx-disable-with="Validating…">Validate and open editor</.button>
+      </.form>
+    </details>
+  </section>
+
+  <section class="list-section" aria-labelledby="history-heading">
+    <h2 id="history-heading">Version history</h2>
+    <p class="muted mt-2">
+      Saved versions never change. Reactivating an earlier version preserves its author and settings.
+    </p>
+    <div id="policy-version-list" phx-update="stream" class="mt-4">
+      <p id="policy-history-empty" class="hidden only:block muted py-6">
+        No organization versions yet. The global policy provides the defaults.
+      </p>
+      <div :for={{id, row} <- @streams.versions} id={id} class="resource-row">
+        <div class="min-w-0 flex-1">
+          <p class="font-medium">
+            {String.capitalize(row.version.settings["profile"])} · {short(row.id)}
+          </p>
+          <p class="muted text-sm mt-1">
+            Saved {Calendar.strftime(row.version.inserted_at, "%d %b %Y, %H:%M UTC")}
+          </p>
+          <p
+            class="resource-status mt-2"
+            data-status={if row.active?, do: "active", else: "inactive"}
+          >
+            {cond do
+              row.active? -> "Active"
+              row.activation -> "Previously active"
+              true -> "Saved · not active"
+            end}
+          </p>
+          <p :if={row.activation} class="muted text-sm mt-1">
+            Last activated {Calendar.strftime(row.activation.inserted_at, "%d %b %Y, %H:%M UTC")}
+          </p>
+        </div>
+        <div class="row-actions">
+          <button
+            id={"policy-view-#{row.id}"}
+            type="button"
+            class="button-secondary"
+            phx-click="view"
+            phx-value-id={row.id}
+            phx-disable-with="Opening…"
+          >Review</button>
+          <button
+            :if={@manage? && row.activation && !row.active?}
+            id={"policy-rollback-#{row.id}"}
+            type="button"
+            class="button-secondary"
+            phx-click="review_rollback"
+            phx-value-id={row.id}
+            phx-disable-with="Opening…"
+          >Restore</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>

@@ -181,3 +181,24 @@ h2 { font-size: 1.0625rem; line-height: 1.4; font-weight: 600; letter-spacing: -
 }
 
 [hidden] { display: none !important; }
+
+/* Policy configuration extends the existing ruled workspace. */
+.policy-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap; }
+.policy-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.5rem; }
+.policy-summary dt { color: var(--muted); font-size: .875rem; }
+.policy-summary dd { margin-top: .5rem; font-weight: 550; overflow-wrap: anywhere; }
+.policy-rule-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; align-items: center; padding-block: 1.25rem; border-bottom: 1px solid var(--line); }
+.policy-details { padding-block: 1.5rem; border-bottom: 1px solid var(--line); }
+.policy-details summary, #policy-import-panel summary { cursor: pointer; min-height: 2.75rem; display: list-item; padding-block: .625rem; font-weight: 550; }
+.policy-budget-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.policy-notice { background: var(--surface-subtle); border: 1px solid var(--line); border-radius: .75rem; padding: 1rem; }
+.policy-errors { color: var(--danger); background: var(--danger-bg); }
+.policy-diff-row { padding-block: 1rem; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; font-size: .875rem; }
+.policy-yaml { font-family: ui-monospace, SFMono-Regular, monospace; font-size: .875rem; line-height: 1.6; caret-color: var(--focus); }
+.policy-file-input { display: block; max-width: 100%; font-size: .875rem; }
+.policy-file-input::file-selector-button { padding: .625rem 1rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--surface); color: var(--ink); margin-right: .75rem; cursor: pointer; }
+@media (max-width: 640px) {
+  .policy-summary, .policy-rule-row, .policy-budget-grid, .policy-diff-row { grid-template-columns: minmax(0, 1fr); }
+  .policy-heading { gap: 1rem; }
+  .policy-yaml { font-size: 1rem; }
+}

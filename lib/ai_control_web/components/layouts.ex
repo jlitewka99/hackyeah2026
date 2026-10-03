@@ -150,6 +150,22 @@ defmodule AiControlWeb.Layouts do
         <.icon name="hero-user-group" class="size-4 shrink-0" /> Members
       </.link>
       <.link
+        :if={@current_scope.organization && "policies.read" in @current_scope.grants.permissions}
+        navigate={~p"/organizations/#{@current_scope.organization.id}/policies"}
+        class="nav-link"
+        aria-current={@active_page == "policies" && "page"}
+      >
+        <.icon name="hero-shield-check" class="size-4 shrink-0" /> Policies
+      </.link>
+      <.link
+        :if={@current_scope.user.organizer}
+        navigate={~p"/platform/policies"}
+        class="nav-link"
+        aria-current={@active_page == "global-policy" && "page"}
+      >
+        <.icon name="hero-shield-check" class="size-4 shrink-0" /> Global policy
+      </.link>
+      <.link
         :if={@current_scope.user.organizer}
         navigate={~p"/platform/organizations"}
         class="nav-link"

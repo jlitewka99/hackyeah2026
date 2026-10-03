@@ -7,6 +7,8 @@
 # General application configuration
 import Config
 
+config :mime, :types, %{"application/yaml" => ["yaml", "yml"]}
+
 config :ai_control, :scopes,
   user: [
     default: true,

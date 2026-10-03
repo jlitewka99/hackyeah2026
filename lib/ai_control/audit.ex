@@ -5,6 +5,7 @@ defmodule AiControl.Audit do
   alias AiControl.Audit.Event
   alias AiControl.Organizations
   alias AiControl.Organizations.{Access, Grants}
+  alias AiControl.Policy.Snapshot
   alias AiControl.Repo
 
   alias AiControl.Security.{
@@ -15,8 +16,53 @@ defmodule AiControl.Audit do
     Validation
   }
 
-  @admin_events ~w(organization.created organization.status_changed member.access_changed member.removed superadmin.transferred invitation.issued invitation.revoked invitation.accepted invitation.delivery_failed)
-  @snapshot_fields ~w(status role permissions agent_count model_count grants_fingerprint grants_fingerprint_key_id user_id previous_superadmin_id next_superadmin_id membership_id invitation_id)a
+  @policy_events ~w(policy.version_created policy.activated policy.rolled_back policy.inheritance_restored)
+  @admin_events ~w(organization.created organization.status_changed member.access_changed member.removed superadmin.transferred invitation.issued invitation.revoked invitation.accepted invitation.delivery_failed) ++
+                  @policy_events
+  @snapshot_fields ~w(status role permissions agent_count model_count grants_fingerprint grants_fingerprint_key_id user_id previous_superadmin_id next_superadmin_id membership_id invitation_id policy_version_id policy_checksum policy_profile policy_source)a
+
+  def record_platform(%AiControl.Accounts.Scope{user: %{id: id}}, event_type, attrs) do
+    with true <- event_type in (@policy_events -- ["policy.inheritance_restored"]),
+         true <- admin_attrs?(attrs),
+         %{organizer: true} = user <- Repo.get(AiControl.Accounts.User, id, log: false) do
+      persist(%Event{
+        scope: :platform,
+        user_id: user.id,
+        actor_type: :user,
+        request_id: Ecto.UUID.generate(),
+        kind: :administrative,
+        event_type: event_type,
+        target_id: attrs.target_id,
+        stage: :administrative,
+        occurred_at: DateTime.utc_now(),
+        data: Map.delete(attrs, :target_id)
+      })
+    else
+      _ -> {:error, :invalid_audit_data}
+    end
+  end
+
+  def record_platform(_, _, _), do: {:error, :invalid_audit_data}
+
+  def list_platform_events(%AiControl.Accounts.Scope{user: %{id: id}}) do
+    case Repo.get(AiControl.Accounts.User, id, log: false) do
+      %{organizer: true} ->
+        {:ok,
+         Repo.all(
+           from(e in Event,
+             where: e.scope == :platform,
+             order_by: [desc: e.occurred_at],
+             limit: 200
+           ),
+           log: false
+         )}
+
+      _ ->
+        {:error, :forbidden}
+    end
+  end
+
+  def list_platform_events(_), do: {:error, :forbidden}
 
   def record_decision(context, assessment, decision) do
     if valid_decision?(context, assessment, decision) do
@@ -159,7 +205,8 @@ defmodule AiControl.Audit do
       failed_guards: assessment.failed_guards,
       redactions: decision.redactions,
       policy_evidence: %{
-        required_guards: decision.policy.required_guards,
+        required_guards: Snapshot.required_guards(decision.policy, decision.stage),
+        settings: decision.policy.settings,
         rules:
           Map.new(decision.policy.rules, fn {category, rule} ->
             {category,
@@ -224,5 +271,8 @@ defmodule AiControl.Audit do
 
   defp snapshot_value?(:grants_fingerprint, value), do: Validation.checksum?(value)
   defp snapshot_value?(:grants_fingerprint_key_id, value), do: Validation.code?(value)
+  defp snapshot_value?(:policy_checksum, value), do: Validation.checksum?(value)
+  defp snapshot_value?(:policy_profile, value), do: value in ~w(relaxed balanced strict)
+  defp snapshot_value?(:policy_source, value), do: value == "global"
   defp snapshot_value?(_, value), do: Validation.uuid?(value)
 end

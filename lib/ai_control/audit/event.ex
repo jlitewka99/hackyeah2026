@@ -7,6 +7,7 @@ defmodule AiControl.Audit.Event do
   @primary_key {:id, :binary_id, autogenerate: true}
   @fields [
     :organization_id,
+    :scope,
     :actor_type,
     :user_id,
     :agent_id,
@@ -30,6 +31,7 @@ defmodule AiControl.Audit.Event do
 
   schema "audit_events" do
     field :organization_id, :binary_id
+    field :scope, Ecto.Enum, values: [:organization, :platform], default: :organization
     field :actor_type, Ecto.Enum, values: [:user, :agent]
     field :user_id, :binary_id
     field :agent_id, :binary_id
@@ -57,7 +59,7 @@ defmodule AiControl.Audit.Event do
     event
     |> change()
     |> validate_required([
-      :organization_id,
+      :scope,
       :actor_type,
       :request_id,
       :kind,
@@ -68,6 +70,14 @@ defmodule AiControl.Audit.Event do
       :duration_us
     ])
     |> validate_number(:duration_us, greater_than_or_equal_to: 0)
+    |> validate_scope()
+    |> check_constraint(:scope, name: :audit_scope_identity)
     |> foreign_key_constraint(:organization_id)
+  end
+
+  defp validate_scope(changeset) do
+    if get_field(changeset, :scope) == :organization,
+      do: validate_required(changeset, [:organization_id]),
+      else: changeset
   end
 end

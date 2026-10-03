@@ -12,6 +12,7 @@ defmodule AiControl.Application do
       AiControlWeb.RequestLog,
       AiControl.Repo,
       AiControl.Accounts.LoginLimiter,
+      AiControl.Policies.Cache,
       {DNSCluster, query: Application.get_env(:ai_control, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: AiControl.PubSub},
       # Start a worker by calling: AiControl.Worker.start_link(arg)

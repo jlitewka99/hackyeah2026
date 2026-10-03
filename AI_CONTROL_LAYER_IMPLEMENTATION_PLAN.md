@@ -54,7 +54,7 @@ Checkboxy oznaczają potwierdzone zakończenie kroku, a nie samą obecność kod
 - [x] Krok 2 — Organizacje, członkostwa i zaproszenia
 - [x] Krok 3 — Agenci i klucze API
 - [x] Krok 4 — Wspólna domena decyzji i podstawowy audyt
-- [ ] Krok 5 — Centralny Policy Engine
+- [x] Krok 5 — Centralny Policy Engine
 - [ ] Krok 6 — Gateway LLM i konfiguracja środowiska
 - [ ] Krok 7 — Deterministyczne guardy i sygnatury
 - [ ] Krok 8 — Output filtering
@@ -318,10 +318,38 @@ w odpowiednich kolejnych krokach.
 - Połączyć indywidualne przydziały agenta/modelu z ograniczeniami polityki; żaden przydział nie uchyla zakazu organizacji.
 - Dodać profile `relaxed`, `balanced`, `strict`; jawne ustawienie konkretnej reguły nadpisuje domyślne ustawienie profilu.
 - Import YAML oraz formularze panelu wykorzystują ten sam walidator.
-- Po walidacji atomowo aktywować wersję i aktualizować cache ETS. Zapisać checksum, autora i czas aktywacji; umożliwić rollback.
+- Zapis tworzy niezmienną, nieaktywną wersję; aktywacja i rollback są osobnymi operacjami z oczekiwaną rewizją. Aktywację, historię i audyt zapisać w jednej transakcji, a po commit uzupełnić ETS i opublikować PubSub.
 - Każde żądanie zachowuje jeden snapshot polityki przez wszystkie swoje etapy. Nowe żądania używają nowej wersji.
 
 **Gotowe, gdy:** błędna polityka nie zastępuje aktywnej, a zmiana `redact → block` zmienia wynik kolejnego żądania.
+
+**Status odbioru (2026-10-03):** wdrożono globalną politykę organizatora,
+dziedziczenie oraz pełne polityki organizacji, wersje, aktywacje, rollback,
+historię, wspólny walidator formularza/YAML, eksport i nadzorowany cache ETS.
+Migracja inicjalizuje systemową wersję `balanced`, model `qwen3.5:4b`, wszystkich
+aktywnych agentów organizacji oraz nieskonfigurowane budżety. Panel organizacji
+i platformy zachowuje istniejący system wizualny, pokazuje różnice przed aktywacją
+i zachowuje edycję przy PubSub. PostgreSQL wymusza przynależność wersji do zestawu;
+blokady i rewizje chronią przed utratą równoczesnych zmian. Audyt platformowy jest
+dostępny tylko organizatorowi, a odczyty organizacji pozostają izolowane.
+Testy potwierdzają `redact → block` dla nowego żądania z zachowaniem starej decyzji
+w rozpoczętym wcześniej żądaniu, współbieżną aktywację, rollback przy błędzie
+audytu, opóźniony cache, odbudowę ETS oraz przecięcie polityki i bieżących
+przydziałów. Odbiór wykonano na oddzielnej instancji PostgreSQL. Gateway,
+detektory, wykonanie redakcji i liczniki budżetowe pozostają w kolejnych krokach;
+ten krok dostarcza ich konfigurację i kontrakty.
+
+`mix precommit` przeszedł: 298 testów ExUnit, 3 testy JavaScript, brak uwag
+Credo i ostrzeżeń kompilacji. Przeszły również `mix assets.build`, Dialyzer,
+Sobelow, audyt zależności i sprawdzenie lockfile wymagane przez CI. Przykładowy
+`priv/policies/balanced.yaml` przeszedł wspólny walidator.
+
+Odbiór `impeccable` objął desktop 1440 px, mobile 390 px, widok 1280 px,
+oba motywy, klawiaturę, długie wartości, edycję, błędy i podgląd zmian.
+Niezależny przegląd wskazał nieaktualne porównanie po zmianie polityki oraz
+odległy komunikat błędu YAML. Po poprawkach reviewer zamknął obie uwagi
+werdyktem `ship` dla tej listy. Końcowa dokumentacja zachowuje istniejący
+system wizualny i opisuje uwagi detektora bez rozszerzania jego zasad.
 
 ### Krok 6. Gateway LLM i konfiguracja środowiska
 
