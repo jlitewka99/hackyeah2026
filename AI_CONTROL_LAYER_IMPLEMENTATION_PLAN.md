@@ -169,6 +169,45 @@ udostępnia jawne selektory wszystkich zasobów; wywołania AI i niezweryfikowan
 konkretne przydziały są odrzucane. Integracja polityki i gatewaya pozostaje
 w krokach 3, 5 i 6.
 
+**Naprawa regresji kroku 2 — 2026-10-03:** akceptacja zaproszenia przez
+uwierzytelnione, istniejące konto zachowuje token sesji, dokładny
+`authenticated_at`, remember-me, CSRF i identyfikator LiveView. Usuwa
+`user_return_to` i przekierowuje do przyjętej organizacji bez tworzenia
+dodatkowej sesji. Nowe konto nadal otrzymuje sesję po atomowej aktywacji.
+Rozróżnienie korzysta z uwierzytelnionego `current_scope`.
+
+Niepoprawny changeset zaproszenia otrzymuje `action: :insert`, dzięki czemu
+oba formularze pokazują komunikat pola i `aria-invalid`. Po udanym wysłaniu
+formularz zachowuje wysłany email i rolę, usuwa poprzednie błędy oraz zachowuje
+wybór organizacji i zaznaczone przydziały. Nie zmieniono publicznego API ani
+schematu bazy.
+
+**Weryfikacja naprawy:** 11 testów kontrolera i formularzy przeszło;
+`mix precommit` przeszedł z 166 testami, bez ostrzeżeń kompilacji i uwag Credo.
+`mix assets.build` przeszedł. Regresje obejmują sesje uwierzytelnione 1, 11
+i 21 minut wcześniej, brak dodatkowej sesji, dokładny czas uwierzytelnienia,
+remember-me, identyfikator LiveView, pozostałe członkostwa oraz żądania z
+rzeczywistym tokenem CSRF. Dla sesji sprzed 11 i 21 minut ustawienia nadal
+wymagają logowania, a zmiana hasła zostaje odrzucona bez zmiany hasha.
+Zachowano testy nowego konta, niewłaściwego konta i jednorazowości zaproszeń.
+Email dłuższy niż 160 znaków nie zapisuje zaproszenia ani nie wysyła emaila;
+poprawienie danych pozwala wysłać zaproszenie i usuwa błąd. Czas ustawiono
+w danych testowych, bez usypiania procesów.
+
+Odbiór w przeglądarce objął oba formularze w ośmiu wariantach: desktop
+1440 px / mobile 390 px, jasny / ciemny motyw, błąd → sukces. Zapisano
+16 zrzutów; potwierdzono widoczny fokus, obsługę Tab/Enter, komunikaty,
+`aria-invalid`, zachowanie wyborów i brak poziomego przewijania. W bazie
+podglądu powstało dokładnie osiem poprawnych zaproszeń z właściwymi rolami
+i przydziałami. Testy i podgląd użyły dwóch wydzielonych baz tymczasowej
+instancji PostgreSQL; mailer podglądu był lokalny.
+
+Ograniczony odbiór `impeccable` nie wykazał regresji w badanych stanach.
+Detektor: 0 błędów, 1 zastana uwaga o rozmiarze `1rem` legendy przydziałów.
+Sprawdzenie mobile dotyczyło viewportu przeglądarki; urządzenia fizyczne
+iOS nie były testowane, a zastane pola zachowują rozmiar 14 px. Odświeżenie
+sidecara pozostaje osobnym zadaniem.
+
 ### Krok 3. Agenci i klucze API
 
 - Dodać rejestr agentów: nazwa, identyfikator, organizacja, status.
