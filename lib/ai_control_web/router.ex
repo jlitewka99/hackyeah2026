@@ -1,6 +1,7 @@
 defmodule AiControlWeb.Router do
   use AiControlWeb, :router
 
+  import AiControlWeb.OrganizationAuth
   import AiControlWeb.UserAuth
 
   pipeline :browser do
@@ -24,17 +25,20 @@ defmodule AiControlWeb.Router do
   scope "/", AiControlWeb do
     pipe_through :browser
     get "/", PageController, :home
+    get "/invitations/:token/sign-in", InvitationController, :sign_in, log: false
 
     live_session :current_user,
       on_mount: [{AiControlWeb.UserAuth, :mount_current_scope}] do
       live "/users/log-in", UserLoginLive, :new
       live "/users/recover", UserRecoveryLive, :new
       live "/users/log-in/:token", UserConfirmationLive, :new, metadata: %{log: false}
+      live "/invitations/:token", InvitationLive, :show, metadata: %{log: false}
     end
 
     post "/users/log-in", UserSessionController, :create
     post "/users/recover", UserSessionController, :request_link
     delete "/users/log-out", UserSessionController, :delete
+    post "/invitations/accept", InvitationController, :accept, log: false
   end
 
   scope "/", AiControlWeb do
@@ -43,12 +47,32 @@ defmodule AiControlWeb.Router do
     live_session :authenticated,
       on_mount: [{AiControlWeb.UserAuth, :require_authenticated}] do
       live "/users/settings", UserSettingsLive, :edit
+      live "/organizations", OrganizationsLive, :index
 
       live "/users/settings/confirm-email/:token", UserSettingsLive, :confirm_email,
         metadata: %{log: false}
     end
 
     post "/users/update-password", UserSessionController, :update_password
+  end
+
+  scope "/organizations/:organization_id", AiControlWeb do
+    pipe_through [:browser, :require_authenticated_user, :require_organization]
+
+    live_session :organization,
+      on_mount: [{AiControlWeb.OrganizationAuth, :require_organization}] do
+      live "/", OrganizationOverviewLive, :show
+    end
+  end
+
+  scope "/organizations/:organization_id", AiControlWeb do
+    pipe_through [:browser, :require_authenticated_user, :require_organization, :require_manager]
+
+    live_session :organization_management,
+      on_mount: [{AiControlWeb.OrganizationAuth, :require_organization}] do
+      live "/members", OrganizationMembersLive, :index
+      live "/members/:membership_id/access", OrganizationMemberAccessLive, :edit
+    end
   end
 
   scope "/platform", AiControlWeb do

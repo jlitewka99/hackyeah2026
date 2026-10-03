@@ -1,0 +1,30 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} active_page="members">
+  <div :if={assigns[:member]} class="page-content" id="member-access-editor">
+    <.link
+      navigate={~p"/organizations/#{@current_scope.organization.id}/members"}
+      class="text-link text-sm inline-flex items-center gap-2 mb-6"
+    ><.icon name="hero-arrow-left" class="size-4" />Back to members</.link>
+    <h1>Member access</h1><p class="page-description break-all">{@member.user.email}</p>
+    <.form for={@form} id="member-access-form" class="list-section" phx-submit="save">
+      <.input
+        field={@form[:role]}
+        label="Administrative role"
+        type="select"
+        options={
+          if AiControl.Organizations.privileged?(@current_scope),
+            do: [{"User", "user"}, {"Admin", "admin"}],
+            else: [{"User", "user"}]
+        }
+      />
+      <OrganizationUI.grant_fields
+        form={@form}
+        allowed={@current_scope.grants}
+        id="member-access"
+      />
+      <p :if={!AiControl.Organizations.privileged?(@current_scope)} class="muted text-sm mb-6">
+        You can edit access within your own permissions. Other existing grants are preserved.
+      </p>
+      <.button id="save-member-access" class="button-primary" phx-disable-with="Saving…">Save access</.button>
+    </.form>
+  </div>
+</Layouts.app>

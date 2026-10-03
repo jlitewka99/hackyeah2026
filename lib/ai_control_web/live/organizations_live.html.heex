@@ -1,0 +1,26 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} active_page="organization-picker">
+  <div class="page-content" id="workspace-picker">
+    <h1>Your workspaces</h1><p class="page-description">
+      Choose an organization. Your role and access can differ in each workspace.
+    </p>
+    <div id="workspace-list" phx-update="stream" class="list-section">
+      <div id="workspaces-empty" class="hidden only:block py-8">
+        <h2>No workspaces available</h2><p class="muted mt-2">
+          Accept an invitation to join an organization. Your account settings remain available.
+        </p>
+      </div>
+      <.link
+        :for={{id, organization} <- @streams.organizations}
+        id={id}
+        navigate={~p"/organizations/#{organization.id}"}
+        class="workspace-row"
+      ><span class="flex items-center gap-3 min-w-0"><.icon
+        name="hero-building-office-2"
+        class="size-5 shrink-0 muted"
+      /><span class="break-all font-medium">{organization.name}</span></span><.icon
+        name="hero-arrow-right"
+        class="size-4 shrink-0"
+      /></.link>
+    </div>
+  </div>
+</Layouts.app>

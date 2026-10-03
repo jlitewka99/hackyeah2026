@@ -113,6 +113,36 @@ defmodule AiControlWeb.Layouts do
     ~H"""
     <nav id={@id} class="space-y-1">
       <.link
+        navigate={~p"/organizations"}
+        class="nav-link"
+        aria-current={@active_page == "organization-picker" && "page"}
+      >
+        <.icon name="hero-squares-2x2" class="size-4 shrink-0" /> Workspaces
+      </.link>
+      <div
+        :if={@current_scope.organization}
+        class="workspace-label"
+        title={@current_scope.organization.name}
+      >
+        {@current_scope.organization.name}
+      </div>
+      <.link
+        :if={@current_scope.organization}
+        navigate={~p"/organizations/#{@current_scope.organization.id}"}
+        class="nav-link"
+        aria-current={@active_page == "overview" && "page"}
+      >
+        <.icon name="hero-building-office-2" class="size-4 shrink-0" /> Organization
+      </.link>
+      <.link
+        :if={@current_scope.organization && AiControl.Organizations.managers?(@current_scope)}
+        navigate={~p"/organizations/#{@current_scope.organization.id}/members"}
+        class="nav-link"
+        aria-current={@active_page == "members" && "page"}
+      >
+        <.icon name="hero-user-group" class="size-4 shrink-0" /> Members
+      </.link>
+      <.link
         :if={@current_scope.user.organizer}
         navigate={~p"/platform/organizations"}
         class="nav-link"

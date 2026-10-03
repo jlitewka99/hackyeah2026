@@ -18,7 +18,7 @@ defmodule AiControl.Accounts.Scope do
 
   alias AiControl.Accounts.User
 
-  defstruct user: nil
+  defstruct user: nil, organization: nil, membership: nil, grants: nil, access_mode: :account
 
   @doc """
   Creates a scope for the given user.

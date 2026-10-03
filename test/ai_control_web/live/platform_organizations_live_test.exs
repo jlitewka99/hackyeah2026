@@ -23,13 +23,14 @@ defmodule AiControlWeb.PlatformOrganizationsLiveTest do
     conn = log_in_user(conn, user)
     {:ok, view, _} = live(conn, ~p"/platform/organizations")
     assert has_element?(view, "#organizer-panel")
-    assert has_element?(view, "#organizations-unavailable")
+    assert has_element?(view, "#organization-create-form")
+    assert has_element?(view, "#owner-invitation-form")
     assert has_element?(view, "#desktop-navigation a[aria-current=page]")
     assert has_element?(view, "#desktop-log-out[data-method=delete]")
 
     assert {:ok, settings, _} =
              view
-             |> element("#panel-account-settings")
+             |> element("#desktop-navigation a[href='/users/settings']")
              |> render_click()
              |> follow_redirect(conn, ~p"/users/settings")
 

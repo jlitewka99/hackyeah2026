@@ -281,6 +281,14 @@ defmodule AiControlWeb.UserAuth do
   def signed_in_path(%Plug.Conn{assigns: %{current_scope: %Scope{user: user}}}),
     do: signed_in_path(user)
 
+  def signed_in_path(%Accounts.User{} = user) do
+    case AiControl.Organizations.list_organizations(Scope.for_user(user)) do
+      [organization] -> ~p"/organizations/#{organization.id}"
+      [] -> ~p"/users/settings"
+      _ -> ~p"/organizations"
+    end
+  end
+
   def signed_in_path(_), do: ~p"/users/settings"
 
   def require_organizer(conn, _opts) do
