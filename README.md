@@ -625,7 +625,8 @@ tools:
 ```
 
 Only the shipped immutable sets are accepted. `tools.allowed_tools` validates
-unique tool identifiers and defaults to empty; execution/enforcement is step 12.
+unique tool identifiers and defaults to empty. Step 12A enforces this list in the
+tool core and sandbox; production execution remains in step 12B.
 The separate Signatures dashboard remains step 11. Step 8 applies these adapters
 to generated text and decoded tool arguments before returning any output.
 
@@ -691,6 +692,16 @@ tests disable the unimplemented semantic guard only in their temporary
 organizations. A controlled backend inspects the redacted input and supplies
 synthetic Polish names, addresses and escaped tool arguments to the real NER
 output pipeline.
+
+## Tool firewall core (step 12A)
+
+The closed tool catalog, verified-agent requests, policy ACL, operator resource
+grants, and tenant-isolated demo adapters are available under `AiControl.Tools`.
+See [the tool sandbox guide](docs/tools.md) for supported operations, configuration,
+examples, and security tests. Demo files, database rows, mailbox, and commands use
+in-memory resources; HTTP uses exact URLs and operator-pinned IPs through Req.
+Production execution with budgets, guards, audit, result filtering, and
+`POST /v1/tool_calls` remains in step 12B.
 
 ## Tests and quality checks
 

@@ -81,6 +81,16 @@ are unchanged. Backend responses are controlled fixtures; NER inference and HTTP
 transport use the actual local sidecar. This adds enforcement smoke coverage to
 Step 7's model acceptance, without a new statistical quality or latency claim.
 
+## Main integration — 2026-10-04
+
+Merged `origin/main` at `a4eca8a`, including the Step 12A tool core. The README
+conflict was resolved by retaining both the completed output filtering behavior
+and the tool sandbox description. `mix precommit` passes **412 Elixir tests** and
+**3 JavaScript tests**, with 3 opt-in tests excluded. Dialyzer reports zero errors;
+Sobelow and dependency audit pass. An initial run hit the existing invitation
+test's second-boundary timing issue (86,399 versus 86,400 seconds); the isolated
+failed-test rerun and subsequent full precommit pass. Invitation code is unchanged.
+
 ## Compatibility and remaining integration
 
 There are no UI changes, migrations or new runtime environment variables.
