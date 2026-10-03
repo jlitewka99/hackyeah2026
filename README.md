@@ -262,8 +262,8 @@ defaults to input. Explicit rule and guard fields override profile defaults.
 The initial policy allows `qwen3.5:4b` and all active agents in the requesting
 organization. Budgets start unconfigured. Organization and agent requests/tokens
 per UTC hour and workflow tool calls can be configured now; budget accounting
-and enforcement arrive in step 9. Step 7 connects deterministic guards and NER;
-the complete output filtering acceptance remains in step 8.
+and enforcement arrive in step 9. Steps 7–8 connect deterministic guards and NER
+to input and output, including schema validation after output redaction.
 
 Import [the example policy](priv/policies/balanced.yaml) by pasting YAML or uploading
 one file. All three schema versions accept one UTF-8 document up to 64 KiB. Unknown fields,
@@ -495,10 +495,59 @@ pinned real model, authenticated catalog, a Polish response and both stage audit
 It never changes the platform balanced policy. Ordinary `mix test` excludes the
 `:live_models` tag.
 
-The remaining MVP execution order after Step 7 acceptance is **8 → 9 → 10 → full 12 → 11**.
+After Step 8 merges, the remaining MVP integration order is **9 → 10 → full 12 → 11**.
 The Polish semantic benchmark and the complete tool ACL retain their acceptance criteria in
 [the implementation roadmap](AI_CONTROL_LAYER_IMPLEMENTATION_PLAN.md). Granite
 remains step 14; RAG, memory and further PII work remain step 18.
+
+## Output filtering
+
+Step 8 buffers the single `stream: false` response and validates its public
+envelope and tool contract before scanning it. PII, secrets and signatures run
+first, then NER, then the configured semantic adapter. Every phase uses the same
+policy snapshot, audits its decision, applies any redaction and validates the
+result before the next control receives fresh fields. There is no regeneration
+or automatic model change.
+
+Scanning includes assistant text, every tool-call ID and name, and every decoded
+JSON argument key and leaf, including nested arrays and numbers rendered as text.
+JSON escapes cannot hide values. String argument fields retain their property
+name as a scan-only prefix, so `password` values keep their credential context.
+Only assistant text and string argument values can change. Keys, IDs, names and
+other JSON types are immutable; required redaction of any of them rejects the
+whole response. UTF-8 byte spans must align to codepoints; overlapping spans
+merge into `[REDACTED]`. Redacted arguments are encoded again with Jason.
+
+The contract is compiled from the filtered request actually sent to the model.
+Every proposal must name a declared tool, respect `tool_choice`, contain a JSON
+object and satisfy its schema before and after each phase. Duplicate tool
+definitions, call IDs and argument object keys are rejected, including duplicate
+keys expressed with Unicode escapes. Missing `parameters` permits any object.
+JSV validates Draft 2020-12 by default and explicitly declared Draft 7, with
+`format` assertions enabled. Casting, atom creation, module callbacks and remote
+schema downloads are disabled. References must resolve within the supplied
+schema or built-in metaschemas. Compilation and validation share the supervised
+guard slots and timeout. Invalid schemas return `400` before generation.
+
+| Failure | HTTP response |
+| --- | --- |
+| Policy blocks any output | `403 policy_blocked` |
+| Redaction cannot preserve immutable fields, JSON or schema | `403 redaction_unavailable` |
+| Original provider response violates the envelope or tool contract | `502 upstream_invalid_response` |
+| Required control or audit unavailable | `503` |
+| Guard capacity exhausted | `429` with `Retry-After` |
+
+Every refusal contains only the fixed error message, code and `request_id`;
+assistant text and all tool proposals are withheld. Successful responses retain
+the gateway envelope, provider allowlist and original supported `usage` values.
+Terminal audit and gateway telemetry record the actual ending stage, including
+output validation refusals, without content, argument values or library errors.
+See [Step 8 acceptance](docs/acceptance/step8.md) for failure and real NER evidence.
+
+The `assess/4` guard contract, existing policy versions and default required
+controls remain compatible. Clients must now provide valid schemas and declared,
+unambiguous tool proposals. Billing blocked output awaits Step 9 integration;
+the real semantic provider belongs to Step 10 and tool execution/ACL to Step 12.
 
 ## Deterministic guards and Polish NER
 
@@ -580,9 +629,10 @@ tools:
 ```
 
 Only the shipped immutable sets are accepted. `tools.allowed_tools` validates
-unique tool identifiers and defaults to empty; execution/enforcement is step 12.
-The separate Signatures dashboard remains step 11. Existing output plumbing can
-run these adapters, while the complete output-contract acceptance is step 8.
+unique tool identifiers and defaults to empty. Step 12A enforces this list in the
+tool core and sandbox; production execution remains in step 12B.
+The separate Signatures dashboard remains step 11. Step 8 applies these adapters
+to generated text and decoded tool arguments before returning any output.
 
 ### Qwen semantic analysis and schema v3
 
@@ -712,8 +762,21 @@ STANZA_RESOURCES_DIR=/tmp/ai-control-models /tmp/ai-control-ner/bin/python -m uv
 Run `NER_LIVE=1 STANZA_RESOURCES_DIR=/tmp/ai-control-models /tmp/ai-control-ner/bin/python
 -m unittest discover -s tests/ner` and `mix test test/ai_control/gateway/live_ner_test.exs
 --include live_ner` against an isolated PostgreSQL test database. The live gateway
-test disables the semantic guard only in its temporary organization
-and uses a backend stub to inspect the actual redacted request.
+tests disable the semantic guard only in their temporary
+organizations. A controlled backend inspects the redacted input and supplies
+synthetic Polish names, addresses and escaped tool arguments to the real NER
+output pipeline.
+
+## Tool firewall core (step 12A)
+
+The closed tool catalog, verified-agent requests, policy ACL, operator resource
+grants, and tenant-isolated demo adapters are available under `AiControl.Tools`.
+See [the tool sandbox guide](docs/tools.md) for supported operations, configuration,
+examples, and security tests. Demo files, database rows, mailbox, and commands use
+in-memory resources; HTTP uses exact URLs and operator-pinned IPs through Req.
+Production execution with budgets, guards, audit, result filtering, and
+`POST /v1/tool_calls` remains in step 12B.
+
 
 ## Tests and quality checks
 

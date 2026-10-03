@@ -26,10 +26,10 @@ defmodule AiControl.Audit do
   def gateway_codes, do: @gateway_codes
 
   @doc "Content-free terminal evidence from the gateway's verified identity adapter."
-  def record_gateway(identity, request_id, code, duration_us, policy \\ nil) do
+  def record_gateway(identity, request_id, code, duration_us, policy \\ nil, stage \\ :input) do
     with true <-
            Validation.uuid?(request_id) && code in @gateway_codes &&
-             Validation.duration?(duration_us),
+             Validation.duration?(duration_us) && stage in [:input, :output],
          true <- is_nil(policy) || Snapshot.valid?(policy),
          {:ok, attrs} <- gateway_identity(identity) do
       event =
@@ -40,7 +40,7 @@ defmodule AiControl.Audit do
             kind: :gateway,
             event_type: gateway_event_type(code),
             target_id: request_id,
-            stage: :input,
+            stage: stage,
             policy_version: if(policy, do: policy.version),
             policy_checksum: if(policy, do: policy.checksum),
             reason_codes: [code],

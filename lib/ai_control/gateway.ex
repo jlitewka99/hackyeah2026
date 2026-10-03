@@ -3,7 +3,7 @@ defmodule AiControl.Gateway do
   alias AiControl.Accounts.Scope
   alias AiControl.ApiKeys.Principal
   alias AiControl.{Audit, Policies}
-  alias AiControl.Gateway.{Config, Limiter, Models, Request, Response, Slots, Stages}
+  alias AiControl.Gateway.{Config, Limiter, Models, Request, Response, Slots, Stages, ToolSchemas}
   alias AiControl.Security.SecurityContext
 
   def chat(identity, params, opts \\ []) do
@@ -11,11 +11,10 @@ defmodule AiControl.Gateway do
       with :ok <- input_size(params),
            {:ok, params} <- Request.validate(params),
            {:ok, policy, current} <- Policies.snapshot_for_models(current, opts[:agent_id]) do
-        result = process_chat(current, params, policy, request_id, opts)
-
-        {result, policy}
+        {result, stage} = process_chat(current, params, policy, request_id, opts)
+        {result, policy, stage}
       else
-        error -> {error, nil}
+        error -> {error, nil, :input}
       end
     end)
   end
@@ -24,14 +23,27 @@ defmodule AiControl.Gateway do
     with :ok <- Policies.model_access(current, policy, opts[:agent_id], params["model"]),
          {:ok, safe} <- Stages.evaluate(params, current, policy, request_id, :input),
          {:ok, safe} <- Request.validate(safe),
-         :ok <- authorize_again(current, policy, opts[:agent_id], params["model"]),
-         {:ok, response} <- generate(safe),
-         {:ok, response} <- Response.normalize(response, params["model"], request_id),
-         {:ok, response} <-
-           Stages.evaluate(response, current, policy, request_id, :output,
-             semantic_prompt: Jason.encode!(safe["messages"])
-           ) do
-      Response.normalize(response, params["model"], request_id)
+         {:ok, contract} <- ToolSchemas.prepare(safe),
+         :ok <- authorize_again(current, policy, opts[:agent_id], params["model"]) do
+      case generate(safe) do
+        {:ok, response} ->
+          {filter_output(response, current, policy, request_id, safe, contract), :output}
+
+        error ->
+          {error, :output}
+      end
+    else
+      error -> {error, :input}
+    end
+  end
+
+  defp filter_output(response, current, policy, request_id, safe, contract) do
+    with {:ok, response} <- Response.normalize(response, safe["model"], request_id),
+         :ok <- Response.validate(response, contract) do
+      Stages.evaluate(response, current, policy, request_id, :output,
+        tool_contract: contract,
+        semantic_prompt: Jason.encode!(safe["messages"])
+      )
     end
   end
 
@@ -49,10 +61,10 @@ defmodule AiControl.Gateway do
               &%{"id" => &1, "object" => "model", "created" => 0, "owned_by" => "operator"}
             )
 
-          {{:ok, %{"object" => "list", "data" => data}}, policy}
+          {{:ok, %{"object" => "list", "data" => data}}, policy, :input}
 
         error ->
-          {error, nil}
+          {error, nil, :input}
       end
     end)
   end
@@ -63,13 +75,13 @@ defmodule AiControl.Gateway do
 
     case Policies.refresh_identity(identity) do
       {:ok, current} ->
-        {result, policy} =
+        {result, policy, stage} =
           case ingress(current, opts) do
             :ok -> callback.(current, request_id)
-            error -> {error, nil}
+            error -> {error, nil, :input}
           end
 
-        finish(current, request_id, result, policy, started)
+        finish(current, request_id, result, policy, started, stage)
 
       {:error, :forbidden} = error ->
         # These are trusted adapters whose previously verified access was revoked.
@@ -85,7 +97,7 @@ defmodule AiControl.Gateway do
     :exit, _ -> {:error, :upstream_unavailable}
   end
 
-  defp finish(identity, request_id, result, policy, started) do
+  defp finish(identity, request_id, result, policy, started, stage \\ :input) do
     code =
       case result do
         {:ok, _} -> "completed"
@@ -96,10 +108,11 @@ defmodule AiControl.Gateway do
     duration = duration(started)
 
     :telemetry.execute([:ai_control, :gateway, :request], %{duration_us: duration}, %{
-      code: code
+      code: code,
+      stage: stage
     })
 
-    case Audit.record_gateway(identity, request_id, code, duration, policy) do
+    case Audit.record_gateway(identity, request_id, code, duration, policy, stage) do
       {:ok, _} -> result
       _ -> {:error, :audit_unavailable}
     end

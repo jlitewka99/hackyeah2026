@@ -8,7 +8,8 @@ model selection and every Prompt Guard implementation/access task belong to 11B.
 ## Local verification — 2026-10-04
 
 - `mix precommit`: strict compilation, formatting, lockfile, Credo, ExUnit and
-  JavaScript regressions pass: **371 ExUnit tests**, four opt-in tests excluded,
+  JavaScript regressions pass after integrating Steps 8 and 12A from main:
+  **429 ExUnit tests**, five opt-in tests excluded,
   and **three JavaScript tests**.
 - `mix assets.build`: Tailwind/esbuild pass.
 - `mix dialyzer`: zero errors. Production compilation passes.
@@ -38,12 +39,40 @@ families were frozen into equally represented calibration/test halves. Checksum:
 No mapping was tuned against the test half. Balanced mapping uses Unsafe +
 Jailbreak; moderation uses Unsafe + its eight response categories.
 
-Actual HTTP inference and the complete benchmark are being verified. Final
-JSONL/CSV/summary, opt-in gateway results and limitations must be attached before
-this acceptance is marked complete. An initial transport run exposed a timeout
-capacity cascade; the benchmark now waits for sidecar capacity between cases
-without retrying classifications. Production still fails closed on admission,
-timeout or invalid results.
+The complete actual HTTP benchmark is recorded in [step10-qwen](step10-qwen/):
+240 cases, **230 completed classifications and 10 service errors**. The command
+returns a nonzero exit status after preserving the reports when service errors
+occur. Every error was the 30-second guard deadline on a long indirect-injection
+fixture. The benchmark waits for sidecar capacity between cases without retrying
+classifications; production fails closed on admission, timeout or invalid results.
+
+Held-out test results with the default balanced mapping:
+
+| Group | TP | FP | TN | FN | Service errors | Result |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Safe | 0 | 0 | 25 | 0 | 0 | 0/25 false positives |
+| PII (negative for injection) | 0 | 0 | 25 | 0 | 0 | 0/25 false positives |
+| Direct injection | 8 | 0 | 0 | 17 | 0 | 32% recall |
+| Indirect injection | 8 | 0 | 0 | 12 | 5 | 40% recall among 20 completed cases |
+| Safe response pairs | 0 | 0 | 10 | 0 | 0 | 0/10 false positives |
+| Harmful response pairs | 10 | 0 | 0 | 0 | 0 | 100% recall on 10 cases |
+
+Injection FPR is **0/50** on the held-out negative cases. This small synthetic
+sample does not establish zero false positives in production. Indirect detection
+is 8/25 (32%) if service errors count as unclassified cases. Errors are reported
+separately from the confusion matrix and never treated as model detections.
+PII results measure injection false positives, not PII recognition accuracy.
+
+Across all cases, warm guard latency p50 is **1,111.6 ms**, p95 **13,874.2 ms**;
+cold model load is **3,567.9 ms** and peak process RSS **4,740,562,944 bytes**
+(4.41 GiB). Latency includes HTTP transport, validation and label mapping and
+excludes downstream LLM generation. The current CPU budget cannot classify every
+long fixture within 30 seconds. Recall and deadline errors must remain visible
+in 11B's model/hardware comparison; this is not final MVP model qualification.
+
+`mix test test/ai_control/gateway/live_semantic_test.exs --include live_models`
+passes **two real-weight tests**: Polish injection and safe control, harmful
+response blocking, private audit, and full token-window coverage of a tail attack.
 
 ## Frontend evidence
 

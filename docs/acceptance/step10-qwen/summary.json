@@ -1,0 +1,275 @@
+{
+  "runtime": "transformers-4.57.1-torch-2.8.0-cpu-fp32",
+  "split": "all",
+  "revision": "fada3b2f655b89601929198343c94cd2f64d93cc",
+  "groups": {
+    "direct": {
+      "count": 50,
+      "precision": 1.0,
+      "fn": 25,
+      "errors": 0,
+      "tp": 25,
+      "fp": 0,
+      "tn": 0,
+      "recall": 0.5,
+      "fpr": null
+    },
+    "indirect": {
+      "count": 50,
+      "precision": 1.0,
+      "fn": 30,
+      "errors": 10,
+      "tp": 10,
+      "fp": 0,
+      "tn": 0,
+      "recall": 0.25,
+      "fpr": null
+    },
+    "moderation_safe": {
+      "count": 20,
+      "precision": null,
+      "fn": 0,
+      "errors": 0,
+      "tp": 0,
+      "fp": 0,
+      "tn": 20,
+      "recall": null,
+      "fpr": 0.0
+    },
+    "moderation_unsafe": {
+      "count": 20,
+      "precision": 1.0,
+      "fn": 0,
+      "errors": 0,
+      "tp": 20,
+      "fp": 0,
+      "tn": 0,
+      "recall": 1.0,
+      "fpr": null
+    },
+    "pii": {
+      "count": 50,
+      "precision": null,
+      "fn": 0,
+      "errors": 0,
+      "tp": 0,
+      "fp": 0,
+      "tn": 50,
+      "recall": null,
+      "fpr": 0.0
+    },
+    "safe": {
+      "count": 50,
+      "precision": null,
+      "fn": 0,
+      "errors": 0,
+      "tp": 0,
+      "fp": 0,
+      "tn": 50,
+      "recall": null,
+      "fpr": 0.0
+    }
+  },
+  "hardware": "Apple M4, ARM64, macOS 27.0, 16 GiB RAM, CPU threads 2, FP32",
+  "dataset_checksum": "1bddc6ebcebb09c83bc37892e4ed6b8090a3c246286c90ffccf74afc5365db47",
+  "model_set": "qwen3guard-gen-0.6b.v1",
+  "cold_start_us": 3567869,
+  "peak_rss_bytes": 4740562944,
+  "mapping": {
+    "severities": [
+      "Unsafe"
+    ],
+    "injection_categories": [
+      "Jailbreak"
+    ]
+  },
+  "latency_scope": "full guard transport, validation and policy label mapping; excludes LLM generation",
+  "p50_us": 1111620,
+  "p95_us": 13874178,
+  "splits": {
+    "calibration": {
+      "groups": {
+        "direct": {
+          "count": 25,
+          "precision": 1.0,
+          "fn": 8,
+          "errors": 0,
+          "tp": 17,
+          "fp": 0,
+          "tn": 0,
+          "recall": 0.68,
+          "fpr": null
+        },
+        "indirect": {
+          "count": 25,
+          "precision": 1.0,
+          "fn": 18,
+          "errors": 5,
+          "tp": 2,
+          "fp": 0,
+          "tn": 0,
+          "recall": 0.1,
+          "fpr": null
+        },
+        "moderation_safe": {
+          "count": 10,
+          "precision": null,
+          "fn": 0,
+          "errors": 0,
+          "tp": 0,
+          "fp": 0,
+          "tn": 10,
+          "recall": null,
+          "fpr": 0.0
+        },
+        "moderation_unsafe": {
+          "count": 10,
+          "precision": 1.0,
+          "fn": 0,
+          "errors": 0,
+          "tp": 10,
+          "fp": 0,
+          "tn": 0,
+          "recall": 1.0,
+          "fpr": null
+        },
+        "pii": {
+          "count": 25,
+          "precision": null,
+          "fn": 0,
+          "errors": 0,
+          "tp": 0,
+          "fp": 0,
+          "tn": 25,
+          "recall": null,
+          "fpr": 0.0
+        },
+        "safe": {
+          "count": 25,
+          "precision": null,
+          "fn": 0,
+          "errors": 0,
+          "tp": 0,
+          "fp": 0,
+          "tn": 25,
+          "recall": null,
+          "fpr": 0.0
+        }
+      },
+      "injection": {
+        "count": 100,
+        "precision": 1.0,
+        "fn": 26,
+        "errors": 5,
+        "tp": 19,
+        "fp": 0,
+        "tn": 50,
+        "recall": 0.4222222222222222,
+        "fpr": 0.0
+      },
+      "moderation": {
+        "count": 20,
+        "precision": 1.0,
+        "fn": 0,
+        "errors": 0,
+        "tp": 10,
+        "fp": 0,
+        "tn": 10,
+        "recall": 1.0,
+        "fpr": 0.0
+      }
+    },
+    "test": {
+      "groups": {
+        "direct": {
+          "count": 25,
+          "precision": 1.0,
+          "fn": 17,
+          "errors": 0,
+          "tp": 8,
+          "fp": 0,
+          "tn": 0,
+          "recall": 0.32,
+          "fpr": null
+        },
+        "indirect": {
+          "count": 25,
+          "precision": 1.0,
+          "fn": 12,
+          "errors": 5,
+          "tp": 8,
+          "fp": 0,
+          "tn": 0,
+          "recall": 0.4,
+          "fpr": null
+        },
+        "moderation_safe": {
+          "count": 10,
+          "precision": null,
+          "fn": 0,
+          "errors": 0,
+          "tp": 0,
+          "fp": 0,
+          "tn": 10,
+          "recall": null,
+          "fpr": 0.0
+        },
+        "moderation_unsafe": {
+          "count": 10,
+          "precision": 1.0,
+          "fn": 0,
+          "errors": 0,
+          "tp": 10,
+          "fp": 0,
+          "tn": 0,
+          "recall": 1.0,
+          "fpr": null
+        },
+        "pii": {
+          "count": 25,
+          "precision": null,
+          "fn": 0,
+          "errors": 0,
+          "tp": 0,
+          "fp": 0,
+          "tn": 25,
+          "recall": null,
+          "fpr": 0.0
+        },
+        "safe": {
+          "count": 25,
+          "precision": null,
+          "fn": 0,
+          "errors": 0,
+          "tp": 0,
+          "fp": 0,
+          "tn": 25,
+          "recall": null,
+          "fpr": 0.0
+        }
+      },
+      "injection": {
+        "count": 100,
+        "precision": 1.0,
+        "fn": 29,
+        "errors": 5,
+        "tp": 16,
+        "fp": 0,
+        "tn": 50,
+        "recall": 0.35555555555555557,
+        "fpr": 0.0
+      },
+      "moderation": {
+        "count": 20,
+        "precision": 1.0,
+        "fn": 0,
+        "errors": 0,
+        "tp": 10,
+        "fp": 0,
+        "tn": 10,
+        "recall": 1.0,
+        "fpr": 0.0
+      }
+    }
+  }
+}
