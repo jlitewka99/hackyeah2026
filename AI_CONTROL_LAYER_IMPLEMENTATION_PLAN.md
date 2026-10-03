@@ -586,6 +586,60 @@ wizualnego; zastanego driftu nie naprawiano w tym rozszerzeniu.
 
 **Praca równoległa:** 12A (katalog, autoryzacja, walidatory i sandboxowe adaptery) realizować po ukończeniu 7 równolegle z 8–10. 12B łączy te moduły z endpointem, budżetami, kontrolami wyników i semantyką po scaleniu pierwszej fali; dopiero wtedy odbierać pełny krok 12.
 
+**Plan implementacji 12A — 2026-10-03:**
+
+1. Dodać zamknięty katalog identyfikatorów operacji i schematów argumentów oraz
+   `AiControl.Tools.ToolRequest`. Przyjmować wyłącznie nazwę narzędzia i argumenty;
+   organizację/agenta/klucz przypisywać ze zweryfikowanego `Principal`.
+2. Przygotować żądanie na jednym snapshotcie istniejącej polityki v2. Przeciąć
+   `allowed_agents` i `tools.allowed_tools` z zasobami dopuszczonymi przez operatora
+   sandboxa dla konkretnego agenta. Polityka v1 i brak przydziału oznaczają odmowę.
+3. Walidować kanoniczne ścieżki, symlinki, dokładne adresy HTTP z przypiętym IP,
+   operacje/tabele bazy, pojedynczych odbiorców i zamknięte komendy bez powłoki.
+   HTTP przez `Req`, bez redirectów, retry, proxy ani rozwiązywania DNS podczas
+   połączenia; prywatne IP tylko przy jawnym wyjątku operatora dla endpointu demo.
+4. Dodać izolowany sandbox per organizacja: wirtualne pliki, tabele demo,
+   lokalna skrzynka i komendy zaimplementowane w Elixirze. Pliki/baza/email/komendy
+   nie korzystają z zasobów hosta. Jedynym zewnętrznym I/O jest jawny endpoint HTTP.
+5. Testować dozwolone wykonania, odmowy bez efektów, podmianę tożsamości,
+   unieważnienie klucza/agenta/organizacji, snapshot, schematy i ataki na zasoby.
+   Uruchomić `mix precommit`, zapisać odbiór i stworzyć PR z opisem po angielsku.
+
+12A nie wprowadza zmian frontendowych ani publicznej ścieżki wykonywania narzędzi.
+Sandbox jest adapterem demo dla zaufanego kodu; produkcyjne wykonanie, trwałe
+liczniki, wymagane guardy, audyt i filtrowanie wyników pozostają w 12B. Checkbox
+całego kroku 12 pozostaje niezaznaczony do odbioru 12B.
+
+**Odbiór 12A — 2026-10-04:** zaimplementowano `AiControl.Tools`, `ToolRequest`,
+zamknięty katalog siedmiu operacji i schematy argumentów, autoryzację na istniejącym
+snapshotcie v2 oraz dokładne przydziały zasobów operatora per organizacja/agent.
+Sandbox udostępnia wirtualne pliki, odczyt tabel demo, lokalną skrzynkę, komendy
+Elixira bez powłoki i rzeczywisty HTTP przez `Req` z przypiętym IP. Walidatory
+odmawiają traversal, symlinków, SSRF, redirectów i nieuprawnionych operacji;
+klucz, agent i organizacja są ponownie sprawdzane przed efektem. Argumenty
+i polityka nie są ujawniane przez `Inspect` żądania. Instrukcje i granice integracji:
+[sandbox narzędzi](docs/tools.md).
+
+Przeszło **30 testów 12A** oraz `mix precommit`: **384 testy Elixir i 3 JavaScript**,
+bez uwag Credo i ostrzeżeń kompilacji aplikacji. Dwa istniejące testy rzeczywistych
+modeli/NER pozostają standardowo wyłączone z tego zestawu; 12A ich nie zmienia.
+Testy obejmują odmowy bez efektów, podmianę tożsamości, wygaśnięcie/unieważnienie
+klucza, zawieszenie, snapshot przy zmianie polityki, Unicode/limity rozmiaru
+i rzeczywisty lokalny HTTP również przez pełną ścieżkę sandboxa. Bez zmian
+frontendu, migracji ani zależności. **12A jest ukończone; 12B i pełny krok 12
+pozostają nieukończone**: endpoint, trwałe liczniki, wymagane guardy, audyt wykonania
+i filtrowanie wyników wymagają osobnej integracji po scaleniu 8–10.
+
+**Ponowny przegląd 12A — 2026-10-04:** odtworzono i poprawiono dwie luki:
+ponowna autoryzacja zmienionych argumentów nie sprawdzała całkowitego limitu JSON,
+a globalne opcje `Req` mogły dołączyć dane uwierzytelniające/parametry lub podmienić
+transport. Limit 64 KiB jest teraz sprawdzany przed efektem; surowe żądanie `Req`
+pomija globalne opcje i middleware. Dodano trzy testy regresji oraz rzeczywisty
+test HTTPS dla przypiętego IP, poprawnego CA/hosta i odmowy obcego CA/błędnego
+hosta. `mix precommit` przeszedł: **388 testów Elixir (w tym 34 testy 12A) i 3
+JavaScript**, bez uwag Credo i ostrzeżeń kompilacji aplikacji; dwa istniejące testy
+modeli/NER pozostają wyłączone. Granica 12B pozostaje bez zmian.
+
 - Dodać `ToolRequest`, katalog narzędzi ze schematami argumentów i `POST /v1/tool_calls`. Organizacja i agent pochodzą wyłącznie ze zweryfikowanej tożsamości; domyślna odmowa jest niezależna od oceny modelu.
 - Dodać tenant-scoped identyfikator wykonania i trwały licznik wywołań narzędzi z kroku 9. Pełna orkiestracja workflowów pozostaje w kroku 15.
 - Sprawdzać uprawnienia agenta, operację, zasób, argumenty i budżet przed wykonaniem.

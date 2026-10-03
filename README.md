@@ -576,7 +576,8 @@ tools:
 ```
 
 Only the shipped immutable sets are accepted. `tools.allowed_tools` validates
-unique tool identifiers and defaults to empty; execution/enforcement is step 12.
+unique tool identifiers and defaults to empty. Step 12A enforces this list in the
+tool core and sandbox; production execution remains in step 12B.
 The separate Signatures dashboard remains step 11. Existing output plumbing can
 run these adapters, while the complete output-contract acceptance is step 8.
 
@@ -640,6 +641,16 @@ Run `NER_LIVE=1 STANZA_RESOURCES_DIR=/tmp/ai-control-models /tmp/ai-control-ner/
 --include live_ner` against an isolated PostgreSQL test database. The live gateway
 test disables the unimplemented semantic guard only in its temporary organization
 and uses a backend stub to inspect the actual redacted request.
+
+## Tool firewall core (step 12A)
+
+The closed tool catalog, verified-agent requests, policy ACL, operator resource
+grants, and tenant-isolated demo adapters are available under `AiControl.Tools`.
+See [the tool sandbox guide](docs/tools.md) for supported operations, configuration,
+examples, and security tests. Demo files, database rows, mailbox, and commands use
+in-memory resources; HTTP uses exact URLs and operator-pinned IPs through Req.
+Production execution with budgets, guards, audit, result filtering, and
+`POST /v1/tool_calls` remains in step 12B.
 
 ## Tests and quality checks
 
