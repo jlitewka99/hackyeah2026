@@ -77,6 +77,7 @@ docker exec -e AI_CONTROL_ORGANIZER_EMAIL=ci@example.test -e AI_CONTROL_ORGANIZE
 docker exec -e AI_CONTROL_ORGANIZER_EMAIL=ci@example.test -e AI_CONTROL_ORGANIZER_PASSWORD=synthetic-ci-password \
   "$container" /app/bin/ai_control eval 'AiControl.Release.bootstrap_organizer()'
 for child in /app/ner /app/semantic /app/tokenizer beam.smp; do
+  echo "Checking unexpected exit of $child"
   docker exec "$container" /opt/ner/bin/python -c '
 import os, signal, sys
 from pathlib import Path
@@ -84,7 +85,7 @@ target = sys.argv[1]
 for path in Path("/proc").glob("[0-9]*/cmdline"):
     args = path.read_bytes().split(b"\0")
     command = [arg.decode(errors="ignore") for arg in args]
-    matches = any(arg.endswith("beam.smp") for arg in command) if target == "beam.smp" else "/app/" + target in command
+    matches = any(arg.endswith("beam.smp") for arg in command) if target == "beam.smp" else target in command
     if matches and int(path.parent.name) != os.getpid():
         os.kill(int(path.parent.name), signal.SIGKILL)
         break
