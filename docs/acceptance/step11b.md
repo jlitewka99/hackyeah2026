@@ -164,6 +164,25 @@ PGPORT=55412 MIX_TEST_PARTITION=step11b \
 The directories above describe this local experiment; use your own verified model
 directories and isolated database when reproducing it.
 
+### PR #26 CI download repair
+
+[Run 37181579586](https://github.com/jlitewka99/hackyeah2026/actions/runs/37181579586)
+passes Quality, Tests, Dialyzer and Security, but the container build fails before
+smoke: Hugging Face returns HTTP 503 for the pinned public tokenizer download.
+This is distinct from the retained Qwen inference timeout. Setup/build tokenizer
+downloads now retry transient network errors and HTTP 429/500/502/503/504 at most
+four times, waiting 1/2/4 seconds between attempts. Each attempt writes a separate
+temporary file and publishes it atomically after size and SHA-256 verification;
+failures leave the previous artifact intact and remove temporary bytes.
+Permanent HTTP errors and artifact mismatches fail immediately. The existing
+120-second request timeout is preserved; inference transport remains bounded
+and has no retry or fallback. Five download regressions and the four real
+offline tokenizer contracts pass locally (9/9). Follow-up Linux CI results are
+visible in [PR #26](https://github.com/jlitewka99/hackyeah2026/pull/26).
+The same 9/9 tests also pass in the Linux container after a fresh real download
+through the repaired helper and pinned verification. `mix precommit` passes
+690 ExUnit tests (16 opt-in excluded) and 5 JavaScript tests after this repair.
+
 ## Shared integration matrix
 
 The security runner executes the full suite together, including previously

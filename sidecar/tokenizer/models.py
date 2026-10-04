@@ -2,29 +2,61 @@
 import hashlib
 import json
 import sys
+import tempfile
+import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
 MANIFEST = json.loads(Path(__file__).with_name("models.v1.json").read_text())
+DOWNLOAD_ATTEMPTS = 4
+TRANSIENT_HTTP = {429, 500, 502, 503, 504}
 
 
 def verify(directory):
     for entry in MANIFEST["files"]:
-        path = Path(directory) / entry["path"]
-        if not path.is_file() or path.stat().st_size != entry["bytes"]:
-            raise RuntimeError("tokenizer_files_unavailable")
-        with path.open("rb") as source:
-            if hashlib.file_digest(source, "sha256").hexdigest() != entry["sha256"]:
-                raise RuntimeError("tokenizer_checksum_mismatch")
+        verify_file(Path(directory) / entry["path"], entry)
+
+
+def verify_file(path, entry):
+    if not path.is_file() or path.stat().st_size != entry["bytes"]:
+        raise RuntimeError("tokenizer_files_unavailable")
+    with path.open("rb") as source:
+        if hashlib.file_digest(source, "sha256").hexdigest() != entry["sha256"]:
+            raise RuntimeError("tokenizer_checksum_mismatch")
+
+
+def download_file(path, entry):
+    # Setup/build only: each attempt starts fresh, verifies bytes, then publishes.
+    for attempt in range(DOWNLOAD_ATTEMPTS):
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=path.parent, prefix=f".{path.name}.",
+                                             suffix=".part", delete=False) as target:
+                temporary = Path(target.name)
+                with urllib.request.urlopen(entry["url"], timeout=120) as response:
+                    while chunk := response.read(1024 * 1024):
+                        target.write(chunk)
+            verify_file(temporary, entry)
+            temporary.replace(path)
+            return
+        except urllib.error.HTTPError as error:
+            if error.code not in TRANSIENT_HTTP or attempt == DOWNLOAD_ATTEMPTS - 1:
+                raise
+        except (urllib.error.URLError, TimeoutError, ConnectionError):
+            if attempt == DOWNLOAD_ATTEMPTS - 1:
+                raise
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+        time.sleep(2 ** attempt)
 
 
 def download(directory):
     for entry in MANIFEST["files"]:
         path = Path(directory) / entry["path"]
         path.parent.mkdir(parents=True, exist_ok=True)
-        with urllib.request.urlopen(entry["url"], timeout=120) as response, path.open("wb") as target:
-            while chunk := response.read(1024 * 1024):
-                target.write(chunk)
+        download_file(path, entry)
     verify(directory)
 
 

@@ -964,6 +964,21 @@ dla gated CI. Standardowe CI PR #18 potwierdziło Tests, Quality,
 Dialyzer, Security i czteroprocesowy kontener (wszystkie success); gated job był
 skipped. To niezależna bramka od implementacji 13/15/16/17/18.
 
+**Poprawka CI PR #26:** [przebieg 37181579586](https://github.com/jlitewka99/hackyeah2026/actions/runs/37181579586)
+zaliczył Quality, Tests, Dialyzer i Security, lecz build kontenera zatrzymał się
+przed testami: publiczny tokenizer Hugging Face zwrócił HTTP 503. Downloader
+tokenizera w setup/build ponawia wyłącznie przejściowe błędy sieci i HTTP
+429/500/502/503/504, maksymalnie cztery próby z przerwami 1/2/4 s.
+Każda próba zaczyna osobny plik tymczasowy; publikacja jest atomowa dopiero po
+weryfikacji przypiętego rozmiaru i SHA-256. Błędy 400/401/403/404 i niezgodność
+artefaktu nie są ponawiane. Pięć nowych testów obejmuje HTTP 503, limit prób,
+przerwany transfer, sprzątanie oraz zachowanie istniejącego artefaktu; cały
+zestaw tokenizera ma 9 testów. Wszystkie przechodzą na hoście oraz w kontenerze
+Linux po rzeczywistym pobraniu i weryfikacji przypiętych bajtów; `mix precommit`
+przechodzi: 690 ExUnit (16 opt-in excluded) i 5 JS.
+Ponowny CI jest dostępny w PR #26. Polityki,
+przypięte bajty, offline runtime i zakaz retry w enforcement nie zmieniły się.
+
 ### Krok 12. Tool firewall i ograniczenia zasobów
 
 **Uzgodniony plan 12B — 2026-10-04 (zrealizowany):** endpoint `POST /v1/tool_calls`
