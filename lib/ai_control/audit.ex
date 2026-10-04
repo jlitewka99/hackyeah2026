@@ -2,8 +2,9 @@ defmodule AiControl.Audit do
   @moduledoc "Synchronous, tenant-scoped audit writes with an explicit content-free serializer."
   import Ecto.Query
 
-  alias AiControl.Audit.Event
+  alias AiControl.Audit.{Event, Filters}
   alias AiControl.Budgets.Usage
+  alias AiControl.Gateway.Measurements
   alias AiControl.Organizations
   alias AiControl.Organizations.{Access, Grants}
   alias AiControl.Policies.Configuration
@@ -91,13 +92,15 @@ defmodule AiControl.Audit do
         duration_us,
         policy \\ nil,
         stage \\ :input,
-        budget \\ nil
+        budget \\ nil,
+        observation \\ nil
       ) do
     with true <-
            Validation.uuid?(request_id) && code in @gateway_codes &&
              Validation.duration?(duration_us) && stage in [:input, :output],
          true <- is_nil(policy) || Snapshot.valid?(policy),
          true <- budget_evidence?(budget),
+         true <- observation?(observation),
          {:ok, attrs} <- gateway_identity(identity) do
       event =
         struct!(
@@ -113,7 +116,7 @@ defmodule AiControl.Audit do
             reason_codes: [code],
             occurred_at: DateTime.utc_now(),
             duration_us: duration_us,
-            data: if(budget, do: %{budget: budget}, else: %{})
+            data: gateway_data(budget, observation)
           })
         )
 
@@ -121,6 +124,18 @@ defmodule AiControl.Audit do
     else
       _ -> {:error, :invalid_audit_data}
     end
+  end
+
+  defp observation?(nil), do: true
+
+  defp observation?(%{operation: operation, timings: timings} = value),
+    do: map_size(value) == 2 && operation in ~w(chat models) && Measurements.valid?(timings)
+
+  defp observation?(_), do: false
+
+  defp gateway_data(budget, observation) do
+    data = if budget, do: %{budget: budget}, else: %{}
+    if observation, do: Map.merge(data, observation), else: data
   end
 
   defp budget_evidence?(nil), do: true
@@ -379,6 +394,41 @@ defmodule AiControl.Audit do
     end
   end
 
+  def page_events(scope, filters) do
+    with {:ok, current} <- Access.authorize(scope, "events.read") do
+      events =
+        Filters.query(current.organization.id, filters)
+        |> Filters.after_cursor(filters.cursor)
+        |> order_by([e], desc: e.occurred_at, desc: e.id)
+        |> limit(51)
+        |> Repo.all(log: false)
+
+      page = Enum.take(events, 50)
+
+      {:ok,
+       %{
+         events: page,
+         next: if(length(events) > 50, do: Filters.cursor(List.last(page)))
+       }}
+    end
+  end
+
+  def request_events(scope, request_id) do
+    with {:ok, current} <- Access.authorize(scope, "events.read"),
+         {:ok, id} <- Ecto.UUID.cast(request_id) do
+      {:ok,
+       Repo.all(
+         from(e in Event,
+           where: e.organization_id == ^current.organization.id and e.request_id == ^id,
+           order_by: [asc: e.occurred_at, asc: e.id]
+         ),
+         log: false
+       )}
+    else
+      _ -> {:error, :forbidden}
+    end
+  end
+
   defp valid_decision?(context, assessment, decision),
     do:
       SecurityContext.valid?(context) && SecurityAssessment.valid?(assessment) &&
@@ -435,6 +485,16 @@ defmodule AiControl.Audit do
     do: %{event | fingerprint_digest: fingerprint.digest, fingerprint_key_id: fingerprint.key_id}
 
   defp persist(event) do
+    if Repo.in_transaction?() do
+      persist_event(event)
+    else
+      result = Repo.transact(fn -> persist_event(event) end)
+      if match?({:ok, _}, result) && event.organization_id, do: notify(event.organization_id)
+      result
+    end
+  end
+
+  defp persist_event(event) do
     event = %{event | id: event.id || Ecto.UUID.generate()}
 
     with {:ok, _} <-
@@ -453,6 +513,17 @@ defmodule AiControl.Audit do
     end
   rescue
     _ -> {:error, :audit_unavailable}
+  end
+
+  def notify(organization_id) do
+    if !Repo.in_transaction?() && Process.whereis(AiControl.PubSub),
+      do:
+        Phoenix.PubSub.broadcast(
+          AiControl.PubSub,
+          "organizations:#{organization_id}:dashboard",
+          :dashboard_changed
+        ),
+      else: :ok
   end
 
   defp comparable(event) do

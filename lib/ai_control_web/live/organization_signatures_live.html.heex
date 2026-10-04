@@ -1,0 +1,67 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} active_page="signatures">
+  <div class="page-content" id="organization-signatures">
+    <h1>Signatures</h1><p class="page-description">
+      Pinned, offline exploit patterns. A pattern match is evidence of a risky invocation, not proof of execution.
+    </p><ReportingHTML.related_links scope={@current_scope} id="signature-report-links" />
+    <%= if ReportingHTML.ok?(@report) do %>
+      <% catalog = ReportingHTML.value(@report) %>
+      <section class="list-section" aria-labelledby="signature-catalog-heading">
+        <h2 id="signature-catalog-heading">{catalog.version}</h2><p class="muted mt-2">
+          {catalog.origin}
+        </p><p class="resource-identifier mt-3" id="signature-checksum">
+          SHA-256 {catalog.checksum}
+        </p>
+        <p class="mt-4" id="signature-policy-status">
+          {if catalog.policy.guard["enabled"], do: "Enabled", else: "Disabled"} · {if catalog.policy.guard[
+                                                                                        "required"
+                                                                                      ],
+                                                                                      do:
+                                                                                        "Required",
+                                                                                      else:
+                                                                                        "Optional"} · {Enum.join(
+            catalog.policy.guard["stages"],
+            ", "
+          )} · Exploit action: {catalog.policy.rule["action"]}
+        </p>
+        <p class="resource-identifier muted mt-2">
+          {catalog.policy.version} · {catalog.policy.checksum}
+        </p>
+        <div id="signature-list" phx-update="stream">
+          <div :for={{id, signature} <- @streams.signatures} id={id} class="signature-row">
+            <h3 class="resource-identifier font-medium">{signature.id}</h3><dl class="report-facts">
+              <div>
+                <dt>Detected invocation</dt><dd>{signature.unsafe}</dd>
+              </div><div>
+                <dt>Safer alternative</dt><dd>{signature.safe_alternative}</dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      </section>
+      <section
+        :if={"events.read" in @current_scope.grants.permissions}
+        class="list-section"
+        id="signature-detections"
+        aria-labelledby="signature-detection-heading"
+      >
+        <h2 id="signature-detection-heading">Detections · last 24 hours</h2><p
+          :if={!ReportingHTML.ok?(@activity)}
+          class="report-error"
+          role="alert"
+        >
+          Detection statistics are unavailable.
+        </p><div id="signature-detection-list" phx-update="stream">
+          <p class="hidden only:block muted py-6" id="signature-detections-empty">
+            No signature detections in this range.
+          </p><div :for={{id, detection} <- @streams.detections} id={id} class="resource-row">
+            <span class="resource-identifier">{detection.rule} · {detection.stage}</span><span>{detection.count}</span>
+          </div>
+        </div>
+      </section>
+    <% else %>
+      <p class="report-error mt-8" id="signature-error" role="alert">
+        The signature catalog or active policy is unavailable.
+      </p>
+    <% end %>
+  </div>
+</Layouts.app>

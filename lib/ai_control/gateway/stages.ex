@@ -9,18 +9,22 @@ defmodule AiControl.Gateway.Stages do
   @phases [~w(pii secret signatures), ["ner"], ["semantic", "moderation"]]
 
   def evaluate(value, identity, policy, request_id, stage, opts \\ []) do
-    Gateway.measure(stage, fn ->
-      phases =
-        Enum.filter(@phases, fn guards ->
-          Enum.any?(guards, &Snapshot.enabled?(policy, &1, stage))
-        end)
+    Gateway.measure(
+      stage,
+      fn ->
+        phases =
+          Enum.filter(@phases, fn guards ->
+            Enum.any?(guards, &Snapshot.enabled?(policy, &1, stage))
+          end)
 
-      if length(phases) < 2 do
-        complete(value, identity, policy, request_id, stage, opts)
-      else
-        layered(value, identity, policy, request_id, stage, phases, opts)
-      end
-    end)
+        if length(phases) < 2 do
+          complete(value, identity, policy, request_id, stage, opts)
+        else
+          layered(value, identity, policy, request_id, stage, phases, opts)
+        end
+      end,
+      opts
+    )
   end
 
   defp layered(value, identity, policy, request_id, stage, phases, opts) do
@@ -159,7 +163,11 @@ defmodule AiControl.Gateway.Stages do
 
   defp configured_guard(module, guard, fields, value, context, policy, opts) do
     result =
-      Gateway.measure(:guard, fn -> call_guard(module, guard, fields, context, policy, opts) end)
+      Gateway.measure(
+        {:guard, context.stage, guard},
+        fn -> call_guard(module, guard, fields, context, policy, opts) end,
+        opts
+      )
 
     validate_result(result, guard, value, context.stage, opts)
   end

@@ -249,7 +249,14 @@ defmodule AiControl.Tools.Executions do
   end
 
   defp transaction(fun) do
-    Repo.transaction(fun, log: false)
+    result = Repo.transaction(fun, log: false)
+
+    case result do
+      {:ok, %Execution{organization_id: id}} -> Audit.notify(id)
+      _ -> :ok
+    end
+
+    result
   rescue
     _ -> {:error, :tool_unavailable}
   catch

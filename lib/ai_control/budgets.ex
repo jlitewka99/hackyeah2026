@@ -22,7 +22,7 @@ defmodule AiControl.Budgets do
          :ok <- resource_access(current, agent_id, model) do
       {org, agent} = resources(current, agent_id)
 
-      transaction(fn -> admit!(org, agent, model, policy, request_id, now, current) end)
+      transaction(fn -> admit!(org, agent, model, policy, request_id, now, current) end, org)
     end
   end
 
@@ -247,7 +247,7 @@ defmodule AiControl.Budgets do
          {:ok, execution_id} <- Ecto.UUID.cast(execution_id) do
       {org, agent} = resources(current, agent_id)
 
-      transaction(fn -> tool_call!(org, agent, policy, workflow_id, execution_id) end)
+      transaction(fn -> tool_call!(org, agent, policy, workflow_id, execution_id) end, org)
     else
       _ -> {:error, :forbidden}
     end
@@ -302,26 +302,30 @@ defmodule AiControl.Budgets do
   end
 
   defp mutate(receipt, callback) do
-    transaction(fn ->
-      lock_org(receipt.organization_id)
-      buckets = buckets(receipt.organization_id, receipt.agent_id, receipt.window)
+    transaction(
+      fn ->
+        lock_org(receipt.organization_id)
+        buckets = buckets(receipt.organization_id, receipt.agent_id, receipt.window)
 
-      stored =
-        Repo.one!(
-          from(r in Reservation,
-            where: r.id == ^receipt.id and r.organization_id == ^receipt.organization_id,
-            lock: "FOR UPDATE"
-          ),
-          log: false
-        )
+        stored =
+          Repo.one!(
+            from(r in Reservation,
+              where: r.id == ^receipt.id and r.organization_id == ^receipt.organization_id,
+              lock: "FOR UPDATE"
+            ),
+            log: false
+          )
 
-      callback.(stored, buckets)
-    end)
+        callback.(stored, buckets)
+      end,
+      receipt.organization_id
+    )
   end
 
-  defp transaction(callback) do
+  defp transaction(callback, organization_id) do
     result = Repo.transaction(callback, log: false)
     Cache.clear()
+    if match?({:ok, _}, result), do: Audit.notify(organization_id)
     result
   rescue
     _ -> {:error, :budget_unavailable}

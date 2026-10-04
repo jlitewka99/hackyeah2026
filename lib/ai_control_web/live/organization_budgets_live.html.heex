@@ -1,0 +1,99 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} active_page="budgets">
+  <div class="page-content" id="organization-budgets">
+    <h1>Budgets</h1><p class="page-description">
+      Durable hourly accounting. Changing a policy does not reset usage.
+    </p>
+    <ReportingHTML.related_links scope={@current_scope} id="budget-report-links" />
+    <%= if ReportingHTML.ok?(@report) do %>
+      <% budget = ReportingHTML.value(@report) %>
+      <section class="list-section" aria-labelledby="budget-window-heading">
+        <h2 id="budget-window-heading">Organization · current UTC hour</h2><p
+          class="muted mt-2"
+          id="budget-window"
+        >
+          {ReportingHTML.time(budget.window)} — {ReportingHTML.time(budget.ends_at)}
+        </p>
+        <dl class="report-summary">
+          <div id="budget-requests">
+            <dt>Admitted requests</dt><dd>
+              {budget.bucket.requests} / {ReportingHTML.limit(
+                budget.policy.limits["organization"]["requests_per_hour"]
+              )}
+            </dd>
+          </div><div id="budget-tokens">
+            <dt>Settled tokens</dt><dd>
+              {budget.bucket.tokens} / {ReportingHTML.limit(
+                budget.policy.limits["organization"]["tokens_per_hour"]
+              )}
+            </dd>
+          </div><div id="budget-reserved">
+            <dt>Reserved tokens</dt><dd>{budget.bucket.reserved}</dd>
+          </div><div>
+            <dt>Unbounded in flight</dt><dd>{budget.bucket.unbounded}</dd>
+          </div><div id="budget-uncertain">
+            <dt>Uncertain executions</dt><dd>{Map.get(budget.statuses, "uncertain", 0)}</dd>
+          </div>
+        </dl>
+        <p class="muted text-sm">
+          Settled usage includes generated responses blocked by output controls. Uncertain executions retain their reservation until an operator verifies the outcome.
+        </p>
+      </section>
+      <section class="list-section" aria-labelledby="budget-agents-heading">
+        <h2 id="budget-agents-heading">Assigned agents</h2><p class="muted mt-2">
+          Only your assigned agents appear here. Organization totals cover the whole organization.
+        </p>
+        <p class="muted mt-2">
+          Agent limits: {ReportingHTML.limit(budget.policy.limits["agent"]["requests_per_hour"])} requests/hour · {ReportingHTML.limit(
+            budget.policy.limits["agent"]["tokens_per_hour"]
+          )} tokens/hour
+        </p>
+        <div id="budget-agent-list" phx-update="stream">
+          <p id="budget-agents-empty" class="hidden only:block muted py-6">
+            No agents are assigned to your access.
+          </p><div :for={{id, agent} <- @streams.agents} id={id} class="resource-row">
+            <div>
+              <p>{agent.name}</p><p class="resource-identifier muted">{agent.id}</p>
+            </div><div class="budget-agent-values">
+              <span>{agent.requests} requests</span><span>{agent.tokens} settled tokens</span><span class="muted">{agent.reserved} reserved · {agent.unbounded} unbounded in flight</span>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="list-section" aria-labelledby="budget-cost-heading">
+        <h2 id="budget-cost-heading">Recorded cost</h2><p class="muted mt-2">
+          Operator-configured rates, grouped by currency. Local compute cost is not inferred.
+        </p><div id="budget-cost-list" phx-update="stream">
+          <p id="budget-cost-empty" class="hidden only:block muted py-6">
+            No accounting activity in this hour.
+          </p><div :for={{id, item} <- @streams.costs} id={id} class="resource-row">
+            <div>
+              <p>{item.currency || "Not configured"}</p><p
+                :if={item.not_configured > 0}
+                class="muted text-sm"
+              >
+                {item.not_configured} reservations without configured prices
+              </p><p :if={item.unavailable > 0} class="muted text-sm">
+                {item.unavailable} reservations with unavailable cost
+              </p>
+            </div><span class="tabular-nums">{if item.currency,
+              do: ReportingHTML.cost(item.cost),
+              else: "Not configured"}</span>
+          </div>
+        </div>
+      </section>
+      <section class="list-section" aria-labelledby="budget-policy-heading">
+        <h2 id="budget-policy-heading">Effective limits</h2><p class="resource-identifier mt-3">
+          {budget.policy.version}
+        </p><p class="resource-identifier muted">Checksum {budget.policy.checksum}</p><p class="muted mt-3">
+          Workflow tool-call limit: {ReportingHTML.limit(
+            budget.policy.limits["workflow"]["tool_calls"]
+          )}. Workflow execution receipts are available in Events.
+        </p>
+      </section>
+    <% else %>
+      <p class="report-error mt-8" id="budget-error" role="alert">
+        Budget usage could not be loaded. Try again shortly.
+      </p>
+    <% end %>
+  </div>
+</Layouts.app>

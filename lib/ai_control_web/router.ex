@@ -38,6 +38,18 @@ defmodule AiControlWeb.Router do
     plug :require_permission, "policies.read"
   end
 
+  pipeline :events_read do
+    plug :require_permission, "events.read"
+  end
+
+  pipeline :budgets_read do
+    plug :require_permission, "budgets.read"
+  end
+
+  pipeline :signatures_read do
+    plug :require_permission, "signatures.read"
+  end
+
   scope "/v1", AiControlWeb do
     pipe_through [:api, :agent_api]
     get "/auth", ApiAuthController, :show, log: false
@@ -87,6 +99,44 @@ defmodule AiControlWeb.Router do
     end
 
     post "/users/update-password", UserSessionController, :update_password
+  end
+
+  scope "/organizations/:organization_id", AiControlWeb do
+    pipe_through [:browser, :require_authenticated_user, :require_organization, :events_read]
+    get "/events/export", EventExportController, :index, log: false
+
+    live_session :events,
+      on_mount: [
+        {AiControlWeb.OrganizationAuth, :require_organization},
+        {AiControlWeb.WorkspaceNavigation, :default}
+      ] do
+      live "/events", OrganizationEventsLive, :index
+      live "/events/:event_id", OrganizationEventLive, :show
+    end
+  end
+
+  scope "/organizations/:organization_id", AiControlWeb do
+    pipe_through [:browser, :require_authenticated_user, :require_organization, :budgets_read]
+
+    live_session :budgets,
+      on_mount: [
+        {AiControlWeb.OrganizationAuth, :require_organization},
+        {AiControlWeb.WorkspaceNavigation, :default}
+      ] do
+      live "/budgets", OrganizationBudgetsLive, :index
+    end
+  end
+
+  scope "/organizations/:organization_id", AiControlWeb do
+    pipe_through [:browser, :require_authenticated_user, :require_organization, :signatures_read]
+
+    live_session :signatures,
+      on_mount: [
+        {AiControlWeb.OrganizationAuth, :require_organization},
+        {AiControlWeb.WorkspaceNavigation, :default}
+      ] do
+      live "/signatures", OrganizationSignaturesLive, :index
+    end
   end
 
   scope "/organizations/:organization_id", AiControlWeb do

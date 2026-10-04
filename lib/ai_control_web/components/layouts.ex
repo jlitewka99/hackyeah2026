@@ -75,11 +75,19 @@ defmodule AiControlWeb.Layouts do
             <.theme_toggle id="mobile-theme" />
           </div>
           <div class="flex items-center justify-between gap-3">
-            <.workspace_nav
-              current_scope={@current_scope}
-              active_page={@active_page}
-              id="mobile-navigation"
-            />
+            <details id="mobile-navigation-menu" class="mobile-navigation-menu">
+              <summary id="mobile-navigation-toggle" class="button-secondary">
+                <span class="truncate">{if @current_scope.organization,
+                  do: @current_scope.organization.name,
+                  else: "Workspace navigation"}</span>
+                <.icon name="hero-chevron-down" class="size-4 shrink-0" />
+              </summary>
+              <.workspace_nav
+                current_scope={@current_scope}
+                active_page={@active_page}
+                id="mobile-navigation"
+              />
+            </details>
             <.link
               href={~p"/users/log-out"}
               method="delete"
@@ -123,8 +131,29 @@ defmodule AiControlWeb.Layouts do
         class="nav-link"
         aria-current={@active_page == "overview" && "page"}
       >
-        <.icon name="hero-building-office-2" class="size-4 shrink-0" /> Organization
+        <.icon name="hero-building-office-2" class="size-4 shrink-0" /> Overview
       </.link>
+      <.link
+        :if={@current_scope.organization && "events.read" in @current_scope.grants.permissions}
+        id={"#{@id}-events"}
+        navigate={~p"/organizations/#{@current_scope.organization.id}/events"}
+        class="nav-link"
+        aria-current={@active_page == "events" && "page"}
+      ><.icon name="hero-list-bullet" class="size-4 shrink-0" /> Events</.link>
+      <.link
+        :if={@current_scope.organization && "budgets.read" in @current_scope.grants.permissions}
+        id={"#{@id}-budgets"}
+        navigate={~p"/organizations/#{@current_scope.organization.id}/budgets"}
+        class="nav-link"
+        aria-current={@active_page == "budgets" && "page"}
+      ><.icon name="hero-chart-bar" class="size-4 shrink-0" /> Budgets</.link>
+      <.link
+        :if={@current_scope.organization && "signatures.read" in @current_scope.grants.permissions}
+        id={"#{@id}-signatures"}
+        navigate={~p"/organizations/#{@current_scope.organization.id}/signatures"}
+        class="nav-link"
+        aria-current={@active_page == "signatures" && "page"}
+      ><.icon name="hero-shield-exclamation" class="size-4 shrink-0" /> Signatures</.link>
       <.link
         :if={@current_scope.organization && "agents.read" in @current_scope.grants.permissions}
         navigate={~p"/organizations/#{@current_scope.organization.id}/agents"}

@@ -26,6 +26,36 @@ defmodule AiControl.Policies do
     end
   end
 
+  @doc "Capability-specific effective settings; never exposes the complete policy to a reporting reader."
+  def summary(scope, section) when section in [:budgets, :signatures] do
+    permission = if section == :budgets, do: "budgets.read", else: "signatures.read"
+
+    with {:ok, current} <- Access.authorize(scope, permission),
+         %Set{} = set <- set_for(current, :organization),
+         {:ok, version, inherited?} <- effective_version(set) do
+      settings = version.settings
+
+      data =
+        if section == :budgets,
+          do: %{limits: settings["budgets"]},
+          else: %{
+            guard: settings["guards"]["signatures"],
+            rule: settings["rules"]["exploit"],
+            set: settings["detector_sets"]["signatures"]
+          }
+
+      {:ok,
+       Map.merge(data, %{
+         version: "policy-#{version.id}",
+         checksum: version.checksum,
+         inherited?: inherited?
+       })}
+    else
+      {:error, reason} -> {:error, reason}
+      _ -> {:error, :policy_unavailable}
+    end
+  end
+
   def list_versions(scope, target \\ :organization) do
     with {:ok, current} <- authorize(scope, "policies.read", target),
          %Set{} = set <- set_for(current, target) do
@@ -160,10 +190,11 @@ defmodule AiControl.Policies do
         end
       end)
 
-    if match?({:ok, _}, result) do
+    if match?({:ok, _}, result) && !Repo.in_transaction?() do
       {_status, record} = result
       warm(record)
       Phoenix.PubSub.broadcast(AiControl.PubSub, topic(scope, target), :policies_changed)
+      if target == :organization, do: Audit.notify(scope.organization.id)
     end
 
     result

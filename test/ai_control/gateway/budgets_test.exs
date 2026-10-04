@@ -295,6 +295,17 @@ defmodule AiControl.Gateway.BudgetsTest do
     assert {:error, :policy_blocked} = Gateway.chat(context.principal, request())
     assert bucket(context).tokens == 16
     assert bucket(context).reserved == 0
+    event = Repo.one!(from(e in Event, where: e.kind == :gateway))
+    assert event.data["operation"] == "chat"
+    assert event.data["budget"]["usage"]["total_tokens"] == 16
+    assert event.data["budget"]["status"] == "settled"
+
+    assert Enum.all?(
+             ~w(request input output upstream budget_admission budget_reservation budget_settlement guard.output.pii),
+             fn key ->
+               is_integer(event.data["timings"][key]) && event.data["timings"][key] >= 0
+             end
+           )
   end
 
   defp guards(pii) do

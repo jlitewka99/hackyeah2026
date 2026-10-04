@@ -1,3 +1,6 @@
 <Layouts.app flash={@flash} current_scope={@current_scope} active_page="policies">
   <AiControlWeb.PolicyHTML.panel {assigns} />
+  <div class="page-content">
+    <AiControlWeb.ReportingHTML.related_links scope={@current_scope} id="policy-report-links" />
+  </div>
 </Layouts.app>

@@ -599,6 +599,121 @@ wizualnego; zastanego driftu nie naprawiano w tym rozszerzeniu.
 
 **Kamień milowy MVP:** działają auth, izolacja organizacji, proxy LLM, centralne polityki, kontrole deterministyczne, NER i AI, input/output filtering, budżety, pełny tool ACL, audyt, dashboard i testy.
 
+**Implementacja 11A — 2026-10-04, branch `JL/step-11-dashboard`:**
+
+1. `AiControl.Dashboard` agreguje istniejący audyt, rozliczenia i aktywną politykę.
+   Każdy odczyt ponownie pobiera przydziały i ogranicza dane do organizacji.
+   Overview pozostaje dostępny bez uprawnień raportowych; poszczególne sekcje
+   wymagają `events.read`, `budgets.read` albo `policies.read`. Budgets i Signatures
+   dostają wyłącznie ograniczone projekcje ustawień potrzebne do ich funkcji;
+   nie nadaje to `policies.read`. Wiersze agentów uwzględniają przydziały zasobów,
+   a istniejący dostęp do sum organizacji pozostaje zachowany.
+2. Końcowy audyt gatewaya przechowuje rodzaj operacji (`chat`/`models`) i zamknięty
+   zestaw pomiarów w mikrosekundach w istniejącym `audit_events.data`.
+   Obejmuje wejście, wyjście, guardy według etapu, przyjęcie/rezerwację/rozliczenie
+   budżetu, całe żądanie i samo `provider.chat`. Istniejący kontrakt telemetrii
+   oraz historyczne rekordy pozostają zgodne. Nie dodano tabel, migracji ani zależności.
+3. Żądania liczone są raz według końcowego zdarzenia gatewaya. Kategorie to allow,
+   redact, block, budget denied, rejected i service error. Wykrycia są deduplikowane
+   po żądaniu, etapie, guardzie i regule; powtarzające się fazy ani wiele lokalizacji
+   tej samej reguły nie zawyżają wyniku. p50/p95 używają nearest-rank
+   (`percentile_disc`), rzeczywistej liczby próbek i jawnego zakresu UTC.
+4. Dodano `/organizations/:organization_id/events`, szczegóły `/events/:event_id`,
+   `/budgets` i `/signatures`. Events ma wspólne filtry czasu, rodzaju, action,
+   etapu, guardu, agenta, reason code i request ID, zapisane w URL. Domyślny zakres
+   to 24 h; dostępne są 1 h, 7 dni i zakres własny UTC `[from, to)`.
+   Strona zawiera 50 rekordów z kursorem `(occurred_at, id)`; szczegóły pokazują
+   chronologię żądania, checksum oraz jawnie dozwolone evidence i usage.
+5. Overview pokazuje razem ruch, decyzje i bieżący budżet, a dalej opóźnienia,
+   aktywne kontrole i ostatnie zdarzenia. Budgets pokazuje bieżącą godzinę UTC,
+   rezerwacje, wykonania niepewne, limity i dokładne koszty oddzielnie dla walut.
+   Rozróżnia zero, `Not configured` i `Unavailable`. Signatures udostępnia katalog
+   `builtin.v1`, pochodzenie, checksum, identyfikatory, wzorce i bezpieczne alternatywy;
+   statystyki wymagają dodatkowo `events.read`. Edycja pozostaje w Policies.
+   Agents i Policies mają powiązane linki; otwarte formularze zachowują edycję
+   podczas odświeżania, a Agents dodatkowo pokazuje statystyki przyznanych agentów.
+6. Standardowe operacje publikują sygnały dopiero po udanym zapisie i zakończeniu
+   transakcji, na temacie organizacji, bez danych zdarzeń. LiveView scala sygnały
+   przez 200 ms; timer 60 s aktualizuje przedziały i godzinę UTC. Hook autoryzacji
+   odświeża dostęp przed callbackiem raportowym. Operacje w zewnętrznej transakcji
+   nie publikują przed jej commitem ani po rollbacku.
+7. `GET /organizations/:organization_id/events/export` wymaga równocześnie
+   `events.read` i `events.export`. Używa tych samych filtrów; link utrwala dokładne
+   granice aktualnego zakresu. `Repo.stream(max_rows: 500)` działa w transakcji
+   READ COMMITTED z deterministyczną kolejnością `(occurred_at, id)`, zgodnie z
+   [kontraktem Ecto stream](https://ecto.hexdocs.pm/Ecto.Repo.html#c:stream/2).
+   Dostęp jest sprawdzany przed wysyłaniem i przed każdą porcją oraz stopką.
+   Utrata dostępu lub błąd połączenia kończy stream i zwalnia transakcję.
+   Rekordy mają `type: event`, `schema_version: 1` i bezpieczną projekcję zdarzenia;
+   końcowy `export_complete` zawiera liczbę wyeksportowanych zdarzeń.
+   Serializacja nie kopiuje dowolnego `data` ani zagnieżdżonych map.
+8. Podczas implementacji scalono 12B na `main` (`84a8f2d`); branch 11A został
+   zaktualizowany do tej wersji. Zdarzenie `tool.dispatching` nie jest końcowym
+   żądaniem. Events i eksport pokazują zamkniętą projekcję potwierdzenia wykonania:
+   `execution_id`, `workflow_id`, `execution_status`, `tool` i `charged`, bez
+   argumentów i treści wyniku. Zakończone wykonania są uwzględniane w decyzjach,
+   a udane commity zajęcia, dispatch i zakończenia wysyłają sygnał raportowy.
+   Nie dorabiamy rodzaju operacji ani pomiarów, których audyt narzędzia nie zapisał.
+
+**Odbiór techniczny 11A:**
+
+- Przygotowano brakujące zależności przez `mix deps.get --check-locked`, bez zmian
+  lockfile, oraz izolowany PostgreSQL na porcie 55411. Podczas planowania worktree
+  nie miał zależności Mix i testów bazowych wtedy nie uruchomiono.
+- Po integracji z aktualnym `main`: `mix precommit` — 513 testów Elixir,
+  0 błędów, 9 testów rzeczywistych modeli
+  wyłączonych zgodnie z istniejącą konfiguracją; 3 testy JavaScript przechodzą.
+  Formatowanie, kompilacja bez ostrzeżeń, kontrola lockfile i Credo przechodzą.
+- Nowe testy obejmują izolację organizacji, niezależne przydziały, aktualizację
+  uprawnień, zgodność filtrów, paginację, eksport 502 rekordów, rozłączenie i brak
+  stopki po przerwaniu, zamkniętą serializację oraz rollback bez PubSub.
+  Osobny test na rzeczywistych commitach, poza sandboxem transakcyjnym, potwierdza
+  odebranie `events.export` przez drugie połączenie między porcjami READ COMMITTED.
+  Test integracji z 12B wykonuje rzeczywisty sandboxowy `file.read`, sprawdza
+  bezpieczne potwierdzenie, brak treści wyniku i brak zliczania samego dispatch.
+- Testy metryk sprawdzają deduplikację faz, nearest-rank p50/p95, brak pomiarów,
+  rozliczenie zablokowanego wyjścia rzeczywistego pipeline, granicę godziny UTC,
+  rezerwacje, agentów spoza przydziału, zero kosztu, brak wyceny, koszt nieznany
+  i sumy oddzielne dla USD/EUR. Testy LiveView używają DOM IDs i kontekstów/fixtures,
+  w tym zachowania niezapisanej zmiany nazwy po PubSub.
+- `mix assets.build` przechodzi. `mix security` przechodzi; audyt zależności nie
+  wykrywa podatności. Sobelow zgłasza 6 niskiej pewności `SQL.Query` przy agregacjach:
+  SQL jest stały albo pochodzi z `Repo.to_sql`, wartości filtrów są bindowane.
+  Pozostaje też zastane zgłoszenie niskiej pewności przy imporcie pliku polityki.
+  Nie dodano wyciszeń skanera. Wyniki istniejących zadań CI są dostępne w checks PR.
+- Impeccable: istniejący neutralny system, angielski interfejs, płaskie sekcje,
+  desktop 1440×1000 i mobile 390×844, oba motywy; potwierdzono brak poziomego
+  overflow, czytelne identyfikatory, stany puste i błędny zakres czasu. Menu mobilne
+  działa klawiaturą i pokazuje focus. Jednorazowy detector: brak głównych zgłoszeń,
+  5 advisory dotyczących typografii względem zapisanej rampy DESIGN.md. Końcowy niezależny przegląd jest
+  zapisany w `docs/acceptance/step11a-ui-review.md`; brief powierzchni zapisuje odbiór.
+
+**Zastrzeżenia i pozostały zakres:**
+
+- Historyczne rekordy nie mają kompletnego rodzaju operacji ani nowych pomiarów.
+  Braków nie rekonstruujemy: są `Not recorded`, bez dopisywania zer. Pomiar całego
+  żądania kończy się przed końcowym zapisem audytu; etapy mogą się nakładać i nie są
+  odejmowane od siebie. Przerwane wykonanie workera może nie zapisać pomiaru
+  upstream; taki czas nie staje się szacowaną próbką.
+- Propozycja wywołania narzędzia i wykrycie wzorca nie dowodzą wykonania. W scalonym
+  12B wykonanie potwierdza trwały rekord z własnym statusem. 11A prezentuje jego
+  bezpieczne evidence; pełna matryca wspólnego odbioru dashboardu i narzędzi,
+  porównanie modeli, kwalifikacja bezpieczeństwa i odbiór całego MVP pozostają
+  w 11B. Checkbox kroku 11 nadal pozostaje niezaznaczony.
+- Duży eksport zajmuje połączenie bazy podczas pobierania (timeout transakcji
+  5 minut). Pobranie bez `export_complete` jest niepełne, również przy błędzie już
+  po rozpoczęciu odpowiedzi HTTP 200. Nie jest to kopia bazy w jednym snapshotcie;
+  READ COMMITTED pozwala odczytom przydziałów zobaczyć ich aktualne commity.
+- Wywołujący kontekst we własnej transakcji powinien wysłać sygnał po jej udanym
+  commicie; nie ma ogólnego callbacku after-commit. Timer minutowy zapewnia ponowny
+  odczyt także wtedy, gdy taki zewnętrzny sygnał nie został opublikowany.
+- Koszt pochodzi z zapisanej wyceny operatora; waluty nie są przeliczane, a koszt
+  lokalnego compute nie jest wnioskowany. Odbiór UI wykorzystuje jawnie syntetyczne
+  fixtures i nie zastępuje benchmarku rzeczywistych modeli ani odbioru 11B.
+- Impeccable zgłasza zastany drift `.impeccable/design.json`. Odświeżenie przez
+  `impeccable document` pozostaje osobnym zadaniem; rozszerzenie zachowuje DESIGN.md
+  i istniejący sidecar.
+
 ### Krok 12. Tool firewall i ograniczenia zasobów
 
 **Uzgodniony plan 12B — 2026-10-04 (zrealizowany):** endpoint `POST /v1/tool_calls`

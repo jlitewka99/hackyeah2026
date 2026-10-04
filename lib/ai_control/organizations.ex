@@ -12,7 +12,7 @@ defmodule AiControl.Organizations do
     with {:ok, user} <- caller(scope), true <- user.organizer do
       result = Repo.transact(fn -> create_with_audit(scope, attrs) end)
 
-      if match?({:ok, _}, result),
+      if match?({:ok, _}, result) && !Repo.in_transaction?(),
         do:
           Phoenix.PubSub.broadcast(
             AiControl.PubSub,
@@ -266,6 +266,12 @@ defmodule AiControl.Organizations do
   def locked(_, _), do: {:error, :not_found}
 
   def notify(id) do
+    if !Repo.in_transaction?(), do: notify_committed(id)
+  end
+
+  defp notify_committed(id) do
+    Audit.notify(id)
+
     Phoenix.PubSub.broadcast(
       AiControl.PubSub,
       "organizations:#{id}:access",
@@ -278,7 +284,11 @@ defmodule AiControl.Organizations do
     |> Enum.each(&notify_user/1)
   end
 
-  defp notify_user(id),
+  defp notify_user(id) do
+    if !Repo.in_transaction?(), do: broadcast_user(id)
+  end
+
+  defp broadcast_user(id),
     do:
       Phoenix.PubSub.broadcast(
         AiControl.PubSub,
