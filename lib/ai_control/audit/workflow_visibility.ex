@@ -5,6 +5,14 @@ defmodule AiControl.Audit.WorkflowVisibility do
   alias AiControl.Accounts.Scope
   alias AiControl.Workflows.{Participant, Run}
 
+  def export_scope?(scope, spec) do
+    case spec["workflow_agents"] do
+      nil -> true
+      agents when is_list(agents) -> Enum.sort(agents) == Enum.sort(scope.grants.agents)
+      _ -> false
+    end
+  end
+
   def query(query, %Scope{grants: %{agents: ["*"]}}), do: query
 
   def query(query, %Scope{} = scope) do

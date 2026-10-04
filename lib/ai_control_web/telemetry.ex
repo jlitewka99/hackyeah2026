@@ -3,12 +3,16 @@ defmodule AiControlWeb.Telemetry do
 
   import Telemetry.Metrics
 
+  alias AiControl.Background.Telemetry, as: BackgroundTelemetry
+
   def start_link(arg) do
     Supervisor.start_link(__MODULE__, arg, name: __MODULE__)
   end
 
   @impl true
   def init(_arg) do
+    BackgroundTelemetry.install()
+
     children = [
       # Telemetry poller will execute the given period measurements
       # every 10_000ms. Learn more here: https://telemetry-metrics.hexdocs.pm
@@ -22,6 +26,13 @@ defmodule AiControlWeb.Telemetry do
 
   def metrics do
     [
+      counter("ai_control.background.job.count", tags: [:queue, :status]),
+      summary("ai_control.background.job.duration",
+        tags: [:queue, :status],
+        unit: {:native, :millisecond}
+      ),
+      summary("ai_control.background.job.wait", tags: [:queue], unit: {:native, :millisecond}),
+      last_value("ai_control.background.queue.count", tags: [:queue, :state]),
       counter("ai_control.tools.execution.duration_us", tags: [:status]),
       summary("ai_control.tools.execution.duration_us", tags: [:status], unit: :microsecond),
       summary("ai_control.gateway.stage.duration_us", tags: [:stage], unit: :microsecond),
@@ -89,6 +100,7 @@ defmodule AiControlWeb.Telemetry do
 
   defp periodic_measurements do
     [
+      {BackgroundTelemetry, :poll, []}
       # A module, function and arguments to be invoked periodically.
       # This function must call :telemetry.execute/3 and a metric must be added above.
       # {AiControlWeb, :count_users, []}

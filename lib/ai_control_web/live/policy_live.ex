@@ -5,6 +5,7 @@ defmodule AiControlWeb.PolicyLive do
   import Phoenix.LiveView
 
   alias AiControl.Agents.Agent
+  alias AiControl.Guards.Feeds
   alias AiControl.Organizations.Access
   alias AiControl.{Policies, Repo}
   alias AiControl.Policies.{Activation, Configuration, Draft}
@@ -322,6 +323,9 @@ defmodule AiControlWeb.PolicyLive do
         current: current,
         manage?: manage?,
         agents: agents,
+        signature_options:
+          [{"Built-in signatures", "builtin.v1"}] ++
+            if(target == :organization, do: Feeds.selectors(scope), else: []),
         categories: Configuration.categories(),
         guards: Configuration.guards(),
         budget_fields: Configuration.budget_fields()

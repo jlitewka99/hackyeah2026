@@ -135,7 +135,13 @@ jobs:
       - run: mix deps.get --check-locked
       - name: Compile without warnings
         run: mix compile --warnings-as-errors
+      - name: Prepare separate runner database
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -c 'CREATE DATABASE ai_control_runner_ci'
       - name: Run ExUnit
+        env:
+          TEST_RUNNER_DATABASE_URL: ecto://postgres:postgres@localhost/ai_control_runner_ci
         run: mix test --warnings-as-errors
       - name: Install asset tools
         run: mix assets.setup

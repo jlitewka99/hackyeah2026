@@ -1089,6 +1089,42 @@ bash docker/smoke ai-control:step9
 See `docs/acceptance/step9.md` for actual results, including the joint step 8
 acceptance and remaining semantic integration with step 10. Tool counter integration remains steps 12/15.
 
+## Background work, reports and gateway tests (Step 16)
+
+Apply the new Ecto migration before starting the application. Oban runs reports,
+JSONL exports, separate audit summaries, local signature imports and isolated
+gateway tests. Primary decisions and audit writes remain synchronous.
+
+Configure a dedicated synthetic runner database and the release executable:
+
+```sh
+export TEST_RUNNER_DATABASE_URL='ecto://postgres:postgres@localhost/ai_control_runner'
+export TEST_RUNNER_EXECUTABLE='/app/bin/ai_control'
+```
+
+The database must differ from the application database; missing configuration
+disables Tests execution. The child migrates its own database and sends real
+loopback HTTP requests through the gateway. Controlled covers 15 deterministic
+gateway/budget/tool scenarios. Live additionally requires the pinned local
+models and Polish benchmark services. Synthetic results do not qualify models
+for production or complete Step 11B. Processes share hardware and local services.
+
+Tests requires `tests.read`/`tests.run`; Reports uses `events.read`, exports add
+`events.export`, and budget-bearing reports add `budgets.read`. Access is checked
+again during work and download. Auxiliary artifacts/results expire after seven
+days; terminal run metadata after 30 days. Runner database fixtures require
+separate operator maintenance.
+
+`GUARD_FEED_PACKAGES` maps operator package IDs to local paths and SHA-256 values.
+Signature refresh publishes immutable tenant candidates; activation requires a
+new v5 policy and the existing revision transaction. Imported packages cannot
+execute code. Existing policy schemas and HTTP export remain supported.
+
+See [the Step 16 runbook and acceptance](docs/acceptance/step16.md) for package
+format, configuration, migration, retention, validation and the remaining Live
+and Linux container acceptance. The implementation is submitted as a draft
+until those checks are observed.
+
 ## Knowledge, RAG and explicit memory (step 18)
 
 Knowledge requires an explicitly activated schema v5 policy. Upgrade a draft, enable

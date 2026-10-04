@@ -46,6 +46,35 @@ defmodule AiControl.GatewayTest do
     assert Enum.any?(events, &(&1.kind == :gateway && &1.reason_codes == ["guard_unavailable"]))
   end
 
+  test "stopped background queues preserve gateway decisions and synchronous audit", context do
+    assert :ok = Supervisor.terminate_child(AiControl.Supervisor, Oban)
+
+    try do
+      blocked_id = Ecto.UUID.generate()
+
+      assert {:error, :guard_unavailable} =
+               Gateway.chat(context.principal, request(), request_id: blocked_id)
+
+      refute_received {:backend, _}
+
+      assert Repo.exists?(
+               from(e in Event,
+                 where: e.request_id == ^blocked_id and e.kind == :decision and e.action == :block
+               )
+             )
+
+      activate_gateway_policy(context.scope)
+      allowed_id = Ecto.UUID.generate()
+      assert {:ok, _} = Gateway.chat(context.principal, request(), request_id: allowed_id)
+
+      assert Enum.sort(
+               Repo.all(from(e in Event, where: e.request_id == ^allowed_id, select: e.kind))
+             ) == [:decision, :decision, :gateway]
+    after
+      assert {:ok, _} = Supervisor.restart_child(AiControl.Supervisor, Oban)
+    end
+  end
+
   test "explicit local policy permits audited input and output with no content in evidence",
        context do
     activate_gateway_policy(context.scope)

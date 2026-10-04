@@ -308,7 +308,7 @@
         >{if schema_version(@form) == 5, do: "Apply workflow defaults", else: "Upgrade to v5"}</button>
       </div>
       <p :if={upgrade_available?(@form)} class="muted mb-6">
-        Upgrade this draft to require workflow context and finite shared limits, and configure Knowledge and NER rule versions. Existing explicit tool limits are preserved. Saving and activation remain separate steps.
+        Upgrade this draft to require workflow context and finite shared limits, and configure Knowledge and NER rule versions and imported signature sets. Existing explicit tool limits are preserved. Saving and activation remain separate steps.
       </p>
       <section :if={schema_version(@form) == 5} id="policy-knowledge" class="list-section mb-6">
         <h3>Knowledge and memory</h3>
@@ -364,12 +364,22 @@
           Immutable sets keep detection reproducible.
         </p>
         <div :for={{guard, version} <- Enum.sort(@form[:detector_sets].value)} class="mt-2">
-          <span id={"policy-set-label-#{guard}"}>
+          <span id={"policy-set-label-#{guard}"} class="break-all">
             {if guard == "ner" && schema_version(@form) == 5,
               do: "Named entity weights",
               else: label(guard)} · {version}
           </span>
           <.input
+            :if={guard == "signatures" && schema_version(@form) == 5}
+            name="policy[detector_sets][signatures]"
+            id="policy-signature-selector"
+            type="select"
+            label="Signature set"
+            value={version}
+            options={@signature_options}
+          />
+          <.input
+            :if={guard != "signatures" || schema_version(@form) != 5}
             name={"policy[detector_sets][#{guard}]"}
             id={"policy-set-#{guard}"}
             value={version}

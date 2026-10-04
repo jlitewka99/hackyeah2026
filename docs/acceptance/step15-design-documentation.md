@@ -34,6 +34,12 @@ After integration with current main `6366bd9` (Step 18), sampled current `Policy
 
 Opened all four newly replaced policy capture paths listed in the matrix above. They show the merged Knowledge/NER controls and populated workflow budgets in neutral light/dark appearances, with desktop columns and stacked mobile fields. The full-page images are 1280×4744 and 390×7077 and were reduced for viewing; exact attributes and upgrade conditions were checked in source. The builder reports six required finite fields, no horizontal overflow, and both Knowledge and Workflows navigation links in browser DOM. Source separately gates those links by their own read grants. The review fixture's 1800-second duration is a synthetic override, not the 300-second product default. List/detail/stop source, captures, and the prior two-fix verdict are unchanged by this scoped policy recheck. No new defect hunt, browser operation, detector run, or broader visual approval is implied.
 
+## Final upstream source compatibility note
+
+Main subsequently advanced to `dae70b3` (Step 16 background jobs) and was integrated. This last source-only recheck sampled `layouts.ex`, `assets/css/app.css`, and the policy template. Navigation retains Workflows and Knowledge while adding Reports (`events.read`) and Tests (`tests.read`) with the incumbent navigation component and active-state semantics. Added `.background-*` CSS is namespaced to background-job rows/actions/forms and uses existing rules, spacing, and a 640px stacking breakpoint. Workflow markup/styles remain unchanged. The v5 policy template retains main's `policy-signature-selector` alongside Knowledge/NER controls and finite workflow budgets.
+
+All supplied captures predate these Step 16 navigation and signature-selector additions. Those additions have source and builder-reported test evidence, not newly captured rendered evidence; test results are recorded separately. This note preserves the prior scoped two-fix verdict and does not extend it to the new upstream surfaces. No browser, detector, visual-polishing round, or new design audit was performed.
+
 ## System summary and existing drift
 
 - Palette: neutral light/dark surfaces with semantic danger, success, and focus roles.

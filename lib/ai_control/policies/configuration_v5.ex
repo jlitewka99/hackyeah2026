@@ -1,5 +1,6 @@
 defmodule AiControl.Policies.ConfigurationV5 do
   @moduledoc "Finite workflow limits, opt-in Knowledge and pinned NER rules; v1–v4 stay frozen."
+  alias AiControl.Guards.{Feeds, Registry}
   alias AiControl.Policies.ConfigurationV4
 
   @workflow_defaults %{
@@ -28,11 +29,13 @@ defmodule AiControl.Policies.ConfigurationV5 do
 
   def validate(source) do
     with {:ok, limits} <- workflow(source),
+         {:ok, sets} <- signature_sets(source),
          {:ok, knowledge, settings, model_set} <- knowledge(source),
          base =
            source
            |> Map.drop(["knowledge", "ner_model_set"])
            |> Map.put("schema_version", 4)
+           |> Map.put("detector_sets", Registry.sets())
            |> put_in(["budgets", "workflow"], Map.take(limits, ["tool_calls"])),
          {:ok, config} <- ConfigurationV4.validate(base) do
       {:ok,
@@ -41,6 +44,7 @@ defmodule AiControl.Policies.ConfigurationV5 do
            config.source
            |> Map.merge(%{
              "schema_version" => 5,
+             "detector_sets" => sets,
              "knowledge" => knowledge,
              "ner_model_set" => model_set
            })
@@ -49,6 +53,7 @@ defmodule AiControl.Policies.ConfigurationV5 do
            config.settings
            |> Map.merge(%{
              "schema_version" => 5,
+             "detector_sets" => sets,
              "knowledge" => settings,
              "ner_model_set" => model_set
            })
@@ -95,6 +100,16 @@ defmodule AiControl.Policies.ConfigurationV5 do
         {:error,
          [{"knowledge", "choose valid switches, source kinds, trust levels and NER model set"}]}
     end
+  end
+
+  defp signature_sets(source) do
+    sets = Map.get(source, "detector_sets", Registry.sets())
+
+    if is_map(sets) && map_size(sets) == map_size(Registry.sets()) &&
+         Feeds.selector?(sets["signatures"]) &&
+         Map.delete(sets, "signatures") == Map.delete(Registry.sets(), "signatures"),
+       do: {:ok, sets},
+       else: {:error, [{"detector_sets", "choose supported immutable detector sets"}]}
   end
 
   defp selected?(items, allowed),
