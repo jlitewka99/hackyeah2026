@@ -7,6 +7,7 @@ defmodule AiControl.Budgets do
   alias AiControl.{Audit, Policies, Repo}
   alias AiControl.Budgets.{Bucket, Cache, Pricing, Reservation, ToolExecution, Usage, Workflow}
   alias AiControl.Organizations.{Access, Grants, Organization, ResourceResolver}
+  alias AiControl.Policy.Snapshot
 
   def window(now) do
     utc = DateTime.from_unix!(DateTime.to_unix(now))
@@ -240,7 +241,8 @@ defmodule AiControl.Budgets do
 
   def consume_tool_call(identity, agent_id, policy, workflow_id, execution_id) do
     with {:ok, current} <- Policies.refresh_identity(identity),
-         {:ok, _, _} <- Policies.snapshot_for_models(current, agent_id),
+         true <- Snapshot.valid?(policy),
+         true <- tool_agent_allowed?(current, agent_id, policy),
          {:ok, workflow_id} <- Ecto.UUID.cast(workflow_id),
          {:ok, execution_id} <- Ecto.UUID.cast(execution_id) do
       {org, agent} = resources(current, agent_id)
@@ -248,6 +250,21 @@ defmodule AiControl.Budgets do
       transaction(fn -> tool_call!(org, agent, policy, workflow_id, execution_id) end)
     else
       _ -> {:error, :forbidden}
+    end
+  end
+
+  defp tool_agent_allowed?(identity, agent_id, policy) do
+    {_org, agent} = resources(identity, agent_id)
+    allowed = policy.settings["allowed_agents"]
+    selected = allowed == ["*"] || agent in allowed
+
+    case identity do
+      %Principal{} ->
+        selected && agent_id in [nil, identity.agent_id]
+
+      %Scope{} ->
+        selected && Grants.includes?(identity.grants.agents, agent) &&
+          ResourceResolver.owned?(identity.organization.id, :agent, agent)
     end
   end
 

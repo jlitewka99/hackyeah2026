@@ -2,6 +2,25 @@ defmodule AiControlWeb.GatewayError do
   @moduledoc "Fixed public errors; upstream payloads and exceptions are never formatted."
   import Plug.Conn
 
+  def respond(conn, {:error, {code, %{execution_id: id, execution_status: status}}})
+      when code in [:tool_execution_exists, :idempotency_conflict] do
+    conn
+    |> put_resp_header("cache-control", "no-store")
+    |> put_resp_content_type("application/json")
+    |> send_resp(
+      409,
+      Jason.encode!(%{
+        error: %{
+          code: Atom.to_string(code),
+          message: "This execution key has already been used.",
+          request_id: conn.assigns[:request_id],
+          execution_id: id,
+          execution_status: status
+        }
+      })
+    )
+  end
+
   def respond(conn, {:error, {code, retry_after}}) do
     conn
     |> put_resp_header("retry-after", Integer.to_string(retry_after))
@@ -27,6 +46,26 @@ defmodule AiControlWeb.GatewayError do
   end
 
   defp classify(:invalid_request), do: {400, "Unsupported or invalid request."}
+
+  defp classify(code) when code in [:invalid_tool_request, :invalid_tool_arguments],
+    do: {400, "Unsupported or invalid tool request."}
+
+  defp classify(:tool_request_too_large), do: {413, "Tool request exceeds the size limit."}
+
+  defp classify(code)
+       when code in [
+              :tool_not_allowed,
+              :tool_resource_not_allowed,
+              :tool_resource_not_found,
+              :tool_redirect_blocked
+            ], do: {403, "Tool request is not allowed."}
+
+  defp classify(:tool_budget_exceeded), do: {429, "Tool context budget exceeded."}
+  defp classify(:tool_timeout), do: {504, "Tool execution timed out."}
+
+  defp classify(code) when code in [:tool_upstream_unavailable, :tool_invalid_result],
+    do: {502, "Tool adapter returned an unusable response."}
+
   defp classify(:input_too_large), do: {413, "Request exceeds the configured size limit."}
 
   defp classify(code)

@@ -5,6 +5,10 @@ defmodule AiControl.Gateway.Content do
   def fields(value, :input), do: walk(value, [])
   def fields(value, :output), do: value |> output_projection() |> elem(1)
 
+  def structured_fields(value), do: argument_fields(value, [], "")
+
+  def locations_valid_fields?(locations, fields), do: Enum.all?(locations, &location?(&1, fields))
+
   # Only message content is mutable. Tool arguments are decoded before scanning,
   # so JSON escaping cannot hide a value from a detector. Context prefixes are
   # scan-only, and offsets still refer to exactly the text supplied to guards.
@@ -72,6 +76,12 @@ defmodule AiControl.Gateway.Content do
     {projected, fields} =
       if stage == :output, do: output_projection(value), else: {value, fields(value)}
 
+    with {:ok, result} <- redact_fields(projected, locations, fields) do
+      {:ok, if(stage == :output, do: encode_arguments(result), else: result)}
+    end
+  end
+
+  def redact_fields(projected, locations, fields) do
     case Enum.all?(locations, &redactable_location?(&1, fields)) do
       true ->
         result =
@@ -91,7 +101,7 @@ defmodule AiControl.Gateway.Content do
             replace(acc, field.path, redact_text(text, spans))
           end)
 
-        {:ok, if(stage == :output, do: encode_arguments(result), else: result)}
+        {:ok, result}
 
       _ ->
         {:error, :redaction_unavailable}

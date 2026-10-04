@@ -46,6 +46,14 @@ gateway_config =
 
 config :ai_control, AiControl.Gateway.Config, gateway_config
 
+config :ai_control, AiControl.Tools.Config,
+  execution_timeout: 10_000,
+  sandboxes:
+    (case Jason.decode(System.get_env("TOOLS_SANDBOXES", "{}")) do
+       {:ok, value} when is_map(value) -> value
+       _ -> raise "TOOLS_SANDBOXES must be a JSON object"
+     end)
+
 if config_env() == :prod do
   encoded_key =
     System.get_env("AUDIT_FINGERPRINT_KEY") || raise "AUDIT_FINGERPRINT_KEY is required"

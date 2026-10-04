@@ -1,10 +1,12 @@
 defmodule AiControl.Tools do
-  @moduledoc "Preparation and ACL contract for step 12B; no production execution endpoint."
+  @moduledoc "Verified-agent tool firewall with durable, audited sandbox execution."
   alias AiControl.ApiKeys.Principal
   alias AiControl.Policies
   alias AiControl.Policy.Snapshot
   alias AiControl.Security.Validation
-  alias AiControl.Tools.ToolRequest
+  alias AiControl.Tools.{Executor, ToolRequest}
+
+  def execute(identity, params, opts \\ []), do: Executor.execute(identity, params, opts)
 
   def prepare(%Principal{} = identity, params) do
     with true <- identity_valid?(identity),

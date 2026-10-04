@@ -8,6 +8,13 @@ Plan opiera się na [AI_CONTROL_LAYER_REQUIREMENTS.md](AI_CONTROL_LAYER_REQUIREM
 
 **Aktualizacja 2026-10-04:** krok **8 ukończony i odebrany lokalnie** na `JL/step-8-output-filtering`, na bazie `origin/main` z krokami 1–7. Odbiór i zgodność API opisano przy kroku 8 oraz w [raporcie](docs/acceptance/step8.md). Rozliczenie zablokowanej odpowiedzi, rzeczywisty provider semantyczny i wykonanie narzędzi czekają na integrację odpowiednio z 9, 10 i 12; checkbox 8 nie oznacza scalenia brancha ani ukończenia tych zależności.
 
+**Aktualizacja 12B — 2026-10-04:** ukończono i odebrano pełny krok 12 na
+`JL/step-12b-tool-execution`, integrując scalone 8–10 i 12A. Publiczne wykonanie
+narzędzi przechodzi kontrole wejścia/wyjścia, trwałą idempotencję, budżet i audyt.
+[Raport odbioru](docs/acceptance/step12b.md) zawiera wyniki testów i ograniczenia.
+Checkbox 11 pozostaje otwarty: dashboard, Events i kwalifikacja modeli MVP nie są
+częścią 12B. Odbiór lokalny nie oznacza scalenia PR.
+
 Przykładowe zlecenie:
 
 > Wykonaj krok 9 z AI_CONTROL_LAYER_IMPLEMENTATION_PLAN.md na bazie ukończonego i scalonego kroku 7. Przeczytaj zasady pracy równoległej z sekcji 2.1, zaimplementuj budżety i rozliczenia bez ponownej implementacji NER, dodaj wymagane testy, uruchom mix precommit i opisz stan integracji w planie.
@@ -104,7 +111,7 @@ Checkboxy oznaczają potwierdzone zakończenie kroku, a nie samą obecność kod
 - [x] Krok 9 — Budżety i rozliczanie użycia
 - [x] Krok 10 — Semantyczne wykrywanie prompt injection
 - [ ] Krok 11 — Dashboard i zamknięcie wymaganego MVP
-- [ ] Krok 12 — Tool firewall i ograniczenia zasobów
+- [x] Krok 12 — Tool firewall i ograniczenia zasobów
 - [ ] Krok 13 — MCP gateway
 - [ ] Krok 14 — Głęboka analiza semantyczna
 - [ ] Krok 15 — Workflowy, runaway protection i wielu agentów
@@ -593,6 +600,88 @@ wizualnego; zastanego driftu nie naprawiano w tym rozszerzeniu.
 **Kamień milowy MVP:** działają auth, izolacja organizacji, proxy LLM, centralne polityki, kontrole deterministyczne, NER i AI, input/output filtering, budżety, pełny tool ACL, audyt, dashboard i testy.
 
 ### Krok 12. Tool firewall i ograniczenia zasobów
+
+**Uzgodniony plan 12B — 2026-10-04 (zrealizowany):** endpoint `POST /v1/tool_calls`
+przyjmuje tylko `tool`, `arguments` i wymagany UUID `Idempotency-Key`. Jeden snapshot,
+ACL zasobu, guardy wejścia, ponowna walidacja, atomowy licznik/audyt dispatch,
+sandbox, walidacja i guardy wyniku oraz audyt końcowy poprzedzają odpowiedź.
+Trwały kontekst limitu nadaje operator organizacji/agentowi; klient nie może go
+zmieniać. Trwały rejestr wykonania deduplikuje efekt, a nie tylko naliczenie:
+ponowienie zwraca 409 z ID i stanem, bez utrwalania argumentów lub wyników.
+Restart zamyka porzucone pending i oznacza dispatching jako uncertain; nie odtwarza
+efektów. Panel polityk otrzyma siedem checkboxów narzędzi, efektywne ustawienia
+i opis limitu, z zachowaniem schematów v1/v2/v3 oraz odbiorem impeccable.
+Odbiór obejmie API, wszystkie adaptery, guardy/redakcję, współbieżność, restart,
+audyt, frontend, HTTP/HTTPS i rzeczywiste NER/Qwen; następnie precommit, assets,
+Dialyzer, security i PR do main na `JL/step-12b-tool-execution`.
+
+Uzgodnione kontrakty wykonania:
+
+- API przyjmuje wyłącznie JSON `{tool, arguments}`; tożsamość, sandbox, adapter
+  treści i UUID kontekstu pochodzą z serwera. Limiter IP, auth i limiter
+  organizacji/agenta poprzedzają parser. Surowe wejście i poprawny JSON wyniku
+  mają limit 64 KiB. Sukces to 200 z request/execution ID, narzędziem i wynikiem;
+  stałe błędy obejmują 400/413, 401, 403, 409, 429, 502/504 i 503.
+- Jeden snapshot obowiązuje od ACL do odpowiedzi. Adapter narzędzi w
+  `Gateway.Stages.evaluate/6` skanuje argumenty i wszystkie zagnieżdżone pola
+  wyniku w kolejności deterministic → NER → semantic; zachowuje offsety UTF-8.
+  Klucze, operacja i selektory są niemodyfikowalne; po każdej fazie ponownie
+  sprawdza kontrakt i ACL. Moderacja dostaje zaakceptowane wejście po redakcji.
+- `tool_executions` utrwala tożsamość, kontekst, UUID idempotencji, HMAC
+  kanonicznego żądania, snapshot, stan i czasy; bez argumentów/wyników. Unikalność
+  organizacja/agent/klucz przetrwa zmianę klucza API i kontekstu. Ten sam klucz
+  daje 409 z ID/stanem, zmieniona treść osobny kod konfliktu, bez ponowienia efektu.
+  Atomowe stany to pending, dispatching, completed, rejected, output_blocked,
+  failed i uncertain.
+- Zatwierdzenie `Budgets.consume_tool_call/5`, dispatching i audyt rozpoczęcia
+  są jedną transakcją z zachowaniem kolejności blokad. Walidacja używa przekazanego
+  snapshotu. Odmowy przed dispatch nie naliczają; rozpoczęcie, awaria adaptera,
+  blokada wyjścia i niepewny wynik pozostają naliczone. Aktywacja i restart nie
+  zerują stałego kontekstu operatora; null oznacza brak limitu, zero odmowę.
+- Nazwany supervisor i Registry uruchamiają skonfigurowane sandboxy przed
+  endpointem; brak przydziału odmawia. Domyślnie jeden slot, timeout 10 sekund,
+  bez retry; termin i anulowanie sprawdzane przed efektem. Recovery zamyka pending
+  bez naliczenia, dispatching jako uncertain, bez odtwarzania. Audyt `tool.*`
+  waliduje beztreściową korelację; awaria końcowego audytu nie ujawnia wyniku.
+- Wspólny panel organizacji/platformy używa siedmiu opisanych checkboxów,
+  `to_form`, `<.input>` i adaptera do `tools.allowed_tools`; pokazuje efektywne
+  uprawnienia, różnice, przydział operatora i trwały zakres limitu. Zachowuje
+  v1/v2/v3, historyczne checksumy i nieobsługiwane ID do jawnego usunięcia.
+  Angielski interfejs i obecny wygląd są odbierane według impeccable.
+- Odbiór obejmuje endpoint/parser/tożsamość, siedem operacji i ataki 12A,
+  Unicode/redakcję/zagnieżdżone wyniki, guardy/audyt bez efektu po odmowie,
+  współbieżne duplikaty, restart/limity, zmianę polityki i unieważnienie tożsamości,
+  HTTP/HTTPS, rzeczywiste NER/Qwen i formularze/import/export/historyczne wersje.
+  Wymaga precommit, assets, Dialyzera, security, dokumentacji i PR do main.
+
+**Zastrzeżenia 12B:** trwałe zajęcie zapobiega ponownemu dispatch tego samego
+klucza, ale nie gwarantuje exactly-once dla zewnętrznych efektów. Wyniki nie są
+odtwarzane. Dane sandboxa są nietrwałe. Blokada wyjścia nie cofa efektu ani
+naliczonego wywołania. Ocena jakości Qwen i porównanie modeli pozostają w 11B
+zgodnie z ograniczeniami pomiarów kroku 10. Domyślne etapy guardów zachowują
+politykę; demo narzędzi jawnie włącza injection także dla wyjścia. Recovery i sloty
+zakładają jedną instancję aplikacji; koordynacja klastra pozostaje poza tym demo.
+Początkowa próba testów w tym
+worktree zatrzymała się na brakujących zależnościach Mix; wynik nie potwierdza
+regresji kodu. Zależności odtworzono zgodnie z istniejącym lockfile bez jego zmiany.
+Istniejący stale sidecar impeccable nie jest częścią tego zakresu.
+
+**Odbiór 12B — 2026-10-04:** `mix precommit` przechodzi: **495 testów Elixir,
+3 JavaScript**, 9 opt-in wyłączonych; assets, Dialyzer (zero błędów) i security
+przechodzą. Osobno przechodzi **2 testy narzędzi z rzeczywistymi NER/Qwen** oraz
+**4 regresje wspólnego gatewaya z rzeczywistymi modelami**. Testy HTTP/HTTPS,
+duplikatów, timeout po dispatch i awarii obu audytów potwierdzają brak retry,
+trwałe naliczenie i nieujawnianie niezaakceptowanych wyników. Impeccable obejmuje
+oba panele, desktop/mobile, oba motywy, klawiaturę, błędy i review; niezależny
+odbiór zwrócił `ship` bez wymaganych poprawek. Porównanie dokumentacji zachowuje
+incumbent DESIGN.md i odłożony sidecar. [Raport odbioru](docs/acceptance/step12b.md)
+i [instrukcja narzędzi](docs/tools.md) opisują migrację i konfigurację operatora.
+**Pełny krok 12 jest odebrany lokalnie; krok 11 pozostaje otwarty.**
+
+**Poprawka po CI 12B:** pierwszy job Quality wykazał różnicę formatowania nowej
+migracji, pominiętą przez lokalny cache formattera. Poprawiono zapis migracji;
+`check` i `precommit` wymuszają teraz pełne formatowanie przez `--force`.
+Ponowiony precommit przechodzi: 495 testów Elixir i 3 JavaScript, bez zmiany logiki.
 
 **Praca równoległa:** 12A (katalog, autoryzacja, walidatory i sandboxowe adaptery) realizować po ukończeniu 7 równolegle z 8–10. 12B łączy te moduły z endpointem, budżetami, kontrolami wyników i semantyką po scaleniu pierwszej fali; dopiero wtedy odbierać pełny krok 12.
 

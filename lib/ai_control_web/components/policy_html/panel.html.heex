@@ -70,6 +70,17 @@
         </dd>
       </div>
     </dl>
+    <div id="policy-effective-tools" class="mt-4">
+      <h3 class="font-medium">Allowed tools</h3>
+      <p class="muted mt-1 break-words">
+        {case get_in(@current.version.settings, ["tools", "allowed_tools"]) do
+          nil -> "None · upgrade a draft to configure tool permissions"
+          [] -> "None"
+          tools -> Enum.map_join(tools, ", ", &tool_label/1)
+        end}
+      </p>
+      <p class="muted text-sm mt-1">Operator resource grants are required for execution.</p>
+    </div>
     <p class="muted text-sm mt-4 break-all">
       Version {short(@current.version.id)} · SHA-256 {@current.version.checksum}
     </p>
@@ -270,7 +281,7 @@
       <section :if={schema_version(@form) in [2, 3]} id="policy-detector-sets" class="mb-6">
         <h3 class="font-medium">Detector sets</h3>
         <p class="muted mt-2">
-          Immutable sets keep detection reproducible. Tool execution is configured in a later step.
+          Immutable sets keep detection reproducible.
         </p>
         <div :for={{guard, version} <- Enum.sort(@form[:detector_sets].value)} class="mt-2">
           <span>{label(guard)} · {version}</span>
@@ -281,20 +292,6 @@
             type="hidden"
           />
         </div>
-        <.input
-          :if={@form[:tools].value["allowed_tools"] == []}
-          name="policy[tools][allowed_tools][]"
-          id="policy-tools-empty"
-          type="hidden"
-          value=""
-        />
-        <.input
-          :for={tool <- @form[:tools].value["allowed_tools"]}
-          name="policy[tools][allowed_tools][]"
-          id={"policy-tool-#{tool}"}
-          type="hidden"
-          value={tool}
-        />
       </section>
       <.input
         field={@form[:profile]}
@@ -528,13 +525,60 @@
         </div>
       </details>
       <details
+        :if={schema_version(@form) in [2, 3]}
+        class="policy-details"
+        id="policy-tools"
+        open={MapSet.member?(@open_sections, "tools")}
+      >
+        <summary phx-click="toggle_section" phx-value-section="tools">Tool permissions</summary>
+        <p id="policy-tool-help" class="muted mt-3">
+          Select operations agents may request. Each operation also requires an exact resource grant from the operator. Selecting none denies all tools.
+        </p>
+        <fieldset class="mt-4 space-y-4" aria-describedby="policy-tool-help">
+          <legend class="sr-only">Allowed tool operations</legend>
+          <div :for={tool <- tool_catalog()}>
+            <.input
+              type="checkbox"
+              name={"policy[tool_selection][#{tool["name"]}]"}
+              id={tool_id(tool["name"])}
+              checked={tool_selected?(@form, tool["name"])}
+              label={tool["name"]}
+              aria-describedby={tool_id(tool["name"]) <> "-description"}
+            />
+            <p id={tool_id(tool["name"]) <> "-description"} class="muted text-sm mt-1">
+              {tool_description(tool["name"])}
+            </p>
+          </div>
+          <div :for={tool <- unknown_tools(@form)} class="break-all">
+            <.input
+              type="checkbox"
+              name={"policy[tool_selection][#{tool}]"}
+              id={tool_id(tool)}
+              checked={tool_selected?(@form, tool)}
+              label={tool}
+              aria-describedby={tool_id(tool) <> "-description"}
+            />
+            <p id={tool_id(tool) <> "-description"} class="muted text-sm mt-1">
+              Unsupported operation. Preserved until you deselect it; it cannot execute.
+            </p>
+          </div>
+        </fieldset>
+        <p
+          :for={message <- field_errors(@errors, "tools.allowed_tools")}
+          class="field-error mt-3"
+          role="alert"
+        >
+          {message}
+        </p>
+      </details>
+      <details
         class="policy-details"
         id="policy-budgets"
         open={MapSet.member?(@open_sections, "budgets")}
       >
         <summary phx-click="toggle_section" phx-value-section="budgets">Budget limits</summary>
         <p id="policy-budget-help" class="muted mt-3">
-          Request and token limits are enforced per UTC hour. An empty limit (null in YAML) is not configured; zero denies new requests or token reservations. Activating a policy does not reset usage or existing reservations. Workflow tool limits will apply when tool execution is connected.
+          Request and token limits are enforced per UTC hour. An empty limit (null in YAML) is not configured; zero denies new requests or token reservations. Activating a policy does not reset usage or existing reservations. Tool calls are limited per operator-assigned agent context, not per hour. A new policy or restart does not reset this count. Zero denies execution; an empty limit is not configured. Started calls count even when their result is blocked.
         </p>
         <fieldset :for={{scope, fields} <- @budget_fields} class="mt-4">
           <legend class="font-medium">{label(scope)}</legend>

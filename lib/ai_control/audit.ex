@@ -18,6 +18,8 @@ defmodule AiControl.Audit do
     Validation
   }
 
+  alias AiControl.Tools.Catalog
+
   @policy_events ~w(policy.version_created policy.activated policy.rolled_back policy.inheritance_restored)
   @admin_events ~w(organization.created organization.status_changed member.access_changed member.removed superadmin.transferred invitation.issued invitation.revoked invitation.accepted invitation.delivery_failed) ++
                   @policy_events
@@ -25,6 +27,61 @@ defmodule AiControl.Audit do
 
   @gateway_codes ~w(completed invalid_request input_too_large forbidden agent_not_allowed model_not_allowed policy_unavailable rate_limited capacity_exceeded guard_unavailable policy_blocked redaction_unavailable audit_unavailable upstream_timeout upstream_unavailable upstream_rejected upstream_invalid_response response_too_large model_unavailable model_digest_mismatch request_budget_exceeded token_budget_exceeded budget_unavailable budget_conflict tokenizer_unavailable)
   def gateway_codes, do: @gateway_codes
+
+  @tool_codes ~w(completed dispatching invalid_request input_too_large forbidden agent_not_allowed tool_not_allowed invalid_tool_request invalid_tool_arguments tool_request_too_large tool_resource_not_allowed tool_resource_not_found tool_redirect_blocked tool_upstream_unavailable tool_invalid_result tool_unavailable tool_timeout tool_cancelled tool_interrupted tool_execution_exists idempotency_conflict tool_budget_exceeded budget_unavailable policy_unavailable guard_unavailable policy_blocked redaction_unavailable audit_unavailable capacity_exceeded rate_limited)
+
+  def record_tool(identity, request_id, type, code, duration, policy, evidence) do
+    with true <-
+           type in ~w(tool.completed tool.dispatching tool.rejected tool.output_blocked tool.failed tool.uncertain),
+         true <-
+           code in @tool_codes && Validation.uuid?(request_id) && Validation.duration?(duration),
+         true <- is_nil(policy) || Snapshot.valid?(policy),
+         true <- tool_evidence?(type, evidence),
+         {:ok, attrs} <- gateway_identity(identity) do
+      event =
+        struct!(
+          Event,
+          Map.merge(attrs, %{
+            request_id: request_id,
+            kind: :gateway,
+            event_type: type,
+            target_id: if(evidence, do: evidence.execution_id, else: request_id),
+            stage: if(type in ~w(tool.completed tool.output_blocked), do: :output, else: :input),
+            policy_version: if(policy, do: policy.version),
+            policy_checksum: if(policy, do: policy.checksum),
+            reason_codes: [code],
+            occurred_at: DateTime.utc_now(),
+            duration_us: duration,
+            data: if(evidence, do: %{tool_execution: evidence}, else: %{})
+          })
+        )
+
+      persist(event)
+    else
+      _ -> {:error, :invalid_audit_data}
+    end
+  end
+
+  defp tool_evidence?("tool.rejected", nil), do: true
+
+  defp tool_evidence?(
+         type,
+         %{
+           execution_id: id,
+           workflow_id: workflow,
+           execution_status: status,
+           tool: tool,
+           charged: charged
+         } = evidence
+       ) do
+    map_size(evidence) == 5 && type == "tool." <> status &&
+      charged == status not in ~w(pending rejected) &&
+      Validation.uuid?(id) && Validation.uuid?(workflow) &&
+      status in ~w(pending dispatching completed rejected output_blocked failed uncertain) &&
+      Enum.any?(Catalog.all(), &(&1["name"] == tool)) && is_boolean(charged)
+  end
+
+  defp tool_evidence?(_, _), do: false
 
   @doc "Content-free terminal evidence from the gateway's verified identity adapter."
   def record_gateway(

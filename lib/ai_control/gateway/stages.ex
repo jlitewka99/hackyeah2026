@@ -32,7 +32,7 @@ defmodule AiControl.Gateway.Stages do
            {:ok, assessment} <- SecurityAssessment.new(context, previous ++ results),
            {:ok, decision} <-
              phase_decision(context, assessment, policy, guards, index == length(phases) - 1),
-           {:ok, safe} <- enforce(current, decision, stage),
+           {:ok, safe} <- enforce(current, decision, stage, opts),
            :ok <- safe_contract(current, safe, stage, opts) do
         evidence = Enum.map(previous ++ results, &%{&1 | detections: []})
         {:cont, {:ok, safe, evidence}}
@@ -68,7 +68,7 @@ defmodule AiControl.Gateway.Stages do
          {:ok, results} <- results(value, context, policy, guards, opts),
          {:ok, assessment} <- SecurityAssessment.new(context, results),
          {:ok, decision} <- Security.evaluate_and_audit(context, assessment, policy) do
-      with {:ok, safe} <- enforce(value, decision, stage),
+      with {:ok, safe} <- enforce(value, decision, stage, opts),
            :ok <- safe_contract(value, safe, stage, opts),
            do: {:ok, safe}
     else
@@ -89,7 +89,7 @@ defmodule AiControl.Gateway.Stages do
   defp classify_error(_), do: {:error, :guard_unavailable}
 
   defp results(value, context, policy, guards, opts) do
-    fields = Content.fields(value, context.stage) |> Enum.map(& &1.text)
+    fields = adapter(opts).fields(value, context.stage) |> Enum.map(& &1.text)
 
     Enum.reduce_while(guards, {:ok, []}, fn guard, {:ok, results} ->
       case assess(guard, fields, value, context, policy, opts) do
@@ -110,7 +110,16 @@ defmodule AiControl.Gateway.Stages do
       else: {:cont, collected}
   end
 
-  defp safe_contract(original, safe, :input, _opts) do
+  defp safe_contract(original, safe, stage, opts) do
+    case Keyword.get(opts, :content_adapter) do
+      nil -> default_contract(original, safe, stage, opts)
+      module -> module.validate(original, safe, stage, opts)
+    end
+  end
+
+  defp adapter(opts), do: Keyword.get(opts, :content_adapter, Content)
+
+  defp default_contract(original, safe, :input, _opts) do
     case Request.validate(safe) do
       {:ok, _} ->
         if original["model"] == safe["model"], do: :ok, else: {:error, :redaction_unavailable}
@@ -120,7 +129,7 @@ defmodule AiControl.Gateway.Stages do
     end
   end
 
-  defp safe_contract(_, safe, :output, opts) do
+  defp default_contract(_, safe, :output, opts) do
     contract = Keyword.get(opts, :tool_contract, %{schemas: %{}, choice: "auto"})
 
     case Response.validate(safe, contract) do
@@ -152,7 +161,7 @@ defmodule AiControl.Gateway.Stages do
     result =
       Gateway.measure(:guard, fn -> call_guard(module, guard, fields, context, policy, opts) end)
 
-    validate_result(result, guard, value, context.stage)
+    validate_result(result, guard, value, context.stage, opts)
   end
 
   defp call_guard(module, guard, fields, context, policy, opts) do
@@ -168,11 +177,11 @@ defmodule AiControl.Gateway.Stages do
     end)
   end
 
-  defp validate_result({:error, {:capacity_exceeded, _}} = error, _, _, _), do: error
+  defp validate_result({:error, {:capacity_exceeded, _}} = error, _, _, _, _), do: error
 
-  defp validate_result({:ok, result}, guard, value, stage) do
+  defp validate_result({:ok, result}, guard, value, stage, opts) do
     if GuardResult.valid?(result) && result.guard == guard &&
-         Content.locations_valid?(
+         adapter(opts).locations_valid?(
            value,
            Enum.map(result.detections, & &1.location) |> Enum.reject(&is_nil/1),
            stage
@@ -181,7 +190,7 @@ defmodule AiControl.Gateway.Stages do
        else: unavailable(guard)
   end
 
-  defp validate_result(_, guard, _, _), do: unavailable(guard)
+  defp validate_result(_, guard, _, _, _), do: unavailable(guard)
 
   defp unavailable(guard) do
     {:ok, result} =
@@ -190,12 +199,12 @@ defmodule AiControl.Gateway.Stages do
     result
   end
 
-  defp enforce(value, %{action: :allow}, _), do: {:ok, value}
+  defp enforce(value, %{action: :allow}, _, _), do: {:ok, value}
 
-  defp enforce(value, %{action: :redact, redactions: spans}, stage),
-    do: Content.redact(value, spans, stage)
+  defp enforce(value, %{action: :redact, redactions: spans}, stage, opts),
+    do: adapter(opts).redact(value, spans, stage)
 
-  defp enforce(_, %{reason_codes: reasons}, _) do
+  defp enforce(_, %{reason_codes: reasons}, _, _) do
     cond do
       "required_guard_unavailable" in reasons -> {:error, :guard_unavailable}
       "redaction_unavailable" in reasons -> {:error, :redaction_unavailable}

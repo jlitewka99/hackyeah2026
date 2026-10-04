@@ -6,6 +6,7 @@ defmodule AiControlWeb.OrganizationPoliciesLiveTest do
 
   alias AiControl.{Organizations, Policies}
   alias AiControl.Policies.{Configuration, YAML}
+  alias AiControlWeb.PolicyHTML
 
   setup %{conn: conn} do
     scope = organization_fixture()
@@ -98,7 +99,7 @@ defmodule AiControlWeb.OrganizationPoliciesLiveTest do
       |> Map.put("tools", %{"allowed_tools" => ["read_document"]})
 
     view |> form("#policy-import-form", yaml: %{text: YAML.encode(source)}) |> render_submit()
-    assert has_element?(view, "#policy-tool-read_document[value='read_document']")
+    assert has_element?(view, "##{PolicyHTML.tool_id("read_document")}[checked]")
     view |> form("#policy-form") |> render_submit()
     assert {:ok, [version]} = Policies.list_versions(scope)
     assert {:ok, expected} = Configuration.validate(source)

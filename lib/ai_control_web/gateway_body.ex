@@ -8,7 +8,8 @@ defmodule AiControlWeb.GatewayBody do
 
   def init(opts), do: opts
 
-  def call(%{method: "POST", request_path: "/v1/chat/completions"} = conn, _) do
+  def call(%{method: "POST", request_path: path} = conn, _)
+      when path in ["/v1/chat/completions", "/v1/tool_calls"] do
     conn = ApiKeyAuth.call(conn, [])
 
     if conn.halted do
@@ -39,7 +40,7 @@ defmodule AiControlWeb.GatewayBody do
 
   defp read(conn, chunks, size) do
     case read_body(conn,
-           length: min(65_536, Config.get(:input_bytes) + 1),
+           length: min(65_536, input_limit(conn) + 1),
            read_length: 65_536,
            read_timeout: 2_000
          ) do
@@ -47,7 +48,7 @@ defmodule AiControlWeb.GatewayBody do
         size = size + byte_size(chunk)
 
         cond do
-          size > Config.get(:input_bytes) -> {:error, :input_too_large, conn}
+          size > input_limit(conn) -> {:error, :input_too_large, conn}
           status == :more -> read(conn, [chunk | chunks], size)
           true -> {:ok, [chunk | chunks] |> Enum.reverse() |> IO.iodata_to_binary(), conn}
         end
@@ -57,14 +58,29 @@ defmodule AiControlWeb.GatewayBody do
     end
   end
 
+  defp input_limit(%{request_path: "/v1/tool_calls"}), do: 65_536
+  defp input_limit(_), do: Config.get(:input_bytes)
+
   defp reject(conn, code, retry \\ nil) do
     result =
-      Audit.record_gateway(
-        conn.assigns.api_principal,
-        conn.assigns.request_id,
-        Atom.to_string(code),
-        0
-      )
+      if conn.request_path == "/v1/tool_calls" do
+        Audit.record_tool(
+          conn.assigns.api_principal,
+          conn.assigns.request_id,
+          "tool.rejected",
+          Atom.to_string(code),
+          0,
+          nil,
+          nil
+        )
+      else
+        Audit.record_gateway(
+          conn.assigns.api_principal,
+          conn.assigns.request_id,
+          Atom.to_string(code),
+          0
+        )
+      end
 
     code = if match?({:ok, _}, result), do: code, else: :audit_unavailable
 

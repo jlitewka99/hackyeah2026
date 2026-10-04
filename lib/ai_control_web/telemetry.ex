@@ -22,6 +22,9 @@ defmodule AiControlWeb.Telemetry do
 
   def metrics do
     [
+      counter("ai_control.tools.execution.duration_us", tags: [:status]),
+      summary("ai_control.tools.execution.duration_us", tags: [:status], unit: :microsecond),
+      summary("ai_control.gateway.stage.duration_us", tags: [:stage], unit: :microsecond),
       # Phoenix Metrics
       summary("phoenix.endpoint.start.system_time",
         unit: {:native, :millisecond}

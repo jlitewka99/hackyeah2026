@@ -116,7 +116,7 @@ defmodule AiControl.MixProject do
         "phx.digest"
       ],
       check: [
-        "format --check-formatted",
+        "format --check-formatted --force",
         "compile --warnings-as-errors",
         "deps.unlock --check-unused",
         "credo --strict",
@@ -125,7 +125,7 @@ defmodule AiControl.MixProject do
       ],
       security: ["sobelow --config", "deps.audit"],
       "check.all": ["check", "dialyzer", "security"],
-      precommit: ["format", "check"]
+      precommit: ["format --force", "check"]
     ]
   end
 end

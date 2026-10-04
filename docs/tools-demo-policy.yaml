@@ -1,0 +1,17 @@
+schema_version: 3
+profile: balanced
+allowed_models: ["qwen3.5:4b"]
+allowed_agents: ["*"]
+tools:
+  allowed_tools: [file.read, file.write, file.delete, http.get, database.select, email.send, command.run]
+guards:
+  semantic:
+    enabled: true
+    required: true
+    stages: [input, output]
+  moderation:
+    enabled: true
+    required: true
+budgets:
+  workflow:
+    tool_calls: 20
