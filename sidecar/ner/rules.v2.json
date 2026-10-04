@@ -1,0 +1,17 @@
+{
+  "model_set": "pl-nkjp.v2",
+  "weights_manifest": "models.v1.json",
+  "weights_manifest_sha256": "53d1a995b4802b8360661e243a178315bb646a028dd9e38edccb13490bd9bca7",
+  "entity_mapping": {
+    "persName": "person",
+    "placeName": "place",
+    "geogName": "geographical_location",
+    "orgName": "organization"
+  },
+  "ignored_labels": [
+    "date",
+    "time"
+  ],
+  "address_rule": "polish_contextual_address_v2",
+  "standalone_name_dictionary": false
+}

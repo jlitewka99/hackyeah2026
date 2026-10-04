@@ -1,11 +1,15 @@
 defmodule AiControl.Gateway.Request do
   @moduledoc "Explicit text-only Chat Completions subset. Identity is a separate argument."
-  @keys ~w(model messages tools tool_choice stream stream_options temperature top_p max_tokens seed stop n)
+  @keys ~w(model messages tools tool_choice stream stream_options temperature top_p max_tokens seed stop n context)
   @message_keys ~w(role content name tool_calls tool_call_id)
+
+  def validate(%{"context" => %{"query" => query}})
+      when is_binary(query) and byte_size(query) > 2048, do: {:error, :input_too_large}
 
   def validate(params) do
     if object?(params, @keys) && text?(params["model"]) && messages?(params["messages"]) &&
-         optional?(params, "tools", &tools?/1) && choices?(params) && options?(params) do
+         optional?(params, "tools", &tools?/1) && choices?(params) && options?(params) &&
+         context?(params) do
       {:ok, Map.put_new(params, "stream", false)}
     else
       {:error, :invalid_request}
@@ -102,6 +106,18 @@ defmodule AiControl.Gateway.Request do
       optional?(params, "seed", &seed?/1) &&
       optional?(params, "stop", &stops?/1)
   end
+
+  defp context?(%{"context" => context, "messages" => messages}) do
+    object?(context, ~w(query sources top_k)) && text?(context["query"]) &&
+      byte_size(context["query"]) <= 2048 && List.last(messages)["role"] == "user" &&
+      optional?(context, "sources", fn sources ->
+        is_list(sources) && sources != [] && Enum.uniq(sources) == sources &&
+          Enum.all?(sources, &(&1 in ~w(document memory)))
+      end) &&
+      optional?(context, "top_k", &integer_range?(&1, 1..10))
+  end
+
+  defp context?(_), do: true
 
   defp stream_options?(%{"stream_options" => options} = params),
     do:

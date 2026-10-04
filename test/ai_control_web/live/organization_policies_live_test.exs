@@ -52,7 +52,7 @@ defmodule AiControlWeb.OrganizationPoliciesLiveTest do
     assert current.snapshot.settings["budgets"]["workflow"]["tool_calls"] == 3
   end
 
-  test "v4 upgrade keeps the active v1 policy until deliberate activation", %{
+  test "v5 upgrade keeps the active v1 policy until deliberate activation", %{
     conn: conn,
     scope: scope
   } do
@@ -60,8 +60,10 @@ defmodule AiControlWeb.OrganizationPoliciesLiveTest do
     assert has_element?(view, "#policy-schema", "v1")
     view |> element("#policy-new") |> render_click()
     view |> element("#policy-upgrade") |> render_click()
-    assert has_element?(view, "#policy-draft-schema", "v4")
+    assert has_element?(view, "#policy-draft-schema", "v5")
     assert has_element?(view, "#policy-detector-sets")
+    assert has_element?(view, "#policy-set-label-ner", "Named entity weights")
+    assert has_element?(view, "#policy-ner-model-set option[value='pl-nkjp.v2'][selected]")
     view |> element("#policy-guards > summary") |> render_click()
     assert has_element?(view, "#policy-ner-entities option[value='person'][selected]")
     assert has_element?(view, "#policy-ner-entities option[value='address'][selected]")
@@ -77,7 +79,7 @@ defmodule AiControlWeb.OrganizationPoliciesLiveTest do
     assert {:ok, current} = Policies.current(scope)
     assert current.version.settings["schema_version"] == 1
     view |> element("#policy-activate") |> render_click()
-    assert has_element?(view, "#policy-schema", "v4")
+    assert has_element?(view, "#policy-schema", "v5")
     assert {:ok, active} = Policies.current(scope)
 
     assert active.version.settings["guards"]["ner"]["entities"] == [

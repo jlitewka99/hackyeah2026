@@ -3,6 +3,7 @@ defmodule AiControlWeb.GatewayStreamControllerTest do
 
   import AiControl.AgentsFixtures
   import AiControl.GatewayFixtures
+  import AiControl.KnowledgeFixtures
   import AiControl.OrganizationsFixtures
   import Ecto.Query
 
@@ -64,6 +65,79 @@ defmodule AiControlWeb.GatewayStreamControllerTest do
     assert {:ok, filters} = Filters.parse()
     assert {:ok, report} = Dashboard.activity(context.scope, filters)
     assert report.counts["allow"] == 1
+  end
+
+  test "RAG is checked and removed from the provider extension before buffered SSE", context do
+    activate_knowledge_policy(context.scope, %{
+      "budgets" => %{"organization" => %{"tokens_per_hour" => 5000}}
+    })
+
+    document = document_fixture(context.scope, context.agent)
+    owner = self()
+
+    Application.put_env(
+      :ai_control,
+      Config,
+      Keyword.put(Config.get(), :test_tokenizer, fn _, prompt ->
+        send(owner, {:rag_counted, prompt})
+        {:ok, 40}
+      end)
+    )
+
+    conn = chat(context.conn, %{"context" => %{"query" => "support"}})
+    assert conn.resp_body =~ "[DONE]"
+    assert_received {:stream_params, params}
+    refute Map.has_key?(params, "context")
+
+    assert [%{"name" => "retrieved_context", "content" => text}, %{"role" => "user"}] =
+             params["messages"]
+
+    assert text =~ document["id"]
+    assert_received {:rag_counted, prompt}
+    assert prompt =~ "Support is available"
+    assert Repo.get_by!(Reservation, request_id: conn.assigns.request_id).input_tokens == 40
+  end
+
+  test "RAG revision changes during stream preparation prevent generation", context do
+    activate_knowledge_policy(context.scope, %{
+      "budgets" => %{"organization" => %{"tokens_per_hour" => 5000}}
+    })
+
+    document = document_fixture(context.scope, context.agent)
+    owner = self()
+
+    Application.put_env(
+      :ai_control,
+      Config,
+      Keyword.put(Config.get(), :test_tokenizer, fn _, _ ->
+        send(owner, {:rag_waiting, self()})
+
+        receive do
+          :continue -> {:ok, 40}
+        end
+      end)
+    )
+
+    supervisor = start_supervised!(Task.Supervisor)
+
+    task =
+      Task.Supervisor.async_nolink(supervisor, fn ->
+        chat(context.conn, %{"context" => %{"query" => "support"}})
+      end)
+
+    assert_receive {:rag_waiting, worker}
+
+    Repo.update_all(
+      from(r in AiControl.Knowledge.Resource, where: r.id == ^document["id"]),
+      [inc: [revision: 1]],
+      log: false
+    )
+
+    send(worker, :continue)
+    conn = Task.await(task)
+    assert json_response(conn, 409)["error"]["code"] == "knowledge_conflict"
+    refute_received :stream_generated
+    assert Repo.get_by!(Reservation, request_id: conn.assigns.request_id).status == "released"
   end
 
   test "split secret blocks output with an error event and charges actual usage", context do
@@ -327,9 +401,10 @@ defmodule AiControlWeb.GatewayStreamControllerTest do
     params = Jason.decode!(raw)
 
     if params["_debug_render_only"] do
-      Req.Test.json(conn, %{_debug_info: %{rendered_template: "safe input"}})
+      Req.Test.json(conn, %{_debug_info: %{rendered_template: Jason.encode!(params["messages"])}})
     else
       send(owner, :stream_generated)
+      send(owner, {:stream_params, params})
       assert params["stream_options"] == %{"include_usage" => true}
 
       conn

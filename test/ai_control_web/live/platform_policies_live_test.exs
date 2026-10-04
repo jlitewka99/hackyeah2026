@@ -9,7 +9,7 @@ defmodule AiControlWeb.PlatformPoliciesLiveTest do
     {:ok, view, _} = live(log_in_user(conn, scope.user), ~p"/platform/policies")
     view |> element("#policy-new") |> render_click()
     view |> element("#policy-upgrade") |> render_click()
-    assert has_element?(view, "#policy-draft-schema", "v4")
+    assert has_element?(view, "#policy-draft-schema", "v5")
     view |> element("#policy-guards > summary") |> render_click()
     assert has_element?(view, "#policy-guard-moderation-mode option[value='']", "disabled")
     refute has_element?(view, "#policy-rule-prompt_injection-threshold")

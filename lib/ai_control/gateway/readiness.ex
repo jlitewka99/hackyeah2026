@@ -52,14 +52,20 @@ defmodule AiControl.Gateway.Readiness do
          if(&1 == "semantic",
            do: Semantic.selected_provider(policy),
            else: "qwen"
-         )}
+         ), if(&1 == "ner", do: Map.get(policy.settings, "ner_model_set", "pl-nkjp.v1"))}
       )
     end)
     |> Enum.uniq()
-    |> Enum.all?(fn {guard, provider} ->
+    |> Enum.all?(fn {guard, provider, model_set} ->
       case config[:guards][guard] do
-        nil -> false
-        module -> module.ready?(Keyword.put(config, :injection_provider, provider)) == true
+        nil ->
+          false
+
+        module ->
+          config
+          |> Keyword.put(:injection_provider, provider)
+          |> Keyword.put(:ner_model_set, model_set)
+          |> module.ready?() == true
       end
     end)
   end
