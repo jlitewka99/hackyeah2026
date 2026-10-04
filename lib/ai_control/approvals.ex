@@ -176,11 +176,21 @@ defmodule AiControl.Approvals do
   def gate(%Approval{} = ticket, identity, payload, policy, opts) do
     sources = opts[:knowledge_sources] || []
 
+    # Keep the historical material for tool and delegation approvals.
     material = %{
       "payload" => payload,
       "sources" => sources,
       "model_digest" => opts[:model_digest]
     }
+
+    material =
+      if opts[:model_identifier] do
+        material
+        |> Map.delete("model_digest")
+        |> Map.put("model_identifier", opts[:model_identifier])
+      else
+        material
+      end
 
     with {:ok, digest} <- fingerprint(ticket.organization_id, material) do
       transaction(ticket.organization_id, fn ->

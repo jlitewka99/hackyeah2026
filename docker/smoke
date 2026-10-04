@@ -34,6 +34,7 @@ start_app() {
     -e AUDIT_FINGERPRINT_KEY=c3ludGhldGljLWNpLWZpbmdlcnByaW50LWtleS0zMi1ieXRlcw== \
     -e APPROVAL_ENCRYPTION_KEY=YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE= \
     -e APPROVAL_ENCRYPTION_KEY_ID=synthetic-ci-v1 \
+    -e AI_CONTROL_ORGANIZER_EMAIL=ci@example.test \
     -e PHX_HOST=localhost "$image" >/dev/null
   for _ in $(seq 1 180); do
     if docker exec "$container" /app/docker/healthcheck >/dev/null 2>&1; then return; fi
@@ -58,6 +59,13 @@ wait_for_exit() {
   return 1
 }
 start_app
+docker exec "$container" /app/bin/ai_control rpc '
+  import Ecto.Query
+  set = AiControl.Repo.one!(from(s in AiControl.Policies.Set, where: is_nil(s.organization_id)))
+  version = AiControl.Repo.get!(AiControl.Policies.Version, set.active_version_id)
+  ["deepseek-flash"] = version.configuration["allowed_models"]
+  2 = AiControl.Repo.aggregate(AiControl.Policies.Version, :count)
+  IO.puts("Fresh installation appends DeepSeek default and preserves original policy")'
 address=$(docker port "$container" 4000/tcp)
 [[ "$address" == 127.0.0.1:* ]]
 [[ $(docker exec "$container" id -u) == 10001 ]]

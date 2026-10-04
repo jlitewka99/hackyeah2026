@@ -9,8 +9,8 @@ defmodule AiControl.Testing.Suite do
   alias AiControl.Budgets.Bucket
   alias AiControl.Budgets.Tokenizer
   alias AiControl.Gateway.Config
+  alias AiControl.Gateway.DeepSeek
   alias AiControl.Gateway.Models
-  alias AiControl.Gateway.Ollama
   alias AiControl.Guards.Ner
   alias AiControl.Guards.Semantic.Local
   alias AiControl.Guards.Semantic.PromptGuard
@@ -56,15 +56,15 @@ defmodule AiControl.Testing.Suite do
     ]
 
     with true <- Enum.all?(checks),
-         {:ok, models} <- Ollama.models(config),
+         {:ok, models} <- DeepSeek.models(config),
          true <-
-           Enum.all?(config[:models], fn {name, digest} -> models[name] == digest end) &&
+           Enum.all?(config[:models], fn {name, _} -> Map.has_key?(models, name) end) &&
              map_size(config[:models]) > 0 do
       Application.put_env(
         :ai_control,
         Config,
         Keyword.merge(config,
-          provider: Ollama,
+          provider: DeepSeek,
           tokenizer: Tokenizer
         )
       )

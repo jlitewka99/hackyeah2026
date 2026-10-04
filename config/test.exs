@@ -5,10 +5,12 @@ config :ai_control, AiControl.Approvals.Cipher,
   key_id: "test-v1"
 
 config :ai_control, AiControl.Gateway.Config,
+  provider: AiControl.TestCatalogProvider,
+  api_key: "synthetic-deepseek-test-key",
   guards: %{},
   models: %{
-    "qwen3.5:4b" => String.duplicate("a", 64),
-    "catalog-model" => String.duplicate("b", 64)
+    "deepseek-flash" => "deepseek-flash",
+    "catalog-model" => "catalog-model"
   }
 
 # Only in tests, remove the complexity from the password hashing algorithm

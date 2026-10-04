@@ -3,14 +3,23 @@ defmodule AiControl.Release do
   Used for executing DB release tasks when run in production without Mix
   installed.
   """
+  alias AiControl.Policies.Bootstrap
+
   @app :ai_control
 
   def migrate do
     load_app()
 
     for repo <- repos() do
-      {:ok, _, _} = Ecto.Migrator.with_repo(repo, &Ecto.Migrator.run(&1, :up, all: true))
+      {:ok, _, _} = Ecto.Migrator.with_repo(repo, &migrate_repo/1)
     end
+  end
+
+  defp migrate_repo(repo) do
+    fresh? = Enum.all?(Ecto.Migrator.migrations(repo), fn {status, _, _} -> status == :down end)
+    result = Ecto.Migrator.run(repo, :up, all: true)
+    if fresh?, do: Bootstrap.seed_new_installation(repo)
+    result
   end
 
   def rollback(repo, version) do

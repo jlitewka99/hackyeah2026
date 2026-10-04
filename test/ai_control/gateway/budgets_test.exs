@@ -38,29 +38,17 @@ defmodule AiControl.Gateway.BudgetsTest do
 
     Req.Test.stub(__MODULE__, fn conn ->
       case conn.request_path do
-        "/api/tags" ->
+        "/models" ->
           Req.Test.json(conn, %{
-            models: [%{name: "qwen3.5:4b", digest: String.duplicate("a", 64)}]
+            data: [%{id: "deepseek-flash"}]
           })
-
-        "/api/version" ->
-          Req.Test.json(conn, %{version: "0.35.1"})
 
         _ ->
           {:ok, body, conn} = Plug.Conn.read_body(conn)
           params = Jason.decode!(body)
           if callback = Config.get()[:test_transport], do: callback.(params)
-
-          if params["_debug_render_only"] do
-            send(owner, {:render, params})
-
-            Req.Test.json(conn, %{
-              _debug_info: %{rendered_template: Jason.encode!(params["messages"])}
-            })
-          else
-            send(owner, {:generate, params})
-            Req.Test.json(conn, Config.get()[:test_response] || response())
-          end
+          send(owner, {:generate, params})
+          Req.Test.json(conn, Config.get()[:test_response] || response())
       end
     end)
 
@@ -181,8 +169,19 @@ defmodule AiControl.Gateway.BudgetsTest do
         Config,
         Config.get()
         |> Keyword.put(:llm_timeout, 100)
-        |> Keyword.put(:test_transport, fn params ->
-          current = if params["_debug_render_only"], do: :prepare, else: :generate
+        |> Keyword.put(:test_tokenizer, fn _, _ ->
+          if phase == :prepare do
+            send(owner, {:waiting, self()})
+
+            receive do
+              :continue -> :ok
+            end
+          end
+
+          {:ok, 12}
+        end)
+        |> Keyword.put(:test_transport, fn _params ->
+          current = :generate
 
           if current == phase do
             send(owner, {:waiting, self()})
@@ -207,9 +206,7 @@ defmodule AiControl.Gateway.BudgetsTest do
     Application.put_env(
       :ai_control,
       Config,
-      Keyword.put(Config.get(), :test_transport, fn params ->
-        if !params["_debug_render_only"], do: Process.exit(self(), :kill)
-      end)
+      Keyword.put(Config.get(), :test_transport, fn _ -> Process.exit(self(), :kill) end)
     )
 
     assert {:error, :upstream_timeout} = Gateway.chat(context.principal, request())
@@ -257,8 +254,9 @@ defmodule AiControl.Gateway.BudgetsTest do
 
     assert {:ok, _} = Gateway.chat(context.principal, request())
     assert_received {:counted, prompt}
-    assert prompt =~ "[REDACTED]"
-    refute prompt =~ "Zażółć"
+    assert Jason.encode!(prompt) =~ "[REDACTED]"
+    assert_received {:generate, ^prompt}
+    refute Jason.encode!(prompt) =~ "Zażółć"
     assert bucket(context).tokens == 16
     decisions = Repo.all(from(e in Event, where: e.kind == :decision))
 

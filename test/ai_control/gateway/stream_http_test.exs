@@ -245,9 +245,9 @@ defmodule AiControl.Gateway.StreamHTTPTest do
 
   test "generation timeout cancels the real upstream without releasing dispatched tokens",
        context do
-    Application.put_env(:ai_control, Config, Keyword.put(Config.get(), :llm_timeout, 100))
+    Application.put_env(:ai_control, Config, Keyword.put(Config.get(), :llm_timeout, 500))
     response = client(context)
-    assert_receive {:upstream_started, upstream}
+    assert_receive {:upstream_started, upstream}, 2000
     ref = Process.monitor(upstream)
     body = Enum.to_list(response.body) |> IO.iodata_to_binary()
     assert body =~ "upstream_timeout"

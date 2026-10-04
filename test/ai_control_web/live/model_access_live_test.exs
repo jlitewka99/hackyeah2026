@@ -17,16 +17,18 @@ defmodule AiControlWeb.ModelAccessLiveTest do
     conn = log_in_user(conn, scope.user)
     {:ok, view, _} = live(conn, ~p"/organizations/#{scope.organization.id}/members")
     assert has_element?(view, "#invite-access-specific-models")
-    assert has_element?(view, "#invite-access-model-1[value='qwen3.5:4b']")
+    assert has_element?(view, "#invite-access-model-1[value='deepseek-flash']")
 
     view
     |> form("#member-invitation-form",
       invitation: %{email: "models@example.test", role: "user"},
-      access: %{models: ["qwen3.5:4b"], all_models: "false"}
+      access: %{models: ["deepseek-flash"], all_models: "false"}
     )
     |> render_submit()
 
-    assert Repo.get_by!(Invitation, email: "models@example.test").grants.models == ["qwen3.5:4b"]
+    assert Repo.get_by!(Invitation, email: "models@example.test").grants.models == [
+             "deepseek-flash"
+           ]
 
     {:ok, view, _} =
       live(
@@ -46,7 +48,7 @@ defmodule AiControlWeb.ModelAccessLiveTest do
 
   test "admin choices respect delegation and preserve inaccessible existing models", %{conn: conn} do
     scope = organization_fixture()
-    admin = member_fixture(scope, :admin, %{permissions: ["ai.use"], models: ["qwen3.5:4b"]})
+    admin = member_fixture(scope, :admin, %{permissions: ["ai.use"], models: ["deepseek-flash"]})
     member = member_fixture(scope, :user, %{models: ["catalog-model"]})
     conn = log_in_user(conn, admin.user)
 
@@ -57,12 +59,12 @@ defmodule AiControlWeb.ModelAccessLiveTest do
       )
 
     assert has_element?(view, "#member-access-all-models[disabled]")
-    assert has_element?(view, "#member-access-model-0[value='qwen3.5:4b']")
+    assert has_element?(view, "#member-access-model-0[value='deepseek-flash']")
     refute has_element?(view, "input[name='access[models][]'][value='catalog-model']")
 
     view
     |> form("#member-access-form",
-      access: %{models: ["qwen3.5:4b"], role: "user"}
+      access: %{models: ["deepseek-flash"], role: "user"}
     )
     |> render_submit()
 
@@ -70,7 +72,7 @@ defmodule AiControlWeb.ModelAccessLiveTest do
 
     assert Repo.get!(Membership, member.membership.id).grants.models |> Enum.sort() == [
              "catalog-model",
-             "qwen3.5:4b"
+             "deepseek-flash"
            ]
 
     assert {:ok, _} = Organizations.refresh_scope(admin.scope)

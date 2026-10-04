@@ -80,14 +80,18 @@ defmodule AiControl.Approvals.APITest do
     wait = post(api(c), "/v1/chat/completions", Jason.encode!(request())) |> json_response(409)
     id = wait["error"]["approval_id"]
     refute_received {:generated, _}
+    record = Repo.get!(Approval, id)
+    assert {:ok, preview} = Cipher.decrypt(record)
+    assert preview["thinking"] == %{"type" => "disabled"}
+    assert preview["model"] == "deepseek-flash"
     assert Repo.get!(Run, c.run.id).reserved_tokens == 0
     assert Enum.all?(Repo.all(Reservation), &(&1.status == "released"))
     again = post(api(c), "/v1/chat/completions", Jason.encode!(request())) |> json_response(409)
     assert again["error"]["approval_id"] == id
-    approve(c, Repo.get!(Approval, id))
+    approve(c, record)
     resumed = api(c) |> put_req_header("x-approval-id", id)
     assert post(resumed, "/v1/chat/completions", Jason.encode!(request())) |> json_response(200)
-    assert_received {:generated, _}
+    assert_received {:generated, ^preview}
     assert post(resumed, "/v1/chat/completions", Jason.encode!(request())) |> json_response(409)
     refute_received {:generated, _}
     assert %{calls: 1, tokens: 16, reserved_tokens: 0} = Repo.get!(Run, c.run.id)
@@ -98,13 +102,14 @@ defmodule AiControl.Approvals.APITest do
     assert {:error, {:approval_required, %{approval_id: id}}} = chat(c)
     record = Repo.get!(Approval, id)
     assert {:ok, preview} = Cipher.decrypt(record)
-    assert preview["reasoning_effort"] == Config.get(:ollama_reasoning_effort)
+    assert preview["thinking"] == %{"type" => "disabled"}
+    assert preview["max_tokens"] == Config.get(:default_max_tokens)
     approve(c, record)
 
     Application.put_env(
       :ai_control,
       Config,
-      Keyword.put(Config.get(), :ollama_reasoning_effort, "low")
+      Keyword.put(Config.get(), :default_max_tokens, 512)
     )
 
     assert {:error, :approval_conflict} = chat(c, approval_id: id)

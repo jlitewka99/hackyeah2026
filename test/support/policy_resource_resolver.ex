@@ -4,5 +4,5 @@ defmodule AiControl.TestPolicyResourceResolver do
 
   @impl true
   def owned?(organization_id, :agent, key), do: AiControl.Agents.owned?(organization_id, key)
-  def owned?(_, :model, key), do: key in ["qwen3.5:4b", "catalog-model"]
+  def owned?(_, :model, key), do: key in ["deepseek-flash", "catalog-model"]
 end

@@ -18,7 +18,7 @@ defmodule AiControl.Gateway.OutputContentTest do
     assert "password" in texts
     assert "call-1" in texts
     assert "lookup" in texts
-    refute "qwen3.5:4b" in texts
+    refute "deepseek-flash" in texts
   end
 
   test "redaction reconstructs valid JSON and merges ranges in decoded UTF-8 text" do

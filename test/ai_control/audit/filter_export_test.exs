@@ -5,7 +5,6 @@ defmodule AiControl.Audit.FilterExportTest do
 
   alias AiControl.{Audit, Organizations}
   alias AiControl.Audit.{Event, Export, Filters, Serializer}
-  alias AiControl.Policies.Configuration
 
   test "validates cursor, UUID, enum, guard and UTC ranges without raising" do
     for params <- [
@@ -136,11 +135,7 @@ defmodule AiControl.Audit.FilterExportTest do
              Repo.transaction(fn ->
                {:ok, _} = Audit.record_gateway(scope, Ecto.UUID.generate(), "completed", 1)
 
-               {:ok, _} =
-                 AiControl.Policies.create_version(
-                   scope,
-                   Configuration.default()
-                 )
+               AiControl.GatewayFixtures.activate_gateway_policy(scope)
 
                Organizations.notify(scope.organization.id)
                {:ok, policy} = AiControl.Policies.current(scope)
@@ -151,7 +146,7 @@ defmodule AiControl.Audit.FilterExportTest do
                  AiControl.Budgets.admit(
                    principal,
                    nil,
-                   "qwen3.5:4b",
+                   "deepseek-flash",
                    policy.snapshot,
                    Ecto.UUID.generate()
                  )

@@ -13,9 +13,8 @@ defmodule AiControl.Gateway.LiveKnowledgeTest do
 
   @moduletag :live_models
   @moduletag timeout: 180_000
-  @digest "2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd"
 
-  test "real v2 NER, Qwen guard, exact tokenizer and pinned local LLM consume checked RAG" do
+  test "real v2 NER, Qwen guard, exact tokenizer and DeepSeek API consume checked RAG" do
     old = Application.fetch_env!(:ai_control, Config)
 
     Application.put_env(
@@ -31,8 +30,9 @@ defmodule AiControl.Gateway.LiveKnowledgeTest do
         "signatures" => Signatures
       })
       |> Keyword.put(:semantic_url, "http://127.0.0.1:8038")
-      |> Keyword.put(:base_url, "http://127.0.0.1:11438")
-      |> Keyword.put(:models, %{"qwen3.5:4b" => @digest})
+      |> Keyword.put(:base_url, "https://api.deepseek.com")
+      |> Keyword.put(:api_key, System.fetch_env!("DEEPSEEK_API_KEY"))
+      |> Keyword.put(:models, %{"deepseek-flash" => "deepseek-flash"})
       |> Keyword.put(:ner_url, "http://127.0.0.1:8018")
       |> Keyword.put(:tokenizer_url, "http://127.0.0.1:8028")
     )
@@ -88,6 +88,7 @@ defmodule AiControl.Gateway.LiveKnowledgeTest do
       Repo.get_by!(AiControl.Budgets.Reservation, organization_id: scope.organization.id)
 
     assert reservation.input_tokens > 50
+    assert reservation.input_tokens == response["usage"]["prompt_tokens"]
     assert reservation.status == "settled"
   end
 

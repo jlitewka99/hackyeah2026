@@ -47,7 +47,7 @@ defmodule AiControl.Policies.ConfigurationTest do
   test "minimal YAML receives the same optional defaults as the form" do
     assert {:ok, source} =
              YAML.decode(
-               ~s(schema_version: 1\nprofile: balanced\nallowed_models: ["qwen3.5:4b"]\nallowed_agents: ["*"])
+               ~s(schema_version: 1\nprofile: balanced\nallowed_models: ["deepseek-flash"]\nallowed_agents: ["*"])
              )
 
     assert source == Configuration.default()
@@ -77,7 +77,7 @@ defmodule AiControl.Policies.ConfigurationTest do
       Map.put(base, "unsafe secret", "DO-NOT-LOG"),
       Map.put(base, "rules", %{"pii" => %{"threshold" => 1.01}}),
       Map.put(base, "guards", %{"pii" => %{"enabled" => false}}),
-      Map.put(base, "allowed_models", ["*", "qwen3.5:4b"]),
+      Map.put(base, "allowed_models", ["*", "deepseek-flash"]),
       Map.put(base, "agent_models", %{"not-a-uuid" => []}),
       Map.put(base, "budgets", %{"organization" => %{"tokens_per_hour" => -1}})
     ]
@@ -92,7 +92,7 @@ defmodule AiControl.Policies.ConfigurationTest do
   test "form normalization feeds the same validator and preserves explicit zeroes" do
     attrs = %{
       "profile" => "balanced",
-      "allowed_models" => "qwen3.5:4b",
+      "allowed_models" => "deepseek-flash",
       "allowed_agents" => ["*"],
       "rules" => %{"pii" => %{"action" => "block", "threshold" => "0"}},
       "budgets" => %{"organization" => %{"requests_per_hour" => "0", "tokens_per_hour" => ""}}
@@ -108,7 +108,7 @@ defmodule AiControl.Policies.ConfigurationTest do
   test "browser untouched-input markers never become policy fields" do
     attrs = %{
       "profile" => "strict",
-      "allowed_models" => "qwen3.5:4b",
+      "allowed_models" => "deepseek-flash",
       "allowed_agents" => ["*"],
       "rules" => %{"pii" => %{"action" => "", "threshold" => "", "_unused_threshold" => ""}},
       "budgets" => %{
@@ -124,7 +124,7 @@ defmodule AiControl.Policies.ConfigurationTest do
   test "malformed nested form values report errors without raising" do
     attrs = %{
       "profile" => "balanced",
-      "allowed_models" => "qwen3.5:4b",
+      "allowed_models" => "deepseek-flash",
       "allowed_agents" => ["*"]
     }
 

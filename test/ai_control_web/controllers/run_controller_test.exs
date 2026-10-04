@@ -22,20 +22,13 @@ defmodule AiControlWeb.RunControllerTest do
 
     Req.Test.stub(__MODULE__, fn conn ->
       case conn.request_path do
-        "/api/tags" ->
+        "/models" ->
           Req.Test.json(conn, %{
-            models: [%{name: "qwen3.5:4b", digest: String.duplicate("a", 64)}]
+            data: [%{id: "deepseek-flash"}]
           })
 
-        "/api/version" ->
-          Req.Test.json(conn, %{version: "0.35.1"})
-
         _ ->
-          {:ok, body, conn} = Plug.Conn.read_body(conn)
-
-          if Jason.decode!(body)["_debug_render_only"],
-            do: Req.Test.json(conn, %{_debug_info: %{rendered_template: "synthetic prompt"}}),
-            else: Req.Test.json(conn, AiControl.GatewayFixtures.response())
+          Req.Test.json(conn, AiControl.GatewayFixtures.response())
       end
     end)
 

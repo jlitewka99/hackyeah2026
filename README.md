@@ -264,7 +264,7 @@ Legacy v1/v2 numeric rule settings remain readable and retain their checksums:
 
 Deterministic guards default to required on input and output; semantic analysis
 defaults to input. Explicit rule and guard fields override profile defaults.
-The initial policy allows `qwen3.5:4b` and all active agents in the requesting
+The historical initial migration policy allows `qwen3.5:4b` and all active agents in the requesting
 organization. Budgets start unconfigured. Organization and agent requests/tokens
 per UTC hour are enforced by durable accounting. Workflow tool calls have an
 atomic counter ready for the step 12 endpoint. Steps 7–8 connect deterministic
@@ -287,7 +287,7 @@ alias AiControl.Policies
 {:ok, _activation} = Policies.activate(current_scope, version.id, current.set.revision)
 
 # Acquire once at the start of a future gateway request, then retain at all stages.
-{:ok, snapshot} = Policies.snapshot_for_request(verified_principal, %{model: "qwen3.5:4b"})
+{:ok, snapshot} = Policies.snapshot_for_request(verified_principal, %{model: "deepseek-flash"})
 ```
 
 `Policies.rollback/4`, `inherit/2`, `list_versions/2`, `get_version/3` and
@@ -454,42 +454,66 @@ Bearer API keys are bound to an organization and agent. Trusted application call
 can use `AiControl.Gateway.chat(scope, params, agent_id: agent_id)`; current `ai.use`
 and both resource grants are required. Client identity fields are rejected.
 
-The operator catalog is empty by default. Configure exact model names and full
-Ollama manifest digests. Registering a model makes it selectable in invitation and
-member access forms; grants and effective organization/agent policies still apply.
-The public catalog exposes no backend URL or digest.
+The sole generating model is `deepseek-flash` through the direct DeepSeek API
+(currently V4.1 Flash). Set `DEEPSEEK_API_KEY` in the environment or your secret
+manager. The fixed upstream origin is `https://api.deepseek.com`; no Ollama
+service or local generation weights are needed. Local Qwen Guard, optional
+Prompt Guard and NER remain security controls. Grants and organization/agent
+policies still determine access. `/models` verifies an available API identifier,
+which is not verification of model weights.
 
 ```sh
-ollama serve
-ollama pull qwen3.5:4b
-# Verify /api/tags against this checked-in manifest before enabling access.
-export GATEWAY_MODELS="$(cat priv/models/ollama-demo.json)"
-export OLLAMA_BASE_URL=http://127.0.0.1:11434
+# Set DEEPSEEK_API_KEY securely in your environment before starting.
 mix phx.server
 ```
 
-The recorded demo digest is
-`2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd`
-(Ollama 0.35.1, qwen3.5:4b, Q4_K_M). A different installed manifest is rejected;
-updating the catalog is an explicit operator action.
+The default output cap is 1024 tokens for every chat, even without a hard token
+budget. `thinking` is always disabled. Generation uses bounded Req transport with
+no retries, redirects or fallback backend. `/health` checks application liveness;
+`/ready` additionally checks PostgreSQL, DeepSeek authentication/model availability,
+required local guards and the tokenizer when hard token budgets are active.
+
+For a fresh database, `mix ecto.setup` seeds a new immutable DeepSeek default after
+the historical initial policy. Release startup does this only when every migration
+was previously pending. Existing deployments retain their active policies and
+require the administrator procedure below.
+
+### Switching an existing database to DeepSeek
+
+1. Set `DEEPSEEK_API_KEY` as a runtime secret and restart with the new release.
+2. In member and invitation access settings, replace explicit `qwen3.5:4b` model
+   grants with `deepseek-flash`. Wildcard grants already include the new model.
+   Update each affected member and outstanding invitation; administrative roles
+   alone do not grant model access.
+3. As organizer, export the active global policy, replace `allowed_models` and
+   any explicit `agent_models` or v6 `review.llm_models` selectors with
+   `deepseek-flash`, save a **new version**,
+   review and activate it. Repeat for each organization with its own active policy.
+   Keep the remaining policy settings. Existing versions, checksums, activations,
+   audit and reports remain immutable. The old model identifier has no alias.
+   Pending LLM approvals for the old backend cannot authorize a DeepSeek request;
+   submit a new operation with a new idempotency key for human review.
+4. Start the pinned V4.1 tokenizer and required local guards, check `/ready`, then
+   run the explicit live acceptance commands with an API key with active balance.
+   Tokenizer/API count drift leaves hard-token-limit acceptance incomplete.
 
 Supported requests contain text `messages`, function `tools`, assistant
 `tool_calls` history and tool results. Optional controls are `tool_choice`,
-`temperature`, `top_p`, `max_tokens` (1–32768), `seed`, `stop`, `n: 1` and
+`temperature`, `top_p: 1`, `max_tokens` (1–32768), `stop`, `n: 1` and
 boolean `stream` (defaults to `false`). Buffered SSE accepts
 `stream_options: {"include_usage": true}` only with `stream: true`.
 Images, audio, unknown fields and unsupported formats return `400`.
 The gateway returns one assistant choice and validated token usage.
 It passes tool proposals through security assessment; it does not execute tools.
-Provider reasoning and unknown response fields are discarded. Ollama reasoning
-is disabled by default (`OLLAMA_REASONING_EFFORT=none`); `default`, `low`, `medium`
-and `high` are operator choices. See [Ollama's reasoning mapping](https://github.com/ollama/ollama/blob/v0.35.1/openai/openai.go).
+Provider reasoning and unknown response fields are discarded. The `developer`
+role is translated to `system`. `seed` and `top_p` values other than 1 are rejected;
+DeepSeek non-thinking mode ignores top-p sampling. [DeepSeek Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/)
 
 ```sh
 curl http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer $AI_CONTROL_API_KEY" \
   -H 'Content-Type: application/json' \
-  -d '{"model":"qwen3.5:4b","messages":[{"role":"user","content":"Describe Kraków in one sentence."}],"stream":false,"max_tokens":128}'
+  -d '{"model":"deepseek-flash","messages":[{"role":"user","content":"Describe Kraków in one sentence."}],"stream":false,"max_tokens":128}'
 ```
 
 For buffered SSE, use a client that handles comments and `event: error`:
@@ -499,7 +523,7 @@ curl --no-buffer http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer $AI_CONTROL_API_KEY" \
   -H 'Content-Type: application/json' \
   -H 'Accept: text/event-stream' \
-  -d '{"model":"qwen3.5:4b","messages":[{"role":"user","content":"Describe Kraków in one sentence."}],"stream":true,"stream_options":{"include_usage":true},"max_tokens":128}'
+  -d '{"model":"deepseek-flash","messages":[{"role":"user","content":"Describe Kraków in one sentence."}],"stream":true,"stream_options":{"include_usage":true},"max_tokens":128}'
 ```
 
 The connection opens after input controls, synchronous audit, model verification
@@ -547,7 +571,7 @@ as metric labels.
 adapters and pinned Qwen semantic analysis are connected. NER requires an
 explicitly activated v2/v3 policy; response moderation requires v3 and is disabled
 by default. Missing required adapters return
-`503` and never call the LLM. A bare Ollama installation is not a ready protected
+`503` and never call the LLM. A DeepSeek API key alone does not provide a ready protected
 service. Optional adapters may fail only under an explicit policy; their failure
 is retained in the assessment evidence.
 
@@ -564,10 +588,10 @@ is retained in the assessment evidence.
 | `GATEWAY_GUARD_SLOTS` | 2 |
 | `GATEWAY_REQUESTS_PER_MINUTE` | 60 per actor in an organization |
 | `GATEWAY_IP_REQUESTS_PER_MINUTE` | 300 attempts per remote IP before authentication |
-| `GATEWAY_DEFAULT_MAX_TOKENS` | 1024 when a token limit is active |
+| `GATEWAY_DEFAULT_MAX_TOKENS` | 1024 for every generating request |
 | `TOKENIZER_BASE_URL` | `http://127.0.0.1:8002` (private) |
 | `TOKENIZER_TIMEOUT_MS` | 5000 |
-| `GATEWAY_PRICES` | `{}`; no configured cost |
+| `GATEWAY_PRICES` | USD 0.30/M input, 1.20/M output for DeepSeek; estimated |
 
 The ingress counter is local Hammer/ETS and is shared by all keys of one agent;
 restart resets it. Authenticated rejected requests count too. Saturated slots return
@@ -579,7 +603,7 @@ response reception stops at its size cap. Hourly budgets persist in PostgreSQL.
 and `504` backend timeout. Error responses use fixed text and a server request ID.
 
 `GET /health` is liveness. `GET /ready` is bounded readiness of the database,
-effective active policies, pinned backend models and required guard adapters,
+effective active policies, available DeepSeek model and required guard adapters,
 returning only `200 {"status":"ready"}` or `503 {"status":"not_ready"}`. Readiness
 includes the platform default and every active organization's effective policy.
 
@@ -588,7 +612,7 @@ Run the real-model acceptance separately from ordinary mock-based CI:
 ```sh
 # Use an isolated PostgreSQL instance/database partition.
 PGPORT=55438 MIX_TEST_PARTITION=step6live mix test \
-  test/ai_control/gateway/live_ollama_test.exs --include live_models
+  test/ai_control/gateway/live_deep_seek_test.exs --include live_models
 ```
 
 The acceptance test creates a dedicated organization, activates an explicit local
@@ -716,7 +740,7 @@ strict blocks it. Explicit rule/guard overrides remain available.
 ```yaml
 schema_version: 2
 profile: balanced
-allowed_models: [qwen3.5:4b]
+allowed_models: [deepseek-flash]
 allowed_agents: ['*']
 guards:
   ner:
@@ -831,9 +855,9 @@ and shared MVP acceptance remain in 11B.
 
 Use Coolify's [Dockerfile build pack](https://coolify.io/docs/applications/builds/dockerfile)
 with `/Dockerfile`, build context `/`, port **4000**, and your HTTPS domain.
-PostgreSQL and Ollama are separate services reachable from the container.
+PostgreSQL is a separate service. Generating calls require outbound HTTPS to DeepSeek.
 Phoenix binds `0.0.0.0:4000`; NER (`127.0.0.1:8001`), budget tokenizer
-(`127.0.0.1:8002`) and Qwen (`127.0.0.1:8003`) are internal loopback services
+(`127.0.0.1:8002`) and Qwen Guard (`127.0.0.1:8003`) are internal loopback services
 and are not published. Step 9 added the tokenizer; Qwen uses a separate port.
 Models are fetched and checked at image build time, then verified and loaded
 offline on startup. The non-root container uses `tini` and a supervisor script
@@ -853,8 +877,7 @@ Set these runtime variables using Coolify's secrets UI:
 | `APPROVAL_ENCRYPTION_KEY` | Separate 32 random bytes encoded as base64; required for human review |
 | `APPROVAL_ENCRYPTION_KEY_ID` | Preview key rotation ID, default `v1` |
 | `PHX_HOST` | Public hostname without scheme |
-| `OLLAMA_BASE_URL` | Reachable external Ollama HTTP origin |
-| `GATEWAY_MODELS` | JSON map of model names to verified full SHA-256 digests |
+| `DEEPSEEK_API_KEY` | Runtime secret for the direct DeepSeek API |
 | `NER_BASE_URL` | Keep `http://127.0.0.1:8001` for this container |
 | `NER_CPU_THREADS` | NER CPU inference threads, default `2` |
 | `TOKENIZER_BASE_URL` | Keep `http://127.0.0.1:8002` for this container |
@@ -879,8 +902,8 @@ Bootstrap reads `AI_CONTROL_ORGANIZER_EMAIL` and `AI_CONTROL_ORGANIZER_PASSWORD`
 it is idempotent for the existing organizer and never prints credentials.
 Remove those temporary variables afterward. The image healthcheck checks
 Phoenix `/health`, NER `/ready` and Qwen `/ready`; Coolify can use that Dockerfile
-healthcheck. Gateway `/ready` additionally checks the database, Ollama/model
-allowlist and every required security control. Health is not permission to
+healthcheck. Gateway `/ready` additionally checks the database, DeepSeek/model
+availability and every required security control. Health is not permission to
 send traffic under an incomplete required policy. Deployment is a separate step.
 
 For local real NER acceptance (models must already be downloaded):
@@ -996,26 +1019,35 @@ access and hourly request refusals do not count. The pre-authentication IP
 limiter uses `remote_ip`, independently of the existing actor limiter and active
 worker slots. Forwarded headers do not select the IP counter.
 
-With either hourly token limit active, missing `max_tokens` receives the
-operator default (1024). After input redaction, the provider renders the full
-prompt with the private `_debug_render_only` flag in **Ollama 0.35.1**, without
-generating. Public API payloads cannot set this flag. The tokenizer counts the
-rendered conversation, special tokens, history and tools, then PostgreSQL
-reserves input plus maximum output against both levels. Admission preserves the
-verified actor, request UUID, model, policy settings/version/checksum, UTC window
-and price snapshot. Generation rechecks access and persists `dispatching`
-before invoking transport. Generation is never retried.
+Every request receives the operator output cap (1024 by default) when
+`max_tokens` is missing. After redaction and RAG augmentation, the provider prepares
+the complete API request: messages, history, tools, disabled thinking and output
+limit. The same request is counted and sent to DeepSeek. PostgreSQL reserves input
+plus maximum output against organization, agent and workflow limits before dispatch.
+Admission preserves identity, request UUID, model, policy snapshot, UTC window and
+configured price. Access is rechecked before persisted dispatch. Generation is never retried.
 
-The private FastAPI/tokenizers sidecar supports only the manifest-pinned
-`qwen3.5:4b` Q4_K_M digest in `sidecar/tokenizer/models.v1.json`. It verifies
-SHA-256 and size, loads offline, exposes only `/count` and `/ready`, and emits
-no prompt access logs. The live acceptance compares counts with Ollama's actual
-`prompt_tokens`; changing runtime/model/tokenizer requires a new manifest and
-that acceptance. Unsupported combinations or unavailable counting fail closed
-with `503` under a hard token limit. Without a token limit the existing chat
-continues without a tokenizer. `/ready` additionally checks tokenizer agreement
-when any effective active policy has a token limit. The container starts both
-sidecars on loopback and supervises them with BEAM; only port 4000 is exposed.
+The private FastAPI sidecar uses **deepseek-recipe 0.1.1**, `DeepseekV41Encoding`
+and the official V4.1 tokenizer pinned by commit, SHA-256 and size in
+`sidecar/tokenizer/models.v1.json`. It loads offline, exposes `/count` and `/ready`,
+rejects non-text input, and has no access logs or inference weights. The Elixir
+client verifies recipe version, encoding and tokenizer hash. A required counter
+failure blocks generation; there is no approximation. Live acceptance compares
+counts with API `usage.prompt_tokens` for Polish, history, RAG and tools. Changing
+the served API model can invalidate equivalence even when `/models` still lists
+`deepseek-flash`; repeat this acceptance before claiming hard limit qualification.
+Without a hard limit and outside a workflow, chats need no counter.
+
+Streaming asks for usage and accepts DeepSeek's final choice frame containing
+`finish_reason`, null delta fields and usage together. Usage is settled before
+output controls and delivery; filtered/aborted terminal responses with valid
+usage are also charged. Unknown usage retains the existing uncertain reservation.
+Buffered public SSE releases content only after successful output controls.
+
+Default conservative estimated rates are USD 0.30/M input and 1.20/M output.
+Costs use operator rate snapshots, exclude cache/off-peak discounts and are labeled
+`operator_estimate` in audit/report data. Override them with `GATEWAY_PRICES`.
+[DeepSeek pricing](https://api-docs.deepseek.com/quick_start/pricing/)
 
 For local development (use a separate venv if needed):
 
@@ -1072,7 +1104,7 @@ Operator prices are decimal **strings** per million input/output tokens, with
 an uppercase three-letter currency. For example:
 
 ```sh
-export GATEWAY_PRICES='{"qwen3.5:4b":{"currency":"USD","input_per_million":"2.50","output_per_million":"10.00"}}'
+export GATEWAY_PRICES='{"deepseek-flash":{"currency":"USD","input_per_million":"0.30","output_per_million":"1.20"}}'
 ```
 
 These example rates are operator choices, not inferred local-model prices.
@@ -1093,12 +1125,12 @@ Run acceptance with:
 mix precommit
 mix assets.build
 PYTHONPATH=sidecar/tokenizer .venv/bin/python -m unittest discover -s tests/tokenizer
-mix test test/ai_control/gateway/live_budget_tokenizer_test.exs --include live_models
-bash docker/smoke ai-control:step9
+mix test test/ai_control/gateway/live_deep_seek_test.exs test/ai_control/gateway/live_budget_tokenizer_test.exs test/ai_control/gateway/live_stream_test.exs test/ai_control/gateway/live_knowledge_test.exs test/ai_control/workflows/live_workflow_test.exs test/ai_control/approvals/live_test.exs --include live_models
+bash docker/smoke ai-control:deepseek
 ```
 
-See `docs/acceptance/step9.md` for actual results, including the joint step 8
-acceptance and remaining semantic integration with step 10. Tool counter integration remains steps 12/15.
+`docs/acceptance/step9.md` retains the historical Ollama results. DeepSeek acceptance
+requires a fresh live count comparison; those earlier counts do not qualify this API integration.
 
 ## Background work, reports and gateway tests (Step 16)
 
@@ -1172,7 +1204,7 @@ at most ten, ordered by lexical rank then UUID after access filtering.
 Chat Completions accepts optional gateway-only context:
 
 ```json
-{"model":"qwen3.5:4b","messages":[{"role":"user","content":"What are the support hours?"}],"context":{"query":"support","sources":["document","memory"],"top_k":5}}
+{"model":"deepseek-flash","messages":[{"role":"user","content":"What are the support hours?"}],"context":{"query":"support","sources":["document","memory"],"top_k":5}}
 ```
 
 RAG requires a final user message. The gateway consumes `context` and inserts an

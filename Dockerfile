@@ -14,6 +14,7 @@ COPY priv priv
 COPY assets assets
 COPY sidecar/semantic/models.v1.json sidecar/semantic/models.v1.json
 COPY sidecar/prompt_guard/models.v1.json sidecar/prompt_guard/models.v1.json
+COPY sidecar/tokenizer/models.v1.json sidecar/tokenizer/models.v1.json
 RUN mix compile && mix assets.deploy
 COPY config/runtime.exs config/
 COPY rel rel

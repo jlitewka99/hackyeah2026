@@ -44,12 +44,12 @@ defmodule AiControl.Gateway.GuardsPipelineTest do
       send(process, {:backend, conn.request_path})
 
       case conn.request_path do
-        "/api/tags" ->
+        "/models" ->
           Req.Test.json(conn, %{
-            models: [%{name: "qwen3.5:4b", digest: String.duplicate("a", 64)}]
+            data: [%{id: "deepseek-flash"}]
           })
 
-        "/v1/chat/completions" ->
+        "/chat/completions" ->
           {:ok, body, conn} = Plug.Conn.read_body(conn)
           send(process, {:generated_with, Jason.decode!(body)})
           Req.Test.json(conn, response("Safe reply."))

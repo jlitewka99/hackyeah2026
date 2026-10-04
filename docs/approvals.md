@@ -13,7 +13,7 @@ schema_version: 6
 review:
   enabled: true
   tools: [file.write, email.send]
-  llm_models: [qwen3.5:4b]
+  llm_models: [deepseek-flash]
   delegation_agents: ["*"]
 ```
 
@@ -68,7 +68,7 @@ A failed/terminal operation needs a **new operation key** and a new review. Neve
 
 Pending approval lasts at most 15 minutes from creation. Approval lasts at most 15 minutes **from the human decision**. Both intervals are capped by the workflow deadline; waiting does not pause its clock. Equality with the deadline is expired. Workflow stop, completion, deadline and restart invalidate unused approvals; a recovered claim is uncertain. Recovery never executes effects.
 
-Fingerprints bind canonical client input and run/participant context, and separately the prepared payload. LLM binding includes generation options/default output limit, effective Ollama reasoning effort, streaming/usage options, pinned model digest and Knowledge source revisions. The encrypted LLM preview is the normalized prepared Chat Completions payload. Any changed arguments, redaction outcome, RAG revision or effective generation parameter invalidates the approval.
+Fingerprints bind canonical client input and run/participant context, and separately the prepared payload. LLM binding includes generation options/default output limit, disabled DeepSeek thinking, streaming/usage options, API model identifier and Knowledge source revisions. The identifier does not verify or pin provider weights. The encrypted LLM preview is the normalized prepared Chat Completions payload sent to DeepSeek. Any changed arguments, redaction outcome, RAG revision or effective generation parameter invalidates the approval.
 
 Resume atomically claims one authorization, then runs current identity/approver permissions, guards, resource access, policy, deadline and budget checks. Approval consumption, dispatch accounting and required dispatch audit commit together before the effect. Parallel resumes cannot both dispatch. Failure after a claim burns it; it is never returned to approved. A policy change can still allow resume if the prepared payload stays identical and all current checks pass.
 

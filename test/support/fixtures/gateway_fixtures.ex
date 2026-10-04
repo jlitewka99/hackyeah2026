@@ -20,7 +20,7 @@ defmodule AiControl.GatewayFixtures do
 
   def request,
     do: %{
-      "model" => "qwen3.5:4b",
+      "model" => "deepseek-flash",
       "messages" => [%{"role" => "user", "content" => "Zażółć gęślą jaźń"}]
     }
 
@@ -36,7 +36,7 @@ defmodule AiControl.GatewayFixtures do
     Jason.encode!(%{
       "id" => "backend-id",
       "created" => 1,
-      "model" => "qwen3.5:4b",
+      "model" => "deepseek-flash",
       "object" => "chat.completion.chunk",
       "choices" => [
         %{"index" => 0, "delta" => delta, "finish_reason" => finish}
@@ -47,17 +47,20 @@ defmodule AiControl.GatewayFixtures do
   def stream_body(parts \\ ["Bezpieczna odpowiedź"]) do
     chunks = Enum.map(parts, &stream_chunk(%{"content" => &1}))
 
-    Enum.map_join(
-      chunks ++ [stream_chunk(%{}, "stop"), stream_usage(), "[DONE]"],
-      &("data: " <> &1 <> "\n\n")
-    )
+    final =
+      stream_chunk(%{"role" => nil, "content" => nil, "tool_calls" => nil}, "stop")
+      |> Jason.decode!()
+      |> Map.put("usage", response()["usage"])
+      |> Jason.encode!()
+
+    Enum.map_join(chunks ++ [final, "[DONE]"], &("data: " <> &1 <> "\n\n"))
   end
 
   def stream_usage do
     Jason.encode!(%{
       "id" => "backend-id",
       "created" => 1,
-      "model" => "qwen3.5:4b",
+      "model" => "deepseek-flash",
       "object" => "chat.completion.chunk",
       "choices" => [],
       "usage" => response()["usage"]

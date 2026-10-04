@@ -41,8 +41,9 @@ defmodule AiControl.Gateway.LivePromptGuardTest do
 
     config =
       original
-      |> Keyword.put(:models, Jason.decode!(File.read!("priv/models/ollama-demo.json")))
+      |> Keyword.put(:models, Jason.decode!(File.read!("priv/models/deepseek-demo.json")))
       |> Keyword.put(:guards, Config.guard_modules())
+      |> Keyword.put(:api_key, System.fetch_env!("DEEPSEEK_API_KEY"))
       |> Keyword.delete(:http_plug)
 
     Application.put_env(:ai_control, Config, config)
@@ -68,7 +69,7 @@ defmodule AiControl.Gateway.LivePromptGuardTest do
     prompt = "Odpowiedz jednym krótkim zdaniem po polsku: czym jest Kraków?"
 
     params = %{
-      "model" => "qwen3.5:4b",
+      "model" => "deepseek-flash",
       "max_tokens" => 128,
       "messages" => [%{"role" => "user", "content" => prompt}]
     }

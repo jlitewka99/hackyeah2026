@@ -39,9 +39,9 @@ defmodule AiControl.Gateway.SemanticPipelineTest do
       send(parent, {:backend, conn.request_path})
 
       case conn.request_path do
-        "/api/tags" ->
+        "/models" ->
           Req.Test.json(conn, %{
-            models: [%{name: "qwen3.5:4b", digest: String.duplicate("a", 64)}]
+            data: [%{id: "deepseek-flash"}]
           })
 
         _ ->
@@ -119,10 +119,10 @@ defmodule AiControl.Gateway.SemanticPipelineTest do
     Req.Test.stub(:semantic_backend, fn conn ->
       send(parent, {:backend, conn.request_path})
 
-      if conn.request_path == "/api/tags",
+      if conn.request_path == "/models",
         do:
           Req.Test.json(conn, %{
-            models: [%{name: "qwen3.5:4b", digest: String.duplicate("a", 64)}]
+            data: [%{id: "deepseek-flash"}]
           }),
         else: Req.Test.json(conn, response("ATTACK output"))
     end)

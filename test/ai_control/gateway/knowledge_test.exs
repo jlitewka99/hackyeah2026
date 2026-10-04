@@ -38,28 +38,16 @@ defmodule AiControl.Gateway.KnowledgeTest do
 
     Req.Test.stub(__MODULE__, fn conn ->
       case conn.request_path do
-        "/api/tags" ->
+        "/models" ->
           Req.Test.json(conn, %{
-            models: [%{name: "qwen3.5:4b", digest: String.duplicate("a", 64)}]
+            data: [%{id: "deepseek-flash"}]
           })
-
-        "/api/version" ->
-          Req.Test.json(conn, %{version: "0.35.1"})
 
         _ ->
           {:ok, body, conn} = Plug.Conn.read_body(conn)
           params = Jason.decode!(body)
-
-          if params["_debug_render_only"] do
-            send(parent, {:rendered, params})
-
-            Req.Test.json(conn, %{
-              _debug_info: %{rendered_template: Jason.encode!(params["messages"])}
-            })
-          else
-            send(parent, {:generated, params})
-            Req.Test.json(conn, response())
-          end
+          send(parent, {:generated, params})
+          Req.Test.json(conn, response())
       end
     end)
 
@@ -93,7 +81,8 @@ defmodule AiControl.Gateway.KnowledgeTest do
     assert context =~ document["id"]
     assert context =~ "Support is available"
     assert_received {:counted, prompt}
-    assert prompt =~ "Support is available"
+    assert Jason.encode!(prompt) =~ "Support is available"
+    assert prompt == params
 
     reservation =
       Repo.get_by!(AiControl.Budgets.Reservation, organization_id: c.scope.organization.id)
@@ -185,7 +174,7 @@ defmodule AiControl.Gateway.KnowledgeTest do
         Gateway.chat(c.principal, rag(), run_context: reference)
       end)
 
-    assert_receive {:waiting, worker}
+    assert_receive {:waiting, worker}, 2000
 
     Repo.update_all(
       from(r in AiControl.Knowledge.Resource, where: r.id == ^document["id"]),
@@ -233,7 +222,7 @@ defmodule AiControl.Gateway.KnowledgeTest do
         Knowledge.get(c.principal, document["id"])
       end)
 
-    assert_receive {:waiting, worker}
+    assert_receive {:waiting, worker}, 2000
 
     Repo.update_all(
       from(a in AiControl.Agents.Agent, where: a.id == ^c.agent.id),

@@ -176,7 +176,7 @@ defmodule AiControlWeb.OrganizationPoliciesLiveTest do
 
     view
     |> form("#policy-form",
-      policy: %{profile: "strict", allowed_models: "qwen3.5:4b", allowed_agents: ["*"]}
+      policy: %{profile: "strict", allowed_models: "deepseek-flash", allowed_agents: ["*"]}
     )
     |> render_submit()
 
@@ -206,7 +206,7 @@ defmodule AiControlWeb.OrganizationPoliciesLiveTest do
     |> form("#policy-form",
       policy: %{
         profile: "balanced",
-        allowed_models: "qwen3.5:4b",
+        allowed_models: "deepseek-flash",
         allowed_agents: ["*"],
         rules: %{pii: %{threshold: "1.1"}}
       }

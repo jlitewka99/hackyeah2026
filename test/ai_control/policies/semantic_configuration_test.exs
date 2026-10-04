@@ -6,13 +6,13 @@ defmodule AiControl.Policies.SemanticConfigurationTest do
 
   test "all legacy resolved settings and checksums are preserved" do
     for version <- [1, 2], profile <- Configuration.profiles() do
-      source = Configuration.default(version) |> Map.put("profile", profile)
+      source = ConfigurationV2.default(version) |> Map.put("profile", profile)
       assert Configuration.validate(source) == ConfigurationV2.validate(source)
     end
   end
 
   test "v2 snapshot matches the independent pre-step-10 checksum vector" do
-    {:ok, %{settings: settings}} = Configuration.validate(Configuration.default(2))
+    {:ok, %{settings: settings}} = Configuration.validate(ConfigurationV2.default(2))
 
     rules =
       Map.new(settings["rules"], fn {category, rule} ->

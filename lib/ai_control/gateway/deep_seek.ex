@@ -1,16 +1,16 @@
-defmodule AiControl.Gateway.Ollama do
+defmodule AiControl.Gateway.DeepSeek do
   @moduledoc "Bounded Req transport; generation is never retried or redirected."
   @behaviour AiControl.Gateway.Provider
 
-  alias AiControl.Gateway.StreamParser
+  alias AiControl.Gateway.{Request, StreamParser}
   alias AiControl.Security.HTTPError
 
   @impl true
   def models(config) do
-    with {:ok, %{"models" => models}} when is_list(models) <-
-           request(:get, "/api/tags", nil, config),
+    with {:ok, %{"data" => models}} when is_list(models) <-
+           request(:get, "/models", nil, config),
          true <- Enum.all?(models, &model?/1) do
-      {:ok, Map.new(models, &{&1["name"], &1["digest"]})}
+      {:ok, Map.new(models, &{&1["id"], &1["id"]})}
     else
       {:error, reason} -> {:error, reason}
       _ -> {:error, :upstream_invalid_response}
@@ -19,40 +19,58 @@ defmodule AiControl.Gateway.Ollama do
 
   @impl true
   def prepare(params, config) do
-    params =
-      reasoning(params, config)
-      |> Map.delete("stream_options")
-      |> Map.put("stream", false)
-      |> Map.put("_debug_render_only", true)
+    with {:ok, params} <- Request.validate(Map.delete(params, "thinking")),
+         true <- params["model"] == "deepseek-flash" do
+      messages =
+        Enum.map(params["messages"], fn
+          %{"role" => "developer"} = message -> Map.put(message, "role", "system")
+          message -> message
+        end)
 
-    with {:ok, %{"version" => "0.35.1"}} <- request(:get, "/api/version", nil, config),
-         {:ok, %{"_debug_info" => %{"rendered_template" => prompt}}} when is_binary(prompt) <-
-           request(:post, "/v1/chat/completions", params, config) do
-      {:ok, prompt}
+      prepared =
+        params
+        |> Map.drop(["n", "context"])
+        |> Map.put("messages", messages)
+        |> Map.put("thinking", %{"type" => "disabled"})
+        |> Map.put_new("max_tokens", config[:default_max_tokens])
+
+      prepared =
+        if prepared["stream"],
+          do: Map.put(prepared, "stream_options", %{"include_usage" => true}),
+          else: Map.delete(prepared, "stream_options")
+
+      {:ok, prepared}
     else
-      _ -> {:error, :tokenizer_unavailable}
+      _ -> {:error, :invalid_request}
     end
   end
 
   @impl true
   def chat(params, config) do
-    request(:post, "/v1/chat/completions", reasoning(params, config), config)
+    with {:ok, prepared} <- prepare(Map.delete(params, "thinking"), config) do
+      request(:post, "/chat/completions", prepared, config)
+    end
   end
 
   @impl true
   def chat_stream(params, config) do
-    params =
-      params
-      |> reasoning(config)
-      |> Map.put("stream", true)
-      |> Map.put("stream_options", %{"include_usage" => true})
+    with true <- is_binary(config[:api_key]) && config[:api_key] != "",
+         {:ok, prepared} <-
+           params |> Map.delete("thinking") |> Map.put("stream", true) |> prepare(config) do
+      stream_request(prepared, config)
+    else
+      false -> {:error, :upstream_unavailable}
+      error -> error
+    end
+  end
 
+  defp stream_request(params, config) do
     parser = StreamParser.new(config[:response_bytes])
     on_usage = config[:on_stream_usage] || fn _ -> :ok end
     on_chunk = config[:on_stream_chunk] || fn _ -> :ok end
 
     options =
-      transport_options(:post, "/v1/chat/completions", params, config)
+      transport_options(:post, "/chat/completions", params, config)
       |> Keyword.put(:into, fn {:data, chunk}, {request, response} ->
         receive_stream(chunk, {request, response}, parser, on_usage, on_chunk)
       end)
@@ -97,19 +115,16 @@ defmodule AiControl.Gateway.Ollama do
     end
   end
 
-  defp reasoning(params, config) do
-    case config[:ollama_reasoning_effort] do
-      nil -> params
-      effort -> Map.put(params, "reasoning_effort", effort)
-    end
-  end
-
-  defp model?(%{"name" => name, "digest" => digest}),
-    do: is_binary(name) && is_binary(digest) && Regex.match?(~r/\A[0-9a-f]{64}\z/, digest)
-
+  defp model?(%{"id" => id}), do: is_binary(id) && byte_size(id) in 1..200
   defp model?(_), do: false
 
   defp request(method, path, params, config) do
+    if is_binary(config[:api_key]) && config[:api_key] != "",
+      do: authenticated_request(method, path, params, config),
+      else: {:error, :upstream_unavailable}
+  end
+
+  defp authenticated_request(method, path, params, config) do
     limit = config[:response_bytes]
 
     options =
@@ -137,10 +152,12 @@ defmodule AiControl.Gateway.Ollama do
   defp transport_options(method, path, params, config) do
     options = [
       method: method,
+      auth: {:bearer, config[:api_key]},
       url: String.trim_trailing(config[:base_url], "/") <> path,
       retry: false,
       redirect: false,
       raw: true,
+      decode_body: false,
       connect_options: [timeout: config[:connect_timeout]],
       receive_timeout: config[:llm_timeout],
       request_timeout: config[:llm_timeout]

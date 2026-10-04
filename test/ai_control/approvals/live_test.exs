@@ -20,9 +20,10 @@ defmodule AiControl.Approvals.LiveTest do
       Config,
       old
       |> Keyword.drop([:http_plug, :ner_http_plug, :tokenizer_http_plug, :semantic_http_plug])
-      |> Keyword.put(:models, Jason.decode!(File.read!("priv/models/ollama-demo.json")))
+      |> Keyword.put(:models, Jason.decode!(File.read!("priv/models/deepseek-demo.json")))
       |> Keyword.put(:guards, Config.guard_modules())
       |> Keyword.put(:tokenizer, AiControl.Budgets.Tokenizer)
+      |> Keyword.put(:api_key, System.fetch_env!("DEEPSEEK_API_KEY"))
     )
 
     on_exit(fn -> Application.put_env(:ai_control, Config, old) end)
@@ -37,7 +38,7 @@ defmodule AiControl.Approvals.LiveTest do
     })
 
     params = %{
-      "model" => "qwen3.5:4b",
+      "model" => "deepseek-flash",
       "max_tokens" => 64,
       "messages" => [
         %{"role" => "user", "content" => "Oblicz dwa plus dwa. Odpowiedz krótko po polsku."}

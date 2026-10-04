@@ -33,7 +33,7 @@ defmodule AiControl.Approvals.ConfigurationTest do
           %{"enabled" => "true"},
           %{"risk" => 0.7},
           %{"tools" => ["shell.exec"]},
-          %{"llm_models" => ["*", "qwen3.5:4b"]},
+          %{"llm_models" => ["*", "deepseek-flash"]},
           %{"delegation_agents" => ["not-an-agent"]}
         ] do
       assert {:error, _} =

@@ -28,22 +28,17 @@ defmodule AiControl.Workflows.AccountingTest do
 
     Req.Test.stub(__MODULE__, fn conn ->
       case conn.request_path do
-        "/api/tags" ->
+        "/models" ->
           Req.Test.json(conn, %{
-            models: [%{name: "qwen3.5:4b", digest: String.duplicate("a", 64)}]
+            data: [%{id: "deepseek-flash"}]
           })
-
-        "/api/version" ->
-          Req.Test.json(conn, %{version: "0.35.1"})
 
         _ ->
           {:ok, body, conn} = Plug.Conn.read_body(conn)
           params = Jason.decode!(body)
           if callback = Config.get()[:test_transport], do: callback.(params)
 
-          if params["_debug_render_only"],
-            do: Req.Test.json(conn, %{_debug_info: %{rendered_template: "synthetic prompt"}}),
-            else: Req.Test.json(conn, response())
+          Req.Test.json(conn, response())
       end
     end)
 
@@ -133,17 +128,15 @@ defmodule AiControl.Workflows.AccountingTest do
     Application.put_env(
       :ai_control,
       Config,
-      Keyword.put(Config.get(), :test_transport, fn params ->
-        if params["_debug_render_only"] do
-          send(owner, {:preparing, self()})
+      Config.get()
+      |> Keyword.put(:test_tokenizer, fn _, _ ->
+        send(owner, {:preparing, self()})
 
-          receive do
-            :continue -> :ok
-          end
-        else
-          send(owner, :generated)
+        receive do
+          :continue -> {:ok, 12}
         end
       end)
+      |> Keyword.put(:test_transport, fn _ -> send(owner, :generated) end)
     )
 
     supervisor = start_supervised!(Task.Supervisor)
@@ -167,13 +160,11 @@ defmodule AiControl.Workflows.AccountingTest do
     Application.put_env(
       :ai_control,
       Config,
-      Keyword.put(Config.get(), :test_transport, fn params ->
-        if !params["_debug_render_only"] do
-          send(owner, {:dispatched, self()})
+      Keyword.put(Config.get(), :test_transport, fn _ ->
+        send(owner, {:dispatched, self()})
 
-          receive do
-            :continue -> :ok
-          end
+        receive do
+          :continue -> :ok
         end
       end)
     )

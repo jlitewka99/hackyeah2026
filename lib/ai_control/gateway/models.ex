@@ -6,7 +6,6 @@ defmodule AiControl.Gateway.Models do
 
   def all, do: Config.get(:models) |> Map.keys() |> Enum.sort()
   def registered?(name), do: Map.has_key?(Config.get(:models), name)
-  def digest(name), do: Map.fetch(Config.get(:models), name)
 
   def list_assignable(scope) do
     with {:ok, current} <- Organizations.refresh_scope(scope),

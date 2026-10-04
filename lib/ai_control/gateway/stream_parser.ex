@@ -96,11 +96,20 @@ defmodule AiControl.Gateway.StreamParser do
 
   defp choices(%{finish: nil} = state, %{"choices" => [choice]}) do
     with %{"index" => 0, "delta" => delta, "finish_reason" => finish} when is_map(delta) <- choice,
-         true <- finish in [nil, "stop", "length", "tool_calls"],
-         true <- Map.get(delta, "role", "assistant") == "assistant",
+         true <-
+           finish in [
+             nil,
+             "stop",
+             "length",
+             "tool_calls",
+             "content_filter",
+             "insufficient_system_resource",
+             "aborted"
+           ],
+         true <- Map.get(delta, "role", "assistant") in [nil, "assistant"],
          content = Map.get(delta, "content"),
          true <- is_nil(content) || (is_binary(content) && String.valid?(content)),
-         {:ok, calls} <- calls(state.calls, Map.get(delta, "tool_calls", [])) do
+         {:ok, calls} <- calls(state.calls, Map.get(delta, "tool_calls") || []) do
       content = if is_binary(content), do: [content | state.content], else: state.content
       {:ok, %{state | content: content, calls: calls, finish: finish}}
     else
@@ -191,9 +200,17 @@ defmodule AiControl.Gateway.StreamParser do
     }
 
     cond do
-      indexes != expected -> invalid()
-      byte_size(Jason.encode!(response)) > state.limit -> {:error, :response_too_large}
-      true -> {:ok, response}
+      state.finish in ["content_filter", "insufficient_system_resource", "aborted"] ->
+        {:error, :upstream_rejected}
+
+      indexes != expected ->
+        invalid()
+
+      byte_size(Jason.encode!(response)) > state.limit ->
+        {:error, :response_too_large}
+
+      true ->
+        {:ok, response}
     end
   end
 

@@ -29,7 +29,7 @@ defmodule AiControl.Policies.ResourceAccessTest do
       member_fixture(scope, :user, %{
         permissions: ["ai.use"],
         agents: [agent.id],
-        models: ["qwen3.5:4b", "catalog-model"]
+        models: ["deepseek-flash", "catalog-model"]
       })
 
     %{scope: scope, agent: agent, member: member}
@@ -40,7 +40,10 @@ defmodule AiControl.Policies.ResourceAccessTest do
     agent: agent,
     member: member
   } do
-    resources = %{agent_id: agent.id, model: "qwen3.5:4b"}
+    {:ok, initial} = Policies.create_version(scope, Configuration.default())
+    {:ok, current} = Policies.current(scope)
+    {:ok, _} = Policies.activate(scope, initial.id, current.set.revision)
+    resources = %{agent_id: agent.id, model: "deepseek-flash"}
     assert {:ok, _} = Policies.snapshot_for_request(member.scope, resources)
 
     assert {:error, :model_not_allowed} =
@@ -67,7 +70,7 @@ defmodule AiControl.Policies.ResourceAccessTest do
 
     assert {:ok, _} =
              Organizations.update_member(scope, member.membership.id, %{
-               grants: %{permissions: [], agents: [agent.id], models: ["qwen3.5:4b"]}
+               grants: %{permissions: [], agents: [agent.id], models: ["deepseek-flash"]}
              })
 
     assert {:error, :forbidden} = Policies.snapshot_for_request(member.scope, resources)

@@ -25,7 +25,7 @@ defmodule AiControl.Budgets.AccountingTest do
 
   defp admit(context, snapshot, now \\ DateTime.utc_now()) do
     {:ok, receipt} =
-      Budgets.admit(context.principal, nil, "qwen3.5:4b", snapshot, Ecto.UUID.generate(), now)
+      Budgets.admit(context.principal, nil, "deepseek-flash", snapshot, Ecto.UUID.generate(), now)
 
     receipt
   end
@@ -70,13 +70,19 @@ defmodule AiControl.Budgets.AccountingTest do
     admit(context, snapshot)
 
     assert {:error, {:request_budget_exceeded, _}} =
-             Budgets.admit(context.principal, nil, "qwen3.5:4b", snapshot, Ecto.UUID.generate())
+             Budgets.admit(
+               context.principal,
+               nil,
+               "deepseek-flash",
+               snapshot,
+               Ecto.UUID.generate()
+             )
 
     assert bucket(context).requests == 1
     zero = policy(context, %{"organization" => %{"requests_per_hour" => 0}})
 
     assert {:error, {:request_budget_exceeded, _}} =
-             Budgets.admit(context.principal, nil, "qwen3.5:4b", zero, Ecto.UUID.generate())
+             Budgets.admit(context.principal, nil, "deepseek-flash", zero, Ecto.UUID.generate())
 
     assert bucket(context).requests == 1
   end
@@ -152,7 +158,13 @@ defmodule AiControl.Budgets.AccountingTest do
     old = Application.fetch_env!(:ai_control, Config)
     on_exit(fn -> Application.put_env(:ai_control, Config, old) end)
     price = %{"currency" => "USD", "input_per_million" => "2.50", "output_per_million" => "10.00"}
-    Application.put_env(:ai_control, Config, Keyword.put(old, :prices, %{"qwen3.5:4b" => price}))
+
+    Application.put_env(
+      :ai_control,
+      Config,
+      Keyword.put(old, :prices, %{"deepseek-flash" => price})
+    )
+
     snapshot = policy(context)
     receipt = admit(context, snapshot)
     assert Budgets.evidence(receipt).cost == "unavailable"

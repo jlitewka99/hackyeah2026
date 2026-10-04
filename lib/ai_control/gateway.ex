@@ -1,5 +1,5 @@
 defmodule AiControl.Gateway do
-  @moduledoc "Verified identity → one policy → audited input → pinned backend → audited output."
+  @moduledoc "Verified identity → one policy → audited input → available backend → audited output."
   alias AiControl.Accounts.Scope
   alias AiControl.ApiKeys.Principal
   alias AiControl.{Approvals, Audit, Budgets, Policies, Workflows}
@@ -106,13 +106,12 @@ defmodule AiControl.Gateway do
            {:ok, contract} <- ToolSchemas.prepare(safe),
            true <- Code.ensure_loaded?(provider) && function_exported?(provider, :chat_stream, 2),
            {:ok, models} <- provider.models(config),
-           {:ok, digest} <- Models.digest(safe["model"]),
-           :ok <- pinned(models, safe["model"], digest),
-           safe = review_defaults(safe, opts),
+           :ok <- available(models, safe["model"]),
+           {:ok, safe} <- prepare_review(safe, opts),
            :ok <-
              Approvals.gate(opts[:approval_ticket], current, safe, policy,
                knowledge_sources: sources,
-               model_digest: digest
+               model_identifier: safe["model"]
              ),
            {:ok, safe, receipt} <- prepare_budget(safe, receipt, policy, provider, config),
            :ok <- authorize_again(current, policy, opts[:agent_id], safe["model"]),
@@ -239,12 +238,11 @@ defmodule AiControl.Gateway do
          {:ok, safe} <- Stages.evaluate(augmented, current, policy, request_id, :input, opts),
          {:ok, safe} <- Request.validate(safe),
          {:ok, contract} <- ToolSchemas.prepare(safe),
-         safe = review_defaults(safe, opts),
-         {:ok, digest} <- Models.digest(safe["model"]),
+         {:ok, safe} <- prepare_review(safe, opts),
          :ok <-
            Approvals.gate(opts[:approval_ticket], current, safe, policy,
              knowledge_sources: sources,
-             model_digest: digest
+             model_identifier: safe["model"]
            ),
          :ok <- authorize_again(current, policy, opts[:agent_id], params["model"]) do
       opts = Keyword.put(opts, :knowledge_sources, sources)
@@ -261,21 +259,12 @@ defmodule AiControl.Gateway do
     end
   end
 
-  defp review_defaults(params, opts) do
+  defp prepare_review(params, opts) do
     if opts[:approval_ticket] do
       config = Config.get()
-      params = Map.put_new(params, "max_tokens", config[:default_max_tokens])
-
-      params =
-        if config[:provider] == AiControl.Gateway.Ollama && config[:ollama_reasoning_effort],
-          do: Map.put(params, "reasoning_effort", config[:ollama_reasoning_effort]),
-          else: params
-
-      if params["stream"],
-        do: Map.put(params, "stream_options", %{"include_usage" => true}),
-        else: params
+      config[:provider].prepare(params, config)
     else
-      params
+      {:ok, params}
     end
   end
 
@@ -438,8 +427,7 @@ defmodule AiControl.Gateway do
     provider = config[:provider]
 
     with {:ok, models} <- provider.models(config),
-         {:ok, digest} <- Models.digest(params["model"]),
-         :ok <- pinned(models, params["model"], digest),
+         :ok <- available(models, params["model"]),
          {:ok, params, receipt} <- prepare_budget(params, receipt, policy, provider, config),
          :ok <- authorize_again(identity, policy, opts[:agent_id], params["model"]),
          :ok <- recheck_knowledge(identity, policy, opts),
@@ -459,14 +447,19 @@ defmodule AiControl.Gateway do
   end
 
   defp prepare_budget(params, receipt, policy, provider, config) do
+    with {:ok, prepared} <- provider.prepare(params, config) do
+      reserve_budget(prepared, receipt, policy, config)
+    end
+  end
+
+  defp reserve_budget(params, receipt, policy, config) do
     if Budgets.hard_limit?(policy) || receipt.run_id do
-      params = Map.put_new(params, "max_tokens", config[:default_max_tokens])
       tokenizer = config[:tokenizer]
 
       measure(
         :budget_reservation,
         fn ->
-          reserve_tokens(params, receipt, provider, tokenizer, config)
+          reserve_tokens(params, receipt, tokenizer, config)
         end,
         config
       )
@@ -482,9 +475,8 @@ defmodule AiControl.Gateway do
     end
   end
 
-  defp reserve_tokens(params, receipt, provider, tokenizer, config) do
-    with {:ok, prompt} <- provider.prepare(params, config),
-         {:ok, input} <- tokenizer.count(params["model"], prompt, config),
+  defp reserve_tokens(params, receipt, tokenizer, config) do
+    with {:ok, input} <- tokenizer.count(params["model"], params, config),
          {:ok, receipt} <- Budgets.reserve(receipt, input, params["max_tokens"]) do
       {:ok, params, receipt}
     end
@@ -497,12 +489,8 @@ defmodule AiControl.Gateway do
     end
   end
 
-  def pinned(models, name, digest) do
-    case Map.get(models, name) do
-      nil -> {:error, :model_unavailable}
-      ^digest -> :ok
-      _ -> {:error, :model_digest_mismatch}
-    end
+  def available(models, name) do
+    if Map.has_key?(models, name), do: :ok, else: {:error, :model_unavailable}
   end
 
   defp input_size(params) do

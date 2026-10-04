@@ -45,8 +45,11 @@ defmodule AiControl.Policies.Configuration do
   def default(6), do: upgrade(default(5), 6)
   def default(5), do: upgrade(default(4), 5)
   def default(4), do: default(3) |> Map.put("schema_version", 4)
-  def default(3), do: ConfigurationV2.default(2) |> Map.put("schema_version", 3)
-  def default(version), do: ConfigurationV2.default(version)
+  def default(3), do: default(2) |> Map.put("schema_version", 3)
+
+  def default(version),
+    do: ConfigurationV2.default(version) |> Map.put("allowed_models", ["deepseek-flash"])
+
   def upgrade(source, version \\ 3)
 
   def upgrade(source, 6),

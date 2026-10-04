@@ -1,10 +1,10 @@
 # Tokenizer provenance
 
-Qwen/Qwen3.5-4B tokenizer.json, revision
-851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a, is distributed under Apache-2.0.
-Source: https://huggingface.co/Qwen/Qwen3.5-4B/tree/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
-
-The manifest binds this tokenizer to the recorded qwen3.5:4b Q4_K_M Ollama
-manifest digest and Ollama 0.35.1. The actual rendered prompt comes from Ollama;
-the Hugging Face chat template is not substituted. No inference weights are
-downloaded by this service. See the model's LICENSE for the license text.
+DeepSeek V4.1 tokenizer from the official deepseek-ai/deepseek-recipe repository,
+commit 8cadfede7063c896b944e7bae05daa3549ae97ea. The manifest pins its size and
+SHA-256. No inference weights are downloaded. deepseek-recipe 0.1.1 is MIT licensed.
+See LICENSE for recipe code and TOKENIZER_LICENSE for the bundled tokenizer.
+Source: https://github.com/deepseek-ai/deepseek-recipe/blob/8cadfede7063c896b944e7bae05daa3549ae97ea/static/tokenizers/README.md
+for upstream tokenizer notices. Recipe encoding is v41. Model availability from
+DeepSeek's /models does not verify weights or guarantee tokenizer equivalence;
+real API prompt_tokens comparisons remain a required acceptance check.

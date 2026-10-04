@@ -40,12 +40,13 @@ defmodule AiControl.PoliciesTest do
     agent: agent
   } do
     principal = principal(scope, agent)
-    assert {:ok, old} = Policies.snapshot_for_request(principal, %{model: "qwen3.5:4b"})
+    activate_default(scope)
+    assert {:ok, old} = Policies.snapshot_for_request(principal, %{model: "deepseek-flash"})
     source = Configuration.default() |> Map.put("rules", %{"pii" => %{"action" => "block"}})
     assert {:ok, version} = Policies.create_version(scope, source)
     assert {:ok, current} = Policies.current(scope)
     assert {:ok, _} = Policies.activate(scope, version.id, current.set.revision)
-    assert {:ok, new} = Policies.snapshot_for_request(principal, %{model: "qwen3.5:4b"})
+    assert {:ok, new} = Policies.snapshot_for_request(principal, %{model: "deepseek-flash"})
 
     for {policy, action} <- [{old, :redact}, {new, :block}] do
       context = context_fixture(scope, policy)
@@ -93,7 +94,8 @@ defmodule AiControl.PoliciesTest do
     agent: agent
   } do
     principal = principal(scope, agent)
-    {:ok, old} = Policies.snapshot_for_request(principal, %{model: "qwen3.5:4b"})
+    activate_default(scope)
+    {:ok, old} = Policies.snapshot_for_request(principal, %{model: "deepseek-flash"})
     {:ok, current} = Policies.current(scope)
 
     {:ok, version} =
@@ -101,7 +103,7 @@ defmodule AiControl.PoliciesTest do
 
     {:ok, _} = Policies.activate(scope, version.id, current.set.revision)
     assert :ok = Cache.clear()
-    {:ok, new} = Policies.snapshot_for_request(principal, %{model: "qwen3.5:4b"})
+    {:ok, new} = Policies.snapshot_for_request(principal, %{model: "deepseek-flash"})
     refute new.checksum == old.checksum
     assert {:ok, new} == Cache.fetch(version.id)
     assert {:error, :invalid_security_data} = Cache.put(version.id, old)
@@ -128,29 +130,33 @@ defmodule AiControl.PoliciesTest do
     {:ok, _} = Policies.activate(scope, version.id, current.set.revision)
 
     assert {:error, :model_not_allowed} =
-             Policies.snapshot_for_request(principal, %{model: "qwen3.5:4b"})
+             Policies.snapshot_for_request(principal, %{model: "deepseek-flash"})
 
     assert {:error, :forbidden} =
              Policies.snapshot_for_request(principal, %{
                agent_id: Ecto.UUID.generate(),
-               model: "qwen3.5:4b"
+               model: "deepseek-flash"
              })
 
     assert {:ok, _} = Agents.set_status(scope, agent.id, :suspended)
-    assert {:error, :forbidden} = Policies.snapshot_for_request(principal, %{model: "qwen3.5:4b"})
+
+    assert {:error, :forbidden} =
+             Policies.snapshot_for_request(principal, %{model: "deepseek-flash"})
   end
 
   test "individual model grants use the operator model registry", %{
     scope: scope,
     agent: agent
   } do
+    activate_default(scope)
+
     member =
       member_fixture(scope, :user, %{permissions: ["ai.use"], agents: [agent.id], models: ["*"]})
 
     assert {:ok, _snapshot} =
              Policies.snapshot_for_request(member.scope, %{
                agent_id: agent.id,
-               model: "qwen3.5:4b"
+               model: "deepseek-flash"
              })
   end
 
@@ -205,5 +211,11 @@ defmodule AiControl.PoliciesTest do
     {_key, token} = key_fixture(scope, agent)
     {:ok, principal} = ApiKeys.authenticate(token)
     principal
+  end
+
+  defp activate_default(scope) do
+    {:ok, version} = Policies.create_version(scope, Configuration.default())
+    {:ok, current} = Policies.current(scope)
+    {:ok, _} = Policies.activate(scope, version.id, current.set.revision)
   end
 end
