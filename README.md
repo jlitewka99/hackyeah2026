@@ -1,4 +1,112 @@
 # AiControl
+
+## Run everything locally with Docker
+
+From the repository root, start Docker Desktop or OrbStack and run:
+
+```sh
+./docker/local up
+```
+
+This builds the local application image and starts Phoenix, PostgreSQL 17,
+Ollama 0.35.1 for Granite Guardian, Polish NER, Qwen Guard, and both tokenizers.
+Generation uses the DeepSeek API with `deepseek-flash`. The launcher asks for
+your DeepSeek API key without echo unless `DEEPSEEK_API_KEY` is already exported;
+it does not save the key. The first start downloads several GB of images and
+model files and may take several minutes.
+Open [localhost:4000](http://localhost:4000). The launcher asks for an organizer
+email and password only when the database has no organizer. The password must
+be at least 12 characters and at most 72 bytes. Organizations, invitations,
+agents, and API keys can then be created in the panel.
+
+Only `127.0.0.1:4000` is published. PostgreSQL, Ollama, and the guard services
+remain internal. Database contents and Ollama models persist in named volumes;
+restarting reuses cached models and checks their full pinned digests. The local
+build uses HTTP, matching session cookies and LiveView origin checks, and the
+organizer-only [mailbox preview](http://localhost:4000/dev/mailbox) for invitations
+and account recovery. Controlled tests in the panel use a separate
+`ai_control_runner` database.
+
+### Required environment variables and AI tokens
+
+**`DEEPSEEK_API_KEY` is required.** Obtain it from the
+[DeepSeek platform](https://platform.deepseek.com/api_keys) and provide it through
+your environment or the launcher's hidden prompt. The current `main` uses the
+direct [DeepSeek API](https://api-docs.deepseek.com/) for generation; requests
+need an account with available balance. No OpenAI or Anthropic key is used.
+Local Qwen Guard and Granite Guardian do not require a Hugging Face token in
+the default build.
+
+| Variable | Local Compose setup |
+| --- | --- |
+| `DEEPSEEK_API_KEY` | Required for generation and `/ready`; exported before each `up` or requested without echo. Passed only to the running application, never the image build, and not saved by the launcher. |
+| `POSTGRES_PASSWORD` | Generated once in `.env.local`; used by the internal database and application. |
+| `SECRET_KEY_BASE` | Generated once in `.env.local`; signs application sessions. |
+| `AUDIT_FINGERPRINT_KEY` | Generated once in `.env.local`; fingerprints audit content. |
+| `APPROVAL_ENCRYPTION_KEY` | Generated once in `.env.local`; encrypts human-review previews. |
+| `AI_CONTROL_ORGANIZER_EMAIL` | Requested interactively if no organizer exists; required as an environment variable for a non-interactive first start. |
+| `AI_CONTROL_ORGANIZER_PASSWORD` | Requested without echo if no organizer exists; passed only to the bootstrap process and never saved in `.env.local`. |
+| `DATABASE_URL` | Set by Compose to the internal `ai_control_local` database. |
+| `GRANITE_OLLAMA_BASE_URL` | Set by Compose to `http://ollama:11434`; used for the separate local guard. |
+| `GATEWAY_MODELS` | No longer required: the current gateway supports the fixed `deepseek-flash` model. |
+| `TEST_RUNNER_DATABASE_URL` / `TEST_RUNNER_EXECUTABLE` | Set by Compose for the separate runner database and release executable. |
+| `AI_CONTROL_API_KEY` | Only for clients calling the gateway: create an agent and issue its API key in the panel, then send it as a Bearer token. Not required to start the server. |
+| `HF_TOKEN` | Optional: only needed to build gated Prompt Guard weights after obtaining access in Hugging Face; passed as a BuildKit secret. See [Prompt Guard](docs/prompt-guard.md). |
+
+Docker Compose, Bash, and OpenSSL must be installed. Allow at least 30 GiB of
+free disk space for a first build, image extraction, and downloaded models.
+The launcher generates the required secrets automatically with file permissions
+`0600`. Keep `.env.local` between restarts; it is excluded from Git and Docker's
+build context. Do not reuse these
+local secrets for production. For a non-interactive first start, supply organizer
+credentials through your environment or secret manager, without putting them
+in source files or command-line arguments.
+
+Ollama runs Granite on CPU in this setup. On macOS, Docker cannot use the Mac GPU,
+so guard inference is slower than with native Ollama
+([Ollama FAQ](https://docs.ollama.com/faq)). Allocate enough Docker memory for
+the guard models; start with 12 GiB and adjust using actual memory
+usage. The optional Prompt Guard is excluded by default; panel Live tests that
+require it remain unavailable until its verified service is configured.
+Granite's `granite4.1-guardian:8b` weights are downloaded and their full digest
+from `sidecar/tokenizer/granite.v1.json` is verified before the app starts.
+Granite remains disabled in policies until explicitly activated in the panel;
+see [Granite Guardian](docs/granite-guardian.md).
+
+### Stop, inspect, rebuild, or reset
+
+```sh
+./docker/local status
+./docker/local logs       # Ctrl-C stops following logs, not the containers
+./docker/local down       # preserves database, model volumes, and .env.local
+./docker/local up         # rebuilds changed code and starts the environment
+```
+
+This is a release build intended for running and testing; code changes require
+another `./docker/local up`. The default Dockerfile build still uses production
+HTTPS settings; Compose explicitly opts into `LOCAL_DOCKER=1` at build time.
+
+To **permanently delete the local database and downloaded Ollama models**:
+
+```sh
+docker compose --env-file .env.local down --volumes
+```
+
+Keep `.env.local` to reuse the keys, or delete it after removing the volumes to
+generate new ones on the next start. Deleting `.env.local` while keeping the
+database loses its matching encryption and audit keys. The next start with an
+empty database asks for organizer credentials again.
+
+If startup fails, use `./docker/local status` and `./docker/local logs`.
+`model-init` reports a version/digest mismatch or a failed download; `db-init`
+creates both databases; `app` runs migrations and loads the guard models.
+The launcher reports success only after the services are healthy and gateway
+`/ready` returns 200. An invalid DeepSeek key, unavailable API or required guard
+stops readiness; check the supplied key and service logs. Digest mismatches
+require investigation rather than silently accepting a different model.
+
+## Native development setup
+
 <img width="1279" height="860" alt="image" src="https://github.com/user-attachments/assets/67b6efbb-0de4-4f0e-b907-ad7b2aa6e712" />
 
 Phoenix 1.8 application. Run all commands from the repository root.

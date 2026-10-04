@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+# Run on every Compose start, including when the volume already exists.
+psql --dbname postgres --set ON_ERROR_STOP=1 <<'SQL'
+SELECT 'CREATE DATABASE ai_control_local'
+WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'ai_control_local')
+\gexec
+SELECT 'CREATE DATABASE ai_control_runner'
+WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'ai_control_runner')
+\gexec
+SQL

@@ -1,6 +1,10 @@
 import Config
 
-config :ai_control, :secure_cookies, true
+local_docker? = System.get_env("LOCAL_DOCKER", "0") == "1"
+
+config :ai_control, :local_docker, local_docker?
+config :ai_control, :secure_cookies, !local_docker?
+config :ai_control, :dev_routes, local_docker?
 
 # Note we also include the path to a cache manifest
 # containing the digested version of static files. This
@@ -14,19 +18,23 @@ config :ai_control, AiControlWeb.Endpoint,
 # known as HSTS. If you have a health check endpoint, you may want to exclude it below.
 # Note `:force_ssl` is required to be set at compile-time.
 config :ai_control, AiControlWeb.Endpoint,
-  force_ssl: [
-    rewrite_on: [:x_forwarded_proto],
-    exclude: [
-      # paths: ["/health"],
-      hosts: ["localhost", "127.0.0.1"]
-    ]
-  ]
+  force_ssl:
+    if(local_docker?,
+      do: false,
+      else: [
+        rewrite_on: [:x_forwarded_proto],
+        exclude: [
+          # paths: ["/health"],
+          hosts: ["localhost", "127.0.0.1"]
+        ]
+      ]
+    )
 
 # Configure Swoosh API Client
 config :swoosh, api_client: Swoosh.ApiClient.Req
 
 # Disable Swoosh Local Memory Storage
-config :swoosh, local: false
+config :swoosh, local: local_docker?
 
 # Do not print debug messages in production
 config :logger, level: :info
