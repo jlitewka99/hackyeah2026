@@ -2,7 +2,9 @@
 
 Acceptance date: 2026-10-04. Implementation and extended Linux container smoke
 are verified; the plan checkbox stays open until successful full Live model
-acceptance. That remaining gap requires a draft PR.
+acceptance. Implementation PR #22 was merged externally at 04:16:59 UTC, before
+CI completed and without closing that acceptance gap. The final CI evidence is
+published as a separate documentation follow-up.
 
 ## Deployment and configuration
 
