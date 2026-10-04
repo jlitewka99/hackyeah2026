@@ -118,6 +118,7 @@
             {cond do
               !settings["enabled"] -> "Disabled"
               settings["required"] -> "Required"
+              guard == "granite" -> "Selected checks required"
               true -> "Optional"
             end} · {Enum.join(settings["stages"], ", ")}
             <span :if={Map.has_key?(settings, "severities")}> · Labels: {Enum.join(
@@ -135,12 +136,12 @@
           {guard, version} <- Enum.sort(Map.get(@current.version.settings, "detector_sets", %{}))
         }>
           <dt class="font-medium">
-            {if guard == "ner" && @current.version.settings["schema_version"] == 5,
+            {if guard == "ner" && @current.version.settings["schema_version"] in [5, 6],
               do: "Named entity weights",
               else: "#{label(guard)} detector set"}
           </dt><dd class="muted">{version}</dd>
         </div>
-        <div :if={@current.version.settings["schema_version"] == 5}>
+        <div :if={@current.version.settings["schema_version"] in [5, 6]}>
           <dt class="font-medium">NER rule set</dt><dd class="muted">
             {@current.version.settings["ner_model_set"]}
           </dd>
@@ -167,6 +168,10 @@
             {label(field)}: {if is_nil(limit), do: "Not configured", else: limit}
           </dd>
         </div>
+        <.granite_settings
+          :if={@current.version.settings["schema_version"] == 6}
+          granite={@current.version.settings["granite"]}
+        />
       </dl>
     </details>
     <button
@@ -305,12 +310,25 @@
           class="button-secondary"
           phx-click="upgrade"
           phx-disable-with="Upgrading…"
-        >{if schema_version(@form) == 5, do: "Apply workflow defaults", else: "Upgrade to v5"}</button>
+        >{if schema_version(@form) in [5, 6], do: "Apply workflow defaults", else: "Upgrade to v5"}</button>
+        <button
+          :if={schema_version(@form) < 6}
+          id="policy-upgrade-granite"
+          type="button"
+          class="button-secondary"
+          phx-click="upgrade_granite"
+          phx-disable-with="Upgrading…"
+        >Upgrade to v6 for Granite</button>
       </div>
       <p :if={upgrade_available?(@form)} class="muted mb-6">
         Upgrade this draft to require workflow context and finite shared limits, and configure Knowledge and NER rule versions and imported signature sets. Existing explicit tool limits are preserved. Saving and activation remain separate steps.
       </p>
-      <section :if={schema_version(@form) == 5} id="policy-knowledge" class="list-section mb-6">
+      <.granite_editor :if={schema_version(@form) == 6} form={@form} errors={@errors} />
+      <section
+        :if={schema_version(@form) in [5, 6]}
+        id="policy-knowledge"
+        class="list-section mb-6"
+      >
         <h3>Knowledge and memory</h3>
         <p class="muted mt-2 mb-4">
           Source access and content checks apply to every read and write. Enabling retrieval does not enable memory writes.
@@ -358,19 +376,23 @@
           {message}
         </p>
       </section>
-      <section :if={schema_version(@form) in [2, 3, 4, 5]} id="policy-detector-sets" class="mb-6">
+      <section
+        :if={schema_version(@form) in [2, 3, 4, 5, 6]}
+        id="policy-detector-sets"
+        class="mb-6"
+      >
         <h3 class="font-medium">Detector sets</h3>
         <p class="muted mt-2">
           Immutable sets keep detection reproducible.
         </p>
         <div :for={{guard, version} <- Enum.sort(@form[:detector_sets].value)} class="mt-2">
           <span id={"policy-set-label-#{guard}"} class="break-all">
-            {if guard == "ner" && schema_version(@form) == 5,
+            {if guard == "ner" && schema_version(@form) in [5, 6],
               do: "Named entity weights",
               else: label(guard)} · {version}
           </span>
           <.input
-            :if={guard == "signatures" && schema_version(@form) == 5}
+            :if={guard == "signatures" && schema_version(@form) in [5, 6]}
             name="policy[detector_sets][signatures]"
             id="policy-signature-selector"
             type="select"
@@ -379,7 +401,7 @@
             options={@signature_options}
           />
           <.input
-            :if={guard != "signatures" || schema_version(@form) != 5}
+            :if={guard != "signatures" || schema_version(@form) not in [5, 6]}
             name={"policy[detector_sets][#{guard}]"}
             id={"policy-set-#{guard}"}
             value={version}
@@ -451,7 +473,7 @@
           An unavailable required guard blocks the request. Select Profile default to remove an override.
         </p>
         <p
-          :if={schema_version(@form) in [2, 3, 4, 5]}
+          :if={schema_version(@form) in [2, 3, 4, 5, 6]}
           id="policy-phase-order"
           class="muted text-sm mt-2"
         >
@@ -491,7 +513,7 @@
             Output only. Disabled by default.
           </p>
           <div
-            :if={schema_version(@form) in [4, 5] && guard == "semantic"}
+            :if={schema_version(@form) in [4, 5, 6] && guard == "semantic"}
             class="md:col-start-2 md:col-span-2"
           >
             <.input
@@ -520,7 +542,7 @@
           </div>
           <div
             :if={
-              schema_version(@form) in [3, 4, 5] &&
+              schema_version(@form) in [3, 4, 5, 6] &&
                 (guard == "moderation" ||
                    (guard == "semantic" && injection_provider(@form) == "qwen"))
             }
@@ -655,7 +677,7 @@
         </div>
       </details>
       <details
-        :if={schema_version(@form) in [2, 3, 4, 5]}
+        :if={schema_version(@form) in [2, 3, 4, 5, 6]}
         class="policy-details"
         id="policy-tools"
         open={MapSet.member?(@open_sections, "tools")}
@@ -710,10 +732,14 @@
         <p id="policy-budget-help" class="muted mt-3">
           Request and token limits are enforced per UTC hour. An empty hourly limit (null in YAML) is not configured; zero denies new requests or token reservations. Activating a policy does not reset usage or existing reservations. Started tool calls count even when their result is blocked.
         </p>
-        <p :if={schema_version(@form) != 5} class="muted mt-2">
+        <p :if={schema_version(@form) not in [5, 6]} class="muted mt-2">
           Tool calls are limited per operator-assigned agent context, not per hour. A new policy or restart does not reset this count. Zero denies execution; an empty tool limit is not configured.
         </p>
-        <p :if={schema_version(@form) == 5} id="policy-workflow-required" class="mt-3 notice-info">
+        <p
+          :if={schema_version(@form) in [5, 6]}
+          id="policy-workflow-required"
+          class="mt-3 notice-info"
+        >
           Activating v5 requires a run and participant for every chat or tool call. Workflow limits are shared by all delegates for the entire run. All workflow limits must be finite; duration is in seconds and root delegation depth is zero.
         </p>
         <fieldset :for={{scope, fields} <- workflow_budget_fields(@form)} class="mt-4">
@@ -729,11 +755,11 @@
               step="1"
               label={label(field)}
               placeholder={
-                if scope == "workflow" && schema_version(@form) == 5,
+                if scope == "workflow" && schema_version(@form) in [5, 6],
                   do: "Finite limit required",
                   else: "Not configured"
               }
-              required={scope == "workflow" && schema_version(@form) == 5}
+              required={scope == "workflow" && schema_version(@form) in [5, 6]}
               errors={field_errors(@errors, "budgets.#{scope}.#{field}")}
             />
           </div>

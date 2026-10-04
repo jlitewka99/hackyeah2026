@@ -6,6 +6,9 @@ defmodule AiControlWeb.OrganizationReportingLiveTest do
   import Phoenix.LiveViewTest
 
   alias AiControl.{Audit, Organizations}
+  alias AiControl.Audit.Event
+  alias AiControl.Guards.Granite.Plan
+  alias AiControl.Repo
 
   test "overview is useful without reporting grants and each page checks its own permission", %{
     conn: conn
@@ -72,6 +75,82 @@ defmodule AiControlWeb.OrganizationReportingLiveTest do
       Organizations.update_member(scope, reader.membership.id, %{grants: %{permissions: []}})
 
     assert_redirect(details, ~p"/organizations/#{scope.organization.id}")
+  end
+
+  test "Granite details explain historical polarity, omission and blocking failure", %{conn: conn} do
+    scope = organization_fixture()
+
+    check = %{
+      "criterion_id" => "tool_alignment.v1",
+      "criterion_hash" => String.duplicate("a", 64),
+      "task" => "tool_action",
+      "trigger" => "high_risk_tool",
+      "block_on" => "no",
+      "status" => "ok",
+      "score" => "no",
+      "interpretation" => "block",
+      "duration_us" => 1,
+      "usage" => %{"prompt_tokens" => 1, "completion_tokens" => 1, "total_tokens" => 2},
+      "action_index" => 0
+    }
+
+    skipped =
+      Map.merge(check, %{
+        "criterion_id" => "groundedness.v1",
+        "task" => "groundedness",
+        "trigger" => "not_applicable",
+        "status" => "skipped",
+        "score" => nil,
+        "interpretation" => "skipped",
+        "usage" => nil,
+        "action_index" => nil
+      })
+
+    failed =
+      Map.merge(check, %{
+        "criterion_id" => "custom.v1",
+        "trigger" => "privileged_resource",
+        "status" => "error",
+        "score" => nil,
+        "interpretation" => "unavailable",
+        "usage" => nil
+      })
+
+    evidence =
+      Plan.evidence([check, skipped, failed]) |> Map.put("digest", String.duplicate("d", 64))
+
+    id = Ecto.UUID.generate()
+
+    event =
+      Repo.insert!(%Event{
+        organization_id: scope.organization.id,
+        actor_type: :user,
+        user_id: scope.user.id,
+        request_id: id,
+        target_id: id,
+        stage: :input,
+        kind: :decision,
+        event_type: "security.decision",
+        policy_version: Ecto.UUID.generate(),
+        policy_checksum: String.duplicate("e", 64),
+        action: :block,
+        occurred_at: DateTime.utc_now(),
+        data: %{
+          "guards" => [%{"guard" => "granite", "status" => "error", "evidence" => evidence}]
+        }
+      })
+
+    {:ok, details, _} =
+      live(
+        log_in_user(conn, scope.user),
+        ~p"/organizations/#{scope.organization.id}/events/#{event.id}"
+      )
+
+    assert has_element?(details, "#event-granite")
+    assert has_element?(details, "#granite_checks-0", "blocks on no")
+    assert has_element?(details, "#granite_checks-1", "Skipped")
+    assert has_element?(details, "#granite_checks-2", "Selected check unavailable")
+    assert has_element?(details, "#event-evidence", String.duplicate("d", 64))
   end
 
   test "read-only budgets and signatures work without policy or event access", %{conn: conn} do

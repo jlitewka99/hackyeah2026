@@ -8,6 +8,16 @@ gateway_models =
   end
 
 gateway_config = [
+  granite_url:
+    System.get_env(
+      "GRANITE_OLLAMA_BASE_URL",
+      System.get_env("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+    ),
+  granite_tokenizer_url:
+    System.get_env(
+      "GRANITE_TOKENIZER_BASE_URL",
+      System.get_env("TOKENIZER_BASE_URL", "http://127.0.0.1:8002")
+    ),
   prompt_guard_url: System.get_env("PROMPT_GUARD_BASE_URL", "http://127.0.0.1:8004"),
   semantic_url: System.get_env("SEMANTIC_BASE_URL", "http://127.0.0.1:8003"),
   semantic_timeout: String.to_integer(System.get_env("GATEWAY_SEMANTIC_TIMEOUT_MS", "30000")),

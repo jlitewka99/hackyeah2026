@@ -92,6 +92,41 @@ defmodule AiControlWeb.OrganizationPoliciesLiveTest do
            ]
   end
 
+  test "v6 keeps Granite disabled until a saved version is activated and carries BYOC", %{
+    conn: conn,
+    scope: scope
+  } do
+    {:ok, view, _} = live(conn, ~p"/organizations/#{scope.organization.id}/policies")
+    view |> element("#policy-new") |> render_click()
+    view |> element("#policy-upgrade-granite") |> render_click()
+    assert has_element?(view, "#policy-granite")
+    refute has_element?(view, "#policy-granite-enabled[checked]")
+    view |> element("#policy-granite-add-criterion") |> render_click()
+    assert has_element?(view, "##{PolicyHTML.granite_id("custom.1")}-text")
+
+    view
+    |> form("#policy-form",
+      policy: %{
+        granite: %{
+          enabled: "true",
+          criteria: %{
+            "custom.1" => %{text: "The action shares confidential data.", block_on: "yes"}
+          }
+        }
+      }
+    )
+    |> render_submit()
+
+    assert has_element?(view, "#policy-activate")
+    {:ok, current} = Policies.current(scope)
+    assert current.version.settings["schema_version"] == 1
+    view |> element("#policy-activate") |> render_click()
+    {:ok, active} = Policies.current(scope)
+    assert active.version.settings["granite"]["enabled"]
+    assert active.version.settings["granite"]["criteria"]["custom.1"]["block_on"] == "yes"
+    assert has_element?(view, "#policy-granite-active")
+  end
+
   test "filling a v5 draft preserves Knowledge, NER and explicit tool limits until activation", %{
     conn: conn,
     scope: scope

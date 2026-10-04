@@ -12,8 +12,9 @@ defmodule AiControlWeb.GatewayStreamControllerTest do
   alias AiControl.Budgets.{Bucket, Reservation}
   alias AiControl.{Dashboard, Repo}
   alias AiControl.Gateway.Config
+  alias AiControl.Guards.Granite
   alias AiControl.Guards.Secret
-  alias AiControl.Policies.Configuration
+  alias AiControl.Policies.{Configuration, ConfigurationV6}
   alias Ecto.Adapters.SQL
 
   setup %{conn: conn} do
@@ -107,6 +108,76 @@ defmodule AiControlWeb.GatewayStreamControllerTest do
     assert_received {:rag_counted, prompt}
     assert prompt =~ "Support is available"
     assert Repo.get_by!(Reservation, request_id: conn.assigns.request_id).input_tokens == 40
+  end
+
+  test "Granite groundedness blocks JSON and buffered SSE and charges generated usage", context do
+    activate_knowledge_policy(context.scope, %{
+      "schema_version" => 6,
+      "granite" => Map.put(ConfigurationV6.defaults(), "enabled", true),
+      "budgets" => %{"organization" => %{"tokens_per_hour" => 5000}}
+    })
+
+    principal = principal_fixture(context.scope, context.agent)
+    reference = run_reference_fixture(principal)
+    document_fixture(context.scope, context.agent)
+    owner = self()
+
+    Application.put_env(
+      :ai_control,
+      Config,
+      Config.get()
+      |> Keyword.merge(
+        guards: %{"granite" => Granite},
+        granite_provider: AiControl.TestGraniteProvider,
+        test_granite: fn prompt, _ ->
+          send(owner, {:groundedness_prompt, prompt})
+          {:ok, "yes", %{"prompt_tokens" => 40, "completion_tokens" => 6, "total_tokens" => 46}}
+        end
+      )
+    )
+
+    conn =
+      context.conn
+      |> put_req_header("x-run-id", reference.run_id)
+      |> put_req_header("x-run-participant-id", reference.participant_id)
+
+    blocked = chat(conn, %{"context" => %{"query" => "support"}})
+    assert blocked.resp_body =~ "policy_blocked"
+    refute blocked.resp_body =~ "Bezpieczna"
+    refute blocked.resp_body =~ "[DONE]"
+    assert_received {:groundedness_prompt, prompt}
+    assert prompt =~ "Support is available on weekdays"
+    assert bucket(context).tokens == 16
+    assert bucket(context).reserved == 0
+
+    Req.Test.stub(__MODULE__, fn conn ->
+      case conn.request_path do
+        "/api/tags" ->
+          Req.Test.json(conn, %{
+            models: [%{name: "qwen3.5:4b", digest: String.duplicate("a", 64)}]
+          })
+
+        "/api/version" ->
+          Req.Test.json(conn, %{version: "0.35.1"})
+
+        _ ->
+          {:ok, raw, conn} = Plug.Conn.read_body(conn)
+
+          if Jason.decode!(raw)["_debug_render_only"],
+            do: Req.Test.json(conn, %{_debug_info: %{rendered_template: "synthetic prompt"}}),
+            else: Req.Test.json(conn, response("PRIVATE_UNGROUNDED_RESPONSE"))
+      end
+    end)
+
+    assert {:error, :policy_blocked} =
+             AiControl.Gateway.chat(
+               principal,
+               request() |> Map.put("context", %{"query" => "support"}),
+               run_context: reference
+             )
+
+    assert bucket(context).tokens == 32
+    assert bucket(context).reserved == 0
   end
 
   test "RAG revision changes during stream preparation prevent generation", context do

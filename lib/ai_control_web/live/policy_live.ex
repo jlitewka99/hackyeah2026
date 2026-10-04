@@ -10,6 +10,18 @@ defmodule AiControlWeb.PolicyLive do
   alias AiControl.{Policies, Repo}
   alias AiControl.Policies.{Activation, Configuration, Draft}
 
+  defp available_criterion_id(criteria),
+    do:
+      Enum.find_value(1..9, fn index ->
+        key = "custom.#{index}"
+        if not Map.has_key?(criteria, key), do: key
+      end)
+
+  defp update_granite(socket, granite) do
+    changeset = Ecto.Changeset.put_change(socket.assigns.form.source, :granite, granite)
+    {:noreply, assign(socket, form: to_form(changeset, as: :policy), preview: nil)}
+  end
+
   def mount(socket, target) do
     if connected?(socket) do
       Phoenix.PubSub.subscribe(
@@ -79,8 +91,9 @@ defmodule AiControlWeb.PolicyLive do
      )}
   end
 
-  def event("upgrade", _, socket) do
-    source = socket.assigns.form.source |> Draft.source() |> Configuration.upgrade(5)
+  def event(event, _, socket) when event in ["upgrade", "upgrade_granite"] do
+    version = if event == "upgrade_granite", do: 6, else: 5
+    source = socket.assigns.form.source |> Draft.source() |> Configuration.upgrade(version)
 
     {:noreply,
      assign(socket,
@@ -88,6 +101,32 @@ defmodule AiControlWeb.PolicyLive do
        preview: nil,
        errors: []
      )}
+  end
+
+  def event("granite_add_criterion", _, socket) do
+    granite = Ecto.Changeset.get_field(socket.assigns.form.source, :granite)
+    criteria = Map.get(granite, "criteria", %{})
+
+    if map_size(criteria) < 8 do
+      id = available_criterion_id(criteria)
+
+      entry = %{
+        "id" => id,
+        "task" => "tool_action",
+        "text" => "",
+        "block_on" => "yes",
+        "enabled" => true
+      }
+
+      update_granite(socket, Map.put(granite, "criteria", Map.put(criteria, id, entry)))
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def event("granite_remove_criterion", %{"id" => id}, socket) do
+    granite = Ecto.Changeset.get_field(socket.assigns.form.source, :granite)
+    update_granite(socket, Map.update!(granite, "criteria", &Map.delete(&1, id)))
   end
 
   def event("validate_yaml", %{"yaml" => attrs}, socket),

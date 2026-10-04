@@ -1,11 +1,12 @@
 """Uses the real pinned tokenizer offline, including digest and request boundaries."""
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
 
 from fastapi.testclient import TestClient
-from models import MANIFEST, verify
+from models import MANIFEST, GRANITE_MANIFEST, verify
 from service import app
 
 
@@ -52,6 +53,30 @@ class TokenizerTest(unittest.TestCase):
             Path(directory, "tokenizer.json").write_bytes(b"changed")
             with self.assertRaises(RuntimeError):
                 verify(directory)
+
+    def test_granite_exact_prompt_uses_its_own_pinned_tokenizer(self):
+        payload = {"model": GRANITE_MANIFEST["model"], "digest": GRANITE_MANIFEST["digest"],
+                   "prompt": "<|start_of_role|>user<|end_of_role|>Zażółć gęślą jaźń<|end_of_text|>"}
+        response = self.client.post("/count", json=payload)
+        if os.environ.get("GRANITE_TOKENIZER_MODELS_DIR"):
+            self.assertEqual(response.status_code, 200)
+            from tokenizers import Tokenizer
+            tokenizer = Tokenizer.from_file(str(Path(os.environ["GRANITE_TOKENIZER_MODELS_DIR"]) / "tokenizer.json"))
+            self.assertEqual(response.json()["tokens"], len(tokenizer.encode(payload["prompt"], add_special_tokens=False).ids))
+            self.assertEqual(response.json()["digest"], GRANITE_MANIFEST["digest"])
+            self.assertIn(GRANITE_MANIFEST["model"], self.client.get("/ready").json()["models"])
+        else:
+            self.assertEqual(response.status_code, 503)
+        payload["digest"] = MANIFEST["digest"]
+        self.assertEqual(self.client.post("/count", json=payload).status_code, 400)
+
+    def test_granite_missing_artifact_fails_verified_setup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(RuntimeError):
+                verify(directory, GRANITE_MANIFEST)
+            Path(directory, "tokenizer.json").write_bytes(b"changed")
+            with self.assertRaises(RuntimeError):
+                verify(directory, GRANITE_MANIFEST)
 
 
 if __name__ == "__main__":

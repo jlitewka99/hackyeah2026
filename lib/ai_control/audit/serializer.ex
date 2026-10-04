@@ -4,7 +4,7 @@ defmodule AiControl.Audit.Serializer do
   alias AiControl.Gateway.Measurements
   alias AiControl.Gateway.StreamEvidence
   alias AiControl.Knowledge.Evidence
-  alias AiControl.Security.{SemanticEvidence, Validation}
+  alias AiControl.Security.{GraniteEvidence, SemanticEvidence, Validation}
   alias AiControl.Tools.Catalog
 
   @fields ~w(id organization_id actor_type user_id agent_id api_key_id request_id run_id participant_id kind event_type target_id stage action policy_version policy_checksum rule_ids reason_codes fingerprint_digest fingerprint_key_id occurred_at duration_us)a
@@ -71,7 +71,14 @@ defmodule AiControl.Audit.Serializer do
       )
     )
     |> put("usage", project(value["usage"], ~w(prompt_tokens completion_tokens total_tokens)))
-    |> put("evidence", if(SemanticEvidence.valid?(value["evidence"]), do: value["evidence"]))
+    |> put(
+      "evidence",
+      if(
+        SemanticEvidence.valid?(value["evidence"]) or
+          (value["guard"] == "granite" and GraniteEvidence.valid?(value["evidence"])),
+        do: value["evidence"]
+      )
+    )
   end
 
   defp detection(value),

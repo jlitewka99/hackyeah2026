@@ -1,0 +1,27 @@
+<div id="policy-granite-active">
+  <dt class="font-medium">Deep semantic analysis</dt>
+  <dd class="muted">
+    {if @granite["enabled"], do: "Enabled · selected checks are mandatory", else: "Disabled"}
+  </dd>
+  <dd class="muted">
+    Suspicious input: {if @granite["suspicious_input"], do: "Enabled", else: "Disabled"} · Prompt Guard threshold: {@granite[
+      "suspicious_threshold"
+    ]}
+  </dd>
+  <dd class="muted break-words">
+    High risk operations: {Enum.join(@granite["high_risk_tools"], ", ")}
+  </dd>
+  <dd
+    :for={{kind, values} <- Enum.sort(@granite["privileged_resources"])}
+    :if={values != []}
+    class="muted break-all"
+  >
+    {label(kind)}: {Enum.join(values, ", ")}
+  </dd>
+  <dd :for={{id, criterion} <- Enum.sort(@granite["criteria"])} class="mt-3">
+    <span class="font-medium break-all">{id}</span><span class="muted"> · {criterion_task(
+      criterion["task"]
+    )} · {if criterion["enabled"], do: "Enabled", else: "Disabled"} · {criterion["block_on"]} blocks</span>
+    <p class="muted mt-1 max-w-prose">{criterion["text"]}</p>
+  </dd>
+</div>

@@ -1,7 +1,7 @@
 defmodule AiControl.Security.GuardResult do
   @moduledoc "Guard measurements and findings. Enforcement belongs to Policy.Engine."
   alias AiControl.Budgets.Usage
-  alias AiControl.Security.{Detection, SemanticEvidence, Validation}
+  alias AiControl.Security.{Detection, GraniteEvidence, SemanticEvidence, Validation}
 
   @fields [:guard, :status, :detections, :signals, :duration_us, :error_code, :usage, :evidence]
   @signals ~w(risk_score injection_score pii_count secret_count exploit_count)
@@ -41,6 +41,14 @@ defmodule AiControl.Security.GuardResult do
     do:
       result.status in [:ok, :error, :skipped] && error_code?(result) &&
         (result.status == :ok || result.detections == [])
+
+  defp evidence?(%{guard: "granite", status: :error, evidence: evidence}) when evidence == %{},
+    do: true
+
+  defp evidence?(%{guard: "granite"} = result) do
+    evidence = result.evidence
+    GraniteEvidence.valid?(evidence) and GraniteEvidence.outcome_valid?(result)
+  end
 
   defp evidence?(result),
     do:

@@ -50,6 +50,26 @@
       </div>
     </section>
     <section class="list-section" aria-labelledby="event-evidence-heading">
+      <div
+        :if={@granite_status}
+        id="event-granite"
+        class="mb-6"
+        aria-labelledby="event-granite-heading"
+      >
+        <h2 id="event-granite-heading">Deep semantic analysis</h2>
+        <p class="muted mt-2">
+          Recorded status: {@granite_status}. These results use the historical criterion and model digest.
+        </p>
+        <div id="event-granite-checks" phx-update="stream">
+          <div :for={{id, check} <- @streams.granite_checks} id={id} class="mt-4">
+            <h3 class="font-medium break-all">{check["criterion_id"]}</h3>
+            <p class="muted mt-1">
+              {granite_trigger(check["trigger"])}. {granite_outcome(check)}
+            </p>
+            <p class="muted mt-1 break-all">Criterion hash: {check["criterion_hash"]}</p>
+          </div>
+        </div>
+      </div>
       <p :if={@model_signal} id="event-model-signal" class="muted mb-4">{@model_signal}</p>
       <h2 id="event-evidence-heading">Recorded evidence</h2><p class="muted mt-2">
         Rule and detector IDs, measured signals, classifier labels or malicious scores and safe usage. Scores are not calibrated probabilities. Model proposals do not prove tool execution.

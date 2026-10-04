@@ -20,9 +20,12 @@ defmodule AiControlWeb.PolicyHTML do
   end
 
   def schema_version(form), do: Ecto.Changeset.get_field(form.source, :schema_version)
-  def guard_catalog(form), do: Configuration.guards(schema_version(form))
+  def guard_catalog(form), do: Configuration.guards(schema_version(form)) -- ["granite"]
   def entity_types, do: Configuration.ner_entities()
-  def category_catalog(form), do: Configuration.categories(schema_version(form))
+
+  def category_catalog(form),
+    do: Configuration.categories(schema_version(form)) -- ["granite_violation"]
+
   def severities, do: Configuration.severities()
   def safety_categories, do: Configuration.safety_categories()
 
@@ -36,6 +39,22 @@ defmodule AiControlWeb.PolicyHTML do
   end
 
   def tool_catalog, do: Catalog.all()
+  def granite(form), do: form[:granite].value || %{}
+  def granite_id(id), do: "policy-granite-criterion-" <> Base.url_encode64(id, padding: false)
+
+  def granite_tasks,
+    do: [
+      {"Suspicious input", "suspicious_input"},
+      {"Tool action", "tool_action"},
+      {"Groundedness", "groundedness"}
+    ]
+
+  def criterion_task(task),
+    do:
+      Enum.find_value(granite_tasks(), task, fn {label, value} -> if value == task, do: label end)
+
+  def granite_error?(errors),
+    do: Enum.any?(errors, fn {path, _} -> String.starts_with?(path, "granite") end)
 
   def tool_label(tool),
     do:
@@ -63,7 +82,7 @@ defmodule AiControlWeb.PolicyHTML do
 
   def label_rule?(form, category),
     do:
-      schema_version(form) in [3, 4, 5] &&
+      schema_version(form) in [3, 4, 5, 6] &&
         (category == "content_safety" ||
            (category == "prompt_injection" && injection_provider(form) == "qwen"))
 
@@ -73,6 +92,10 @@ defmodule AiControlWeb.PolicyHTML do
 
   def diff_label("guards.semantic.provider"), do: "Injection provider"
   def diff_label("rules.prompt_injection.threshold"), do: "Injection sensitivity"
+
+  def diff_label("granite." <> path),
+    do: "Deep semantic analysis · " <> String.replace(path, "_", " ")
+
   def diff_label(path), do: path
 
   def diff_value(%{path: "guards.semantic.provider"}, settings, _side),
@@ -97,13 +120,13 @@ defmodule AiControlWeb.PolicyHTML do
 
   def label_rule_settings?(settings, category),
     do:
-      settings["schema_version"] in [3, 4, 5] &&
+      settings["schema_version"] in [3, 4, 5, 6] &&
         (category == "content_safety" ||
            (category == "prompt_injection" &&
               get_in(settings, ["guards", "semantic", "provider"]) != "prompt_guard"))
 
   def rule_actions(form, category) do
-    if category in ~w(prompt_injection content_safety) && schema_version(form) in [3, 4, 5],
+    if category in ~w(prompt_injection content_safety) && schema_version(form) in [3, 4, 5, 6],
       do: [{"Allow", "allow"}, {"Block", "block"}],
       else: [{"Allow", "allow"}, {"Redact", "redact"}, {"Block", "block"}]
   end
@@ -129,6 +152,8 @@ defmodule AiControlWeb.PolicyHTML do
   def label("semantic"), do: "Semantic analysis"
   def label("moderation"), do: "Response moderation"
   def label("content_safety"), do: "Response safety"
+  def label("granite"), do: "Deep semantic analysis"
+  def label("granite_violation"), do: "Deep analysis violation"
   def label(value), do: value |> String.replace("_", " ") |> String.capitalize()
 
   def nested(form, field, key, subkey, default \\ "") do

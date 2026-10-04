@@ -1,7 +1,7 @@
 defmodule AiControl.Policy.Snapshot do
   @moduledoc "Immutable evaluation contract; complete policy settings are covered by its checksum."
   alias AiControl.Policies.Configuration
-  alias AiControl.Security.Validation
+  alias AiControl.Security.{GraniteEvidence, Validation}
 
   defstruct [:version, :checksum, :settings, required_guards: [], rules: %{}]
 
@@ -69,7 +69,16 @@ defmodule AiControl.Policy.Snapshot do
     |> Enum.map(&elem(&1, 0))
   end
 
-  def enabled?(%{settings: nil}, guard, _stage), do: guard != "ner"
+  def required_guards(policy, stage, results) do
+    required = required_guards(policy, stage)
+
+    if enabled?(policy, "granite", stage) and
+         GraniteEvidence.required?(results),
+       do: ["granite" | required],
+       else: required
+  end
+
+  def enabled?(%{settings: nil}, guard, _stage), do: guard not in ~w(ner granite)
 
   def enabled?(policy, guard, stage) do
     case policy.settings["guards"][guard] do

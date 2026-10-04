@@ -32,7 +32,7 @@ defmodule AiControl.Audit.Filters do
         ~w(range from to kind action stage guard agent_id reason_code request_id run_id cursor)a
       )
       |> validate_inclusion(:range, ~w(1h 24h 7d custom))
-      |> validate_inclusion(:guard, Configuration.guards(3))
+      |> validate_inclusion(:guard, Configuration.guards(6))
       |> validate_format(:reason_code, ~r/\A[a-z][a-z0-9_.-]{0,95}\z/)
       |> validate_change(:agent_id, &uuid/2)
       |> validate_change(:request_id, &uuid/2)
