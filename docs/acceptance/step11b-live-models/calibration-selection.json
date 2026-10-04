@@ -1,0 +1,715 @@
+{
+  "candidates": [
+    {
+      "selected": null,
+      "provider": "qwen",
+      "variants": [
+        {
+          "variant": {
+            "severities": [
+              "Unsafe"
+            ]
+          },
+          "metrics": {
+            "groups": {
+              "direct": {
+                "count": 25,
+                "precision": 1.0,
+                "fn": 8,
+                "errors": 0,
+                "tp": 17,
+                "fp": 0,
+                "fpr": null,
+                "recall": 0.68,
+                "tn": 0
+              },
+              "indirect": {
+                "count": 25,
+                "precision": 1.0,
+                "fn": 19,
+                "errors": 4,
+                "tp": 2,
+                "fp": 0,
+                "fpr": null,
+                "recall": 0.09523809523809523,
+                "tn": 0
+              },
+              "pii": {
+                "count": 25,
+                "precision": null,
+                "fn": 0,
+                "errors": 0,
+                "tp": 0,
+                "fp": 0,
+                "fpr": 0.0,
+                "recall": null,
+                "tn": 25
+              },
+              "safe": {
+                "count": 25,
+                "precision": null,
+                "fn": 0,
+                "errors": 0,
+                "tp": 0,
+                "fp": 0,
+                "fpr": 0.0,
+                "recall": null,
+                "tn": 25
+              }
+            },
+            "fpr": 0.0,
+            "complete?": false,
+            "mean_recall": 0.38761904761904764,
+            "p95_us": 2888188
+          },
+          "qualified": false
+        },
+        {
+          "variant": {
+            "severities": [
+              "Unsafe",
+              "Controversial"
+            ]
+          },
+          "metrics": {
+            "groups": {
+              "direct": {
+                "count": 25,
+                "precision": 1.0,
+                "fn": 6,
+                "errors": 0,
+                "tp": 19,
+                "fp": 0,
+                "fpr": null,
+                "recall": 0.76,
+                "tn": 0
+              },
+              "indirect": {
+                "count": 25,
+                "precision": 1.0,
+                "fn": 9,
+                "errors": 4,
+                "tp": 12,
+                "fp": 0,
+                "fpr": null,
+                "recall": 0.5714285714285714,
+                "tn": 0
+              },
+              "pii": {
+                "count": 25,
+                "precision": null,
+                "fn": 0,
+                "errors": 0,
+                "tp": 0,
+                "fp": 0,
+                "fpr": 0.0,
+                "recall": null,
+                "tn": 25
+              },
+              "safe": {
+                "count": 25,
+                "precision": 0.0,
+                "fn": 0,
+                "errors": 0,
+                "tp": 0,
+                "fp": 1,
+                "fpr": 0.04,
+                "recall": null,
+                "tn": 24
+              }
+            },
+            "fpr": 0.02,
+            "complete?": false,
+            "mean_recall": 0.6657142857142857,
+            "p95_us": 2888188
+          },
+          "qualified": false
+        }
+      ]
+    },
+    {
+      "selected": {
+        "variant": {
+          "threshold": 0.5
+        },
+        "metrics": {
+          "groups": {
+            "direct": {
+              "count": 25,
+              "precision": 1.0,
+              "fn": 9,
+              "errors": 0,
+              "tp": 16,
+              "fp": 0,
+              "fpr": null,
+              "recall": 0.64,
+              "tn": 0
+            },
+            "indirect": {
+              "count": 25,
+              "precision": 1.0,
+              "fn": 11,
+              "errors": 0,
+              "tp": 14,
+              "fp": 0,
+              "fpr": null,
+              "recall": 0.56,
+              "tn": 0
+            },
+            "pii": {
+              "count": 25,
+              "precision": null,
+              "fn": 0,
+              "errors": 0,
+              "tp": 0,
+              "fp": 0,
+              "fpr": 0.0,
+              "recall": null,
+              "tn": 25
+            },
+            "safe": {
+              "count": 25,
+              "precision": 0.0,
+              "fn": 0,
+              "errors": 0,
+              "tp": 0,
+              "fp": 1,
+              "fpr": 0.04,
+              "recall": null,
+              "tn": 24
+            }
+          },
+          "fpr": 0.02,
+          "complete?": true,
+          "mean_recall": 0.6000000000000001,
+          "p95_us": 1091247
+        }
+      },
+      "provider": "prompt_guard",
+      "variants": [
+        {
+          "variant": {
+            "threshold": 0.5
+          },
+          "metrics": {
+            "groups": {
+              "direct": {
+                "count": 25,
+                "precision": 1.0,
+                "fn": 9,
+                "errors": 0,
+                "tp": 16,
+                "fp": 0,
+                "fpr": null,
+                "recall": 0.64,
+                "tn": 0
+              },
+              "indirect": {
+                "count": 25,
+                "precision": 1.0,
+                "fn": 11,
+                "errors": 0,
+                "tp": 14,
+                "fp": 0,
+                "fpr": null,
+                "recall": 0.56,
+                "tn": 0
+              },
+              "pii": {
+                "count": 25,
+                "precision": null,
+                "fn": 0,
+                "errors": 0,
+                "tp": 0,
+                "fp": 0,
+                "fpr": 0.0,
+                "recall": null,
+                "tn": 25
+              },
+              "safe": {
+                "count": 25,
+                "precision": 0.0,
+                "fn": 0,
+                "errors": 0,
+                "tp": 0,
+                "fp": 1,
+                "fpr": 0.04,
+                "recall": null,
+                "tn": 24
+              }
+            },
+            "fpr": 0.02,
+            "complete?": true,
+            "mean_recall": 0.6000000000000001,
+            "p95_us": 1091247
+          },
+          "qualified": true
+        },
+        {
+          "variant": {
+            "threshold": 0.55
+          },
+          "metrics": {
+            "groups": {
+              "direct": {
+                "count": 25,
+                "precision": 1.0,
+                "fn": 9,
+                "errors": 0,
+                "tp": 16,
+                "fp": 0,
+                "fpr": null,
+                "recall": 0.64,
+                "tn": 0
+              },
+              "indirect": {
+                "count": 25,
+                "precision": 1.0,
+                "fn": 11,
+                "errors": 0,
+                "tp": 14,
+                "fp": 0,
+                "fpr": null,
+                "recall": 0.56,
+                "tn": 0
+              },
+              "pii": {
+                "count": 25,
+                "precision": null,
+                "fn": 0,
+                "errors": 0,
+                "tp": 0,
+                "fp": 0,
+                "fpr": 0.0,
+                "recall": null,
+                "tn": 25
+              },
+              "safe": {
+                "count": 25,
+                "precision": 0.0,
+                "fn": 0,
+                "errors": 0,
+                "tp": 0,
+                "fp": 1,
+                "fpr": 0.04,
+                "recall": null,
+                "tn": 24
+              }
+            },
+            "fpr": 0.02,
+            "complete?": true,
+            "mean_recall": 0.6000000000000001,
+            "p95_us": 1091247
+          },
+          "qualified": true
+        },
+        {
+          "variant": {
+            "threshold": 0.6
+          },
+          "metrics": {
+            "groups": {
+              "direct": {
+                "count": 25,
+                "precision": 1.0,
+                "fn": 9,
+                "errors": 0,
+                "tp": 16,
+                "fp": 0,
+                "fpr": null,
+                "recall": 0.64,
+                "tn": 0
+              },
+              "indirect": {
+                "count": 25,
+                "precision": 1.0,
+                "fn": 11,
+                "errors": 0,
+                "tp": 14,
+                "fp": 0,
+                "fpr": null,
+                "recall": 0.56,
+                "tn": 0
+              },
+              "pii": {
+                "count": 25,
+                "precision": null,
+                "fn": 0,
+                "errors": 0,
+                "tp": 0,
+                "fp": 0,
+                "fpr": 0.0,
+                "recall": null,
+                "tn": 25
+              },
+              "safe": {
+                "count": 25,
+                "precision": 0.0,
+                "fn": 0,
+                "errors": 0,
+                "tp": 0,
+                "fp": 1,
+                "fpr": 0.04,
+                "recall": null,
+                "tn": 24
+              }
+            },
+            "fpr": 0.02,
+            "complete?": true,
+            "mean_recall": 0.6000000000000001,
+            "p95_us": 1091247
+          },
+          "qualified": true
+        },
+        {
+          "variant": {
+            "threshold": 0.65
+          },
+          "metrics": {
+            "groups": {
+              "direct": {
+                "count": 25,
+                "precision": 1.0,
+                "fn": 9,
+                "errors": 0,
+                "tp": 16,
+                "fp": 0,
+                "fpr": null,
+                "recall": 0.64,
+                "tn": 0
+              },
+              "indirect": {
+                "count": 25,
+                "precision": 1.0,
+                "fn": 11,
+                "errors": 0,
+                "tp": 14,
+                "fp": 0,
+                "fpr": null,
+                "recall": 0.56,
+                "tn": 0
+              },
+              "pii": {
+                "count": 25,
+                "precision": null,
+                "fn": 0,
+                "errors": 0,
+                "tp": 0,
+                "fp": 0,
+                "fpr": 0.0,
+                "recall": null,
+                "tn": 25
+              },
+              "safe": {
+                "count": 25,
+                "precision": 0.0,
+                "fn": 0,
+                "errors": 0,
+                "tp": 0,
+                "fp": 1,
+                "fpr": 0.04,
+                "recall": null,
+                "tn": 24
+              }
+            },
+            "fpr": 0.02,
+            "complete?": true,
+            "mean_recall": 0.6000000000000001,
+            "p95_us": 1091247
+          },
+          "qualified": true
+        },
+        {
+          "variant": {
+            "threshold": 0.7
+          },
+          "metrics": {
+            "groups": {
+              "direct": {
+                "count": 25,
+                "precision": 1.0,
+                "fn": 9,
+                "errors": 0,
+                "tp": 16,
+                "fp": 0,
+                "fpr": null,
+                "recall": 0.64,
+                "tn": 0
+              },
+              "indirect": {
+                "count": 25,
+                "precision": 1.0,
+                "fn": 11,
+                "errors": 0,
+                "tp": 14,
+                "fp": 0,
+                "fpr": null,
+                "recall": 0.56,
+                "tn": 0
+              },
+              "pii": {
+                "count": 25,
+                "precision": null,
+                "fn": 0,
+                "errors": 0,
+                "tp": 0,
+                "fp": 0,
+                "fpr": 0.0,
+                "recall": null,
+                "tn": 25
+              },
+              "safe": {
+                "count": 25,
+                "precision": 0.0,
+                "fn": 0,
+                "errors": 0,
+                "tp": 0,
+                "fp": 1,
+                "fpr": 0.04,
+                "recall": null,
+                "tn": 24
+              }
+            },
+            "fpr": 0.02,
+            "complete?": true,
+            "mean_recall": 0.6000000000000001,
+            "p95_us": 1091247
+          },
+          "qualified": true
+        },
+        {
+          "variant": {
+            "threshold": 0.75
+          },
+          "metrics": {
+            "groups": {
+              "direct": {
+                "count": 25,
+                "precision": 1.0,
+                "fn": 9,
+                "errors": 0,
+                "tp": 16,
+                "fp": 0,
+                "fpr": null,
+                "recall": 0.64,
+                "tn": 0
+              },
+              "indirect": {
+                "count": 25,
+                "precision": 1.0,
+                "fn": 11,
+                "errors": 0,
+                "tp": 14,
+                "fp": 0,
+                "fpr": null,
+                "recall": 0.56,
+                "tn": 0
+              },
+              "pii": {
+                "count": 25,
+                "precision": null,
+                "fn": 0,
+                "errors": 0,
+                "tp": 0,
+                "fp": 0,
+                "fpr": 0.0,
+                "recall": null,
+                "tn": 25
+              },
+              "safe": {
+                "count": 25,
+                "precision": 0.0,
+                "fn": 0,
+                "errors": 0,
+                "tp": 0,
+                "fp": 1,
+                "fpr": 0.04,
+                "recall": null,
+                "tn": 24
+              }
+            },
+            "fpr": 0.02,
+            "complete?": true,
+            "mean_recall": 0.6000000000000001,
+            "p95_us": 1091247
+          },
+          "qualified": true
+        },
+        {
+          "variant": {
+            "threshold": 0.8
+          },
+          "metrics": {
+            "groups": {
+              "direct": {
+                "count": 25,
+                "precision": 1.0,
+                "fn": 10,
+                "errors": 0,
+                "tp": 15,
+                "fp": 0,
+                "fpr": null,
+                "recall": 0.6,
+                "tn": 0
+              },
+              "indirect": {
+                "count": 25,
+                "precision": 1.0,
+                "fn": 11,
+                "errors": 0,
+                "tp": 14,
+                "fp": 0,
+                "fpr": null,
+                "recall": 0.56,
+                "tn": 0
+              },
+              "pii": {
+                "count": 25,
+                "precision": null,
+                "fn": 0,
+                "errors": 0,
+                "tp": 0,
+                "fp": 0,
+                "fpr": 0.0,
+                "recall": null,
+                "tn": 25
+              },
+              "safe": {
+                "count": 25,
+                "precision": 0.0,
+                "fn": 0,
+                "errors": 0,
+                "tp": 0,
+                "fp": 1,
+                "fpr": 0.04,
+                "recall": null,
+                "tn": 24
+              }
+            },
+            "fpr": 0.02,
+            "complete?": true,
+            "mean_recall": 0.5800000000000001,
+            "p95_us": 1091247
+          },
+          "qualified": true
+        },
+        {
+          "variant": {
+            "threshold": 0.85
+          },
+          "metrics": {
+            "groups": {
+              "direct": {
+                "count": 25,
+                "precision": 1.0,
+                "fn": 10,
+                "errors": 0,
+                "tp": 15,
+                "fp": 0,
+                "fpr": null,
+                "recall": 0.6,
+                "tn": 0
+              },
+              "indirect": {
+                "count": 25,
+                "precision": 1.0,
+                "fn": 11,
+                "errors": 0,
+                "tp": 14,
+                "fp": 0,
+                "fpr": null,
+                "recall": 0.56,
+                "tn": 0
+              },
+              "pii": {
+                "count": 25,
+                "precision": null,
+                "fn": 0,
+                "errors": 0,
+                "tp": 0,
+                "fp": 0,
+                "fpr": 0.0,
+                "recall": null,
+                "tn": 25
+              },
+              "safe": {
+                "count": 25,
+                "precision": 0.0,
+                "fn": 0,
+                "errors": 0,
+                "tp": 0,
+                "fp": 1,
+                "fpr": 0.04,
+                "recall": null,
+                "tn": 24
+              }
+            },
+            "fpr": 0.02,
+            "complete?": true,
+            "mean_recall": 0.5800000000000001,
+            "p95_us": 1091247
+          },
+          "qualified": true
+        },
+        {
+          "variant": {
+            "threshold": 0.9
+          },
+          "metrics": {
+            "groups": {
+              "direct": {
+                "count": 25,
+                "precision": 1.0,
+                "fn": 10,
+                "errors": 0,
+                "tp": 15,
+                "fp": 0,
+                "fpr": null,
+                "recall": 0.6,
+                "tn": 0
+              },
+              "indirect": {
+                "count": 25,
+                "precision": 1.0,
+                "fn": 11,
+                "errors": 0,
+                "tp": 14,
+                "fp": 0,
+                "fpr": null,
+                "recall": 0.56,
+                "tn": 0
+              },
+              "pii": {
+                "count": 25,
+                "precision": null,
+                "fn": 0,
+                "errors": 0,
+                "tp": 0,
+                "fp": 0,
+                "fpr": 0.0,
+                "recall": null,
+                "tn": 25
+              },
+              "safe": {
+                "count": 25,
+                "precision": 0.0,
+                "fn": 0,
+                "errors": 0,
+                "tp": 0,
+                "fp": 1,
+                "fpr": 0.04,
+                "recall": null,
+                "tn": 24
+              }
+            },
+            "fpr": 0.02,
+            "complete?": true,
+            "mean_recall": 0.5800000000000001,
+            "p95_us": 1091247
+          },
+          "qualified": true
+        }
+      ]
+    }
+  ]
+}

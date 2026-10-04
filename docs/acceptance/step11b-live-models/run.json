@@ -1,0 +1,34 @@
+{
+  "source_base": "dae70b3d6d07e3add0331251bb7cb98af593581b",
+  "model_implementation_commit": "4f27d3c7231ffa84c95b828c98de80b9c79cbd1c",
+  "started_at_utc": "2026-10-04T04:34:44.716125+00:00",
+  "completed_at_utc": "2026-10-04T04:46:00.790262+00:00",
+  "dataset_sha256": "1bddc6ebcebb09c83bc37892e4ed6b8090a3c246286c90ffccf74afc5365db47",
+  "hardware": {
+    "cpu": "Apple M4",
+    "ram_bytes": 17179869184,
+    "os": "macOS 27.0",
+    "device": "cpu",
+    "dtype": "float32",
+    "cpu_threads": 2
+  },
+  "runtime": {
+    "torch": "2.8.0",
+    "transformers": "4.57.1",
+    "huggingface_hub": "0.36.2",
+    "tokenizers": "0.22.2",
+    "safetensors": "0.8.0"
+  },
+  "conditions": {
+    "sequential_provider_assessments": true,
+    "fresh_service_processes": true,
+    "os_page_cache_flushed": false,
+    "exclusive_machine": false,
+    "other_model_services_stopped": true,
+    "orbstack_started_during_qwen_test": true,
+    "docker_image_build_started_after_comparison": true,
+    "background_sql_sandbox_ownership_timeouts": true
+  },
+  "qualification": "FPR <= 5%; complete zero-error candidate; mean direct/indirect recall; then p95; no minimum recall",
+  "automatic_policy_activation": false
+}

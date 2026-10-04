@@ -17,9 +17,11 @@ częścią 12B. Odbiór lokalny nie oznacza scalenia PR.
 
 **Aktualizacja 11B — 2026-10-04:** scalone 11A i 12B odblokowały implementację.
 Dodano Prompt Guard, polityki v4, wybór providera w panelu i wspólną matrycę
-testów. Odbiór techniczny opisano przy 11B; pełny odbiór MVP nadal blokują
-brak zatwierdzonych wag Prompt Guard, rzeczywistych pomiarów i odbioru kontenera.
-Checkbox 11 pozostaje otwarty, a PR ma status draft.
+testów. PR #18 został scalony. W odbiorze na `JL/step-11b-live-acceptance`
+potwierdzono dostęp i checksumy rzeczywistych wag Prompt Guard oraz uruchomienie
+offline i polski test integracyjny. Porównanie zakwalifikowało Prompt Guard .50
+(FPR 0%, średni recall 50%); pełny odbiór MVP nadal wymaga stabilnego odbioru
+wszystkich usług i kontenera. Checkbox 11 pozostaje otwarty.
 
 Przykładowe zlecenie:
 
@@ -173,7 +175,7 @@ Testy po scaleniu obejmują także interakcje między branchami: tokenizację tr
 
 #### Równoległe kroki 13, 15, 16, 17 i 18 przy otwartym odbiorze 11B
 
-**Ustalenie 2026-10-04:** brak wag i pomiarów Prompt Guard nie jest twardą
+**Ustalenie 2026-10-04:** brak pomiarów Prompt Guard nie jest twardą
 zależnością implementacji tych pięciu kroków. Można rozpocząć je równolegle po
 scalonych 8–10, 11A i 12B. Odbiór MVP pozostaje otwarty do wykonania
 **11B.1–11B.3**; dalsza implementacja nie zastępuje tych bramek.
@@ -189,10 +191,10 @@ scalonych 8–10, 11A i 12B. Odbiór MVP pozostaje otwarty do wykonania
 Zasady dla równoległych branchy:
 
 - Każdy krok ma osobny worktree i bazę testową. Wspólną bazę kodu zapisać jako
-  commit. Dopóki [PR #18](https://github.com/jlitewka99/hackyeah2026/pull/18) nie
-  jest scalony, `main` zawiera 11A/12B, ale nie implementację 11B. Funkcje zależne
-  od v4/porównania providerów muszą jawnie bazować na commicie 11B albo poczekać
-  na jego integrację; pozostałe mogą startować z `main` i później podłączyć 11B.
+  commit. [PR #18](https://github.com/jlitewka99/hackyeah2026/pull/18) jest już
+  scalony; bieżący `main` zawiera implementację 11B i rozszerzenia 13/15/16/17/18.
+  Odbiór rzeczywistych modeli odbywa się na tej połączonej bazie. Historyczny
+  branch bez 11B wymaga aktualizacji przed użyciem v4/porównania providerów.
 - Przed zmianami uzgodnić właściciela wspólnych plików: gateway/etapy,
   wykonawca narzędzi, budżety, schemat i formularz polityki, router, supervisor,
   konfiguracja, zależności i Dockerfile. Zmiany tych plików scalać pojedynczo;
@@ -818,7 +820,7 @@ Zakres techniczny obejmuje:
    pola/JSON argumenty, snapshot, współbieżną idempotencję, audyt i izolację.
    Tryb `--live-models` wymaga realnych Prompt Guard, Qwen, NER, tokenizera i LLM.
 
-**Odbiór techniczny i bramki 11B:**
+**Pierwotny odbiór techniczny 11B (przed pobraniem rzeczywistych wag):**
 
 - `mix precommit`: 526 testów Elixir i 3 JavaScript przechodzą, 10 jawnie
   uruchamianych testów modeli wyłączonych. Assets i Dialyzer przechodzą.
@@ -842,9 +844,42 @@ Zakres techniczny obejmuje:
   smoke piątego procesu i shutdown pozostają do wykonania. Dodano ścieżkę CI,
   lecz nie przypisuje to wyników nieuruchomionemu odbiorowi.
 
-**Zastrzeżenia i status MVP:** brak zatwierdzonego dostępu/wag Prompt Guard blokuje
-rzeczywiste pomiary, wybór modelu i zakończenie MVP. Wersja przykładowa
-`docs/prompt-guard-example.yaml` jest jawnie **niezakwalifikowana**. Historyczny
+**Aktualizacja rzeczywistego odbioru — 2026-10-04:** na bazie bieżącego `main`
+(`dae70b3`, ze scalonymi rozszerzeniami 13/15/16/17/18) pobrano przypięte artefakty
+Prompt Guard i zweryfikowano wszystkie rozmiary/checksumy oraz LICENSE/USE_POLICY/NOTICE.
+Token podano przez ukryte stdin i BuildKit secret, użyto wyłącznie podczas
+pobierania; nie zapisano go w repozytorium, cache po pobraniu usunięto. Runtime działa offline na
+`127.0.0.1:8004`, CPU FP32/dwa wątki, revision
+`a8ded8e697ce7c355e395a0df51f94adb4a2fd27`. Polski test rzeczywistego modelu
+(safe/direct/tail z pełnym pokryciem) przeszedł; 9 testów kontraktu Python przechodzi.
+Rzeczywisty config Meta nie zawiera `id2label`; poprawiono loader, aby po
+weryfikacji artefaktów przypisywał opublikowane klasy 0=BENIGN, 1=MALICIOUS.
+Regresja sprawdza brak nazw, poprawne nazwy oraz odrzucenie odwróconych klas
+i głowicy z inną liczbą klas. Nie zmieniono przypiętych wag ani revision.
+Na połączonym `main` pełny ExUnit: 646 passed/15 excluded; Python: NER 5 z
+rzeczywistymi wagami bez skip, tokenizer 4, Qwen 8, Prompt Guard 9 przechodzą.
+Pierwszy live odbiór usług: 10/10; ponowny kompletny runner: 9/10, Qwen nie
+kończy długiego tekstu w deadline. Runner prawidłowo zwraca 1; wcześniejszy
+przebieg nie zamyka tej niestabilnej bramki. Rzeczywiste demo hot activation
+na commicie `4f27d3c`: 2/2 testy; zapis draftu nie zmienia checksumu/wyniku,
+aktywacja zmienia chat i narzędzia bez restartu, Dashboard pokazuje 3 allow/2 block,
+JSONL ma completion footer i zamknięte evidence bez treści/obcej organizacji.
+
+**Zastrzeżenia i status MVP:** dostęp i wagi Prompt Guard są już potwierdzone;
+lokalne porównanie zakwalifikowało Prompt Guard z progiem **.50**: kalibracja
+recall 60%/FPR 2%, test direct 36%/indirect 64%, średnio **50%**, FPR 0%, 200/200
+pomiarów bez błędów. Test: TP/FP/TN/FN 25/0/50/25, precision 100%, p50/p95
+45,112/71,219 ms, maksimum 4,517 s, verify/load 2,388 s, peak RSS 0,587 GiB.
+Przykład `docs/prompt-guard-example.yaml` ma zmierzony próg .50 i nie aktywuje
+istniejących polityk. Qwen: 4 błędy kalibracji i 5 testu, więc nie kwalifikuje się;
+test direct 32%, indirect 40% wśród zakończonych przypadków, FPR 0%.
+Wszystkie 40 osobnych przypadków moderacji Qwen zakończono bez FP/FN.
+Raporty: [porównanie i zamrożone ustawienia](docs/acceptance/step11b-live-models/comparison.json).
+Sprzęt Apple M4/16 GiB/macOS 27.0, CPU FP32/2 wątki; modele mierzone kolejno,
+aktywność systemu nie była izolowana, OrbStack uruchomiono podczas testu Qwen.
+Powtórzyć pomiary wydajności na bezczynnym hoście. **Połowa testowych ataków
+została pominięta przez zwycięzcę**; kwalifikacja bez minimalnego recall nie oznacza
+pełnej skuteczności ochrony. Historyczny
 Qwen ma niski recall i 10 timeoutów długich tekstów; nie kwalifikuje się jako
 kompletny pomiar. Polski nie jest wśród języków opublikowanej ewaluacji Meta.
 Brak wyników nie jest zastępowany fixture ani szacowaniem. Kernel PyTorch może
@@ -853,32 +888,35 @@ zajęty. Sandbox pozostaje ograniczonym demo z 12B, bez dowolnego dostępu do ho
 ani gwarancji exactly-once zewnętrznych efektów; blokada wyjścia nie cofa efektu.
 Pełne mapowanie FR-01–FR-22, odtwarzalne komendy, demo zmiany bez restartu i bramki
 opisano w `docs/acceptance/step11b.md` oraz `docs/prompt-guard.md`.
-**Checkbox 11 pozostaje niezaznaczony. PR jest draft do pełnego odbioru.**
+**Checkbox 11 pozostaje niezaznaczony. Scalenie PR #18 nie oznacza pełnego odbioru MVP.**
 
 #### 11B.1 — Rzeczywiste wagi i dostęp Prompt Guard
 
-- [ ] Zapewnić zatwierdzony dostęp Hugging Face, pobrać przypięte wagi/tokenizer,
+- [x] Zapewnić zatwierdzony dostęp Hugging Face, pobrać przypięte wagi/tokenizer,
   sprawdzić rozmiary i checksumy, zachować licencję oraz wymagane oznaczenia.
   Token przekazać przez sekret środowiska/BuildKit, nie przez repozytorium.
-- [ ] Uruchomić usługę offline na loopback i potwierdzić `/ready` oraz rzeczywistą
+- [x] Uruchomić usługę offline na loopback i potwierdzić `/ready` oraz rzeczywistą
   analizę z oczekiwanym modelem/revision. Sam kontrakt z fixture nie zamyka punktu.
 
-**Status:** otwarte; brak zatwierdzonych wag. Komendy: [setup Prompt Guard](docs/prompt-guard.md).
+**Status:** odebrane lokalnie; przypięte artefakty zweryfikowane, offline `/ready`
+i rzeczywisty polski test integracyjny przechodzą. Komendy: [setup Prompt Guard](docs/prompt-guard.md).
 
 #### 11B.2 — Pomiary obu modeli i zwycięska polityka MVP
 
-- [ ] Po 11B.1 uruchomić kalibrację i test Qwen oraz Prompt Guard kolejno na tym
-  samym bezczynnym sprzęcie, CPU FP32/dwa wątki. Zachować dataset, checksum i
-  split; zamrozić ustawienia przed pomiarem testowym.
-- [ ] Zachować kompletne raporty bez błędów: TP/FP/TN/FN, FPR, precision/recall,
+- [x] Po 11B.1 uruchomić kalibrację i test Qwen oraz Prompt Guard kolejno na tym
+  samym sprzęcie, CPU FP32/dwa wątki. Zachować dataset, checksum i
+  split; zamrozić ustawienia przed pomiarem testowym i zapisać warunki obciążenia.
+- [x] Zachować raporty i kwalifikować wyłącznie kompletne warianty bez błędów: TP/FP/TN/FN, FPR, precision/recall,
   p50/p95, cold start i peak RSS. Kwalifikacja: FPR≤5%, najwyższy średni recall
   direct/indirect, następnie niższy p95; bez minimalnego recall.
-- [ ] Zapisać zwycięzcę i ustawienia w przykładowej polityce MVP. Brak
+- [x] Zapisać zwycięzcę i ustawienia w przykładowej polityce MVP. Brak
   kwalifikującego wariantu pozostawia punkt otwarty; istniejące polityki wymagają
   osobnej jawnej aktywacji.
 
-**Status:** otwarte; nie ma rzeczywistego porównania ani zakwalifikowanego zwycięzcy.
-Komendy i kryteria: [raport 11B](docs/acceptance/step11b.md).
+**Status:** lokalna kwalifikacja jakości zakończona: Prompt Guard .50, FPR 0% i
+średni recall 50% na teście. Wydajność wymaga ponownego pomiaru na bezczynnym
+hoście; Qwen pozostaje niekwalifikowany z powodu błędów. Komendy, kompletne
+wyniki i ograniczenia: [raport 11B](docs/acceptance/step11b.md).
 
 #### 11B.3 — Pełny odbiór rzeczywistych usług i kontenera
 
@@ -887,14 +925,20 @@ Komendy i kryteria: [raport 11B](docs/acceptance/step11b.md).
 - [ ] Potwierdzić standardowy kontener oraz gated build z Prompt Guard, offline
   runtime, loopback, awarie pięciu procesów i shutdown. Odbiór standardowego
   czteroprocesowego obrazu nie zastępuje gated sprawdzenia.
-- [ ] Potwierdzić wspólną matrycę chat → narzędzia → dashboard → JSONL i demo
+- [x] Potwierdzić wspólną matrycę chat → narzędzia → dashboard → JSONL i demo
   zmiany polityki bez restartu. Zapisać commit, środowisko i wyniki; zaznaczyć
   checkbox 11 dopiero po spełnieniu 11B.1–11B.3 oraz pozostałych kryteriów MVP.
 
-**Status:** otwarte; lokalny live odbiór nie przeszedł, Docker był niedostępny,
-gated odbiór nie został wykonany. Standardowe CI dla pierwotnego commita 11B
-potwierdziło Tests, Quality, Dialyzer i Security; odbiór kontenera był jeszcze
-w toku przy tej aktualizacji. To niezależna bramka od implementacji 13/15/16/17/18.
+**Status:** otwarte; ostatni kompletny live runner ma 9/10 testów usług i jeden
+błąd długiego skanu Qwen. Rzeczywista matryca i demo hot activation przechodzą.
+Na prośbę operatora uruchomiono OrbStack; Docker 29.4.0/arm64/8 GiB jest dostępny.
+Pierwszy gated build/smoke na bazie `dae70b3` przechodzi: rzeczywiste modele,
+15 przypadków runnera, awarie pięciu procesów i SIGTERM. Naprawiono brak GNU
+`timeout` w macOS przez ograniczony polling stanu kontenera. Odbiór po odświeżeniu
+main oraz standardowego obrazu pozostaje do wykonania. Repozytorium nie ma sekretu `HF_TOKEN`
+dla gated CI. Standardowe CI PR #18 potwierdziło Tests, Quality,
+Dialyzer, Security i czteroprocesowy kontener (wszystkie success); gated job był
+skipped. To niezależna bramka od implementacji 13/15/16/17/18.
 
 ### Krok 12. Tool firewall i ograniczenia zasobów
 

@@ -4,9 +4,14 @@ Implemented on `JL/step-11b-mvp-acceptance`, initially based on `main` at
 `6159428` with 11A and 12B merged, then synchronized with `c2bca28` (the Step 11A
 CI documentation follow-up; no implementation changes). Recorded on 2026-10-04.
 **The complete MVP is not accepted.**
-Prompt Guard weights/approved Hugging Face access are unavailable; the real
-comparison has no winner. The local Docker daemon is unavailable. Step 11's
-checkbox stays open and the PR is a draft.
+Implementation [PR #18](https://github.com/jlitewka99/hackyeah2026/pull/18) is merged.
+The follow-up on `JL/step-11b-live-acceptance` starts from current `main` at
+`dae70b3`, including the parallel MCP, workflow, Tests, streaming and Knowledge work.
+Approved pinned Prompt Guard artifacts are now downloaded and verified; offline
+readiness and the real Polish integration test pass. Model qualification and
+complete service/container acceptance are recorded below. OrbStack was started
+at the operator's request; Docker 29.4.0 is now available for container acceptance.
+Step 11's checkbox remains open.
 
 ## Implementation
 
@@ -39,15 +44,16 @@ existing design system is preserved; pre-existing sidecar drift is not repaired.
 
 See [operator instructions](../prompt-guard.md) for pinned versions, license,
 BuildKit secret, offline startup, policy authoring and measurement commands.
-[The example](../prompt-guard-example.yaml) is **unqualified**; it demonstrates
-the schema and is not a fabricated model recommendation.
+[The example](../prompt-guard-example.yaml) uses the measured injection winner
+at cutoff .50. Model qualification is separate from complete MVP acceptance.
 
 ## Local verification
 
 Mix dependencies were restored from the unchanged lockfile. An isolated UTF-8
 PostgreSQL instance on port 55412 served `MIX_TEST_PARTITION=step11b`; browser
-fixtures used the separate `step11bqa` database. All interaction text, model
-scores and identities used by offline/browser fixtures are synthetic.
+fixtures used the separate `step11bqa` database. The original offline/browser
+fixtures use synthetic interaction text, model scores and identities. The
+follow-up uses actual pinned model weights with synthetic test inputs.
 
 | Check | Result |
 | --- | --- |
@@ -67,6 +73,66 @@ Sobelow retains six low-confidence SQL findings in existing Dashboard aggregatio
 queries (fixed/bound queries or `Repo.to_sql`) and the existing Phoenix upload-path
 finding. No new scanner suppression was added. None of these local results claim
 production performance or new container/CI acceptance.
+
+## Real-model follow-up
+
+The implementation commit is `4f27d3c` on base `dae70b3`. The operator supplied
+an already approved credential through hidden stdin. Pinned Prompt Guard artifacts
+passed all size/hash checks, including license files; a separate writable download
+cache was discarded after verification. No credential or weights are committed.
+The service then ran offline on loopback with the expected revision, CPU FP32 and
+two threads. Its pinned configuration omits `id2label`, so the loader now assigns
+the published binary head indices after verification and rejects swapped labels
+or nonbinary heads. No artifact hash or revision changed.
+
+| Check | Follow-up result |
+| --- | --- |
+| Prompt Guard Python | 9 contracts pass, including actual offline AutoConfig resolution without gated weights |
+| NER Python | 5 tests pass with `NER_LIVE=1` and verified Polish weights; no skip |
+| Current-main ExUnit security suite | 646 tests pass; 15 opt-in tests excluded before the additional live demo |
+| Initial real-service integration | 10/10 pass; the aggregate script initially fails because its fresh Python environment lacked the new NER dependency, subsequently installed from the lockfile |
+| Complete security rerun | All four Python groups pass (NER 5, tokenizer 4, Qwen 8, Prompt Guard 9); live integration is 9/10, with Qwen's overlapping long-tail scan returning `guard_unavailable`; aggregate exits 1 |
+| Real Prompt Guard and hot configuration demo | 2/2 pass with actual Prompt Guard, Qwen moderation, NER, tokenizer and pinned Ollama; no model/backend fixtures |
+| Gated container on base `dae70b3` | Build and smoke pass on Docker 29.4.0/arm64/8 GiB: actual guards, 15 release runner cases, five child failures and SIGTERM. Refreshed-main verification follows; the repository has no `HF_TOKEN` CI secret |
+
+The headless demo saves a new cutoff without activating it and proves the current
+checksum and tool outcome stay unchanged. Explicit activation then changes the
+checksum and blocks the same chat/tool inputs, without restarting the application.
+Dashboard terminal counts are three allows and two blocks. The actual JSONL exporter
+emits its completion footer, both policy checksums and real classifier evidence;
+neither source text, generated output, file content nor another organization's ID
+appears. Cutoffs 1 and 0 deliberately exercise activation and inclusive boundaries;
+they are not calibrated recommendations. The browser review above still uses
+synthetic fixtures and makes no real-model screenshot claim.
+
+The two service-suite runs expose Qwen long-input latency instability. Preserve
+the failed latest rerun; a previous passing run does not close that acceptance
+gate. The whole guard deadline remains at most 30 seconds, with no retries or
+fallback. Qualification measurements run separately with fresh service processes;
+local macOS background activity is not isolated, so timings do not establish
+production throughput or dedicated-host latency.
+The gated Docker build uses a temporary Hub cache and discards it after pinned
+verification (`d8232bc`), retaining only the verified model copy in that layer.
+The initial smoke reached real classification and the release runner, then failed
+because macOS lacks GNU `timeout`. Bounded Docker-state polling replaces that
+dependency; the complete gated smoke then exits zero and reports five child
+failures. Runtime environment and image history contain no Hugging Face token.
+
+Reproduction uses the unchanged sidecar lockfiles and model manifests:
+
+```sh
+# Start all five real services, with weights verified and HF_TOKEN unset.
+env -u TRANSFORMERS_CACHE PGPORT=55412 MIX_TEST_PARTITION=step11b \
+  PYTHON="$PWD/_build/step11b-semantic-venv/bin/python" \
+  TOKENIZER_MODELS_DIR=/private/tmp/step11b-tokenizer-models \
+  STANZA_RESOURCES_DIR=/private/tmp/ai-control-step8-models NER_CPU_THREADS=2 NER_LIVE=1 \
+  HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 ./run_security_tests.sh --live-models
+PGPORT=55412 MIX_TEST_PARTITION=step11b \
+  mix test test/ai_control/gateway/live_prompt_guard_test.exs --include live_models
+```
+
+The directories above describe this local experiment; use your own verified model
+directories and isolated database when reproducing it.
 
 ## Shared integration matrix
 
@@ -103,9 +169,9 @@ real-model/MVP gate passed. The source requirement strengths remain those in
 | 02 | Versioned org/global policy and immutable snapshots; policy concurrency/global tests and provider activation test |
 | 03 | Provider, controls, sensitivity, models, budgets; configuration tests, Policies LiveView and budget suites |
 | 04 | Profiles, score thresholds and label mappings; Prompt Guard config/threshold/UI tests; example policy; real model quality still blocked |
-| 05 | Deterministic → NER → semantic pipeline; guard/pipeline tests; real Prompt Guard/Qwen unavailable in this run |
+| 05 | Deterministic → NER → semantic pipeline; guard/pipeline tests and real Prompt Guard/Qwen follow-up, with Qwen long-input errors explicitly retained |
 | 06 | PII, secrets, signatures, authentication and access; deterministic guards, identity and resource suites |
-| 07 | Qwen/Prompt Guard enforcement adapters plus Qwen response moderation; contract/pipeline tests; historical Qwen acceptance; current live/model qualification open |
+| 07 | Qwen/Prompt Guard enforcement adapters plus Qwen response moderation; actual hot-activation demo and local Prompt Guard qualification; stable complete live acceptance remains open |
 | 08 | Block/redact decisions and fresh projected fields; engine, gateway and tool executor tests |
 | 09 | Input plus every output field/decoded argument; output content/filtering and tool executor tests |
 | 10 | Request/token/tool budgets; zero/null limits, concurrency, redacted tokenization and blocked-output accounting tests |
@@ -133,19 +199,66 @@ recall ranks qualifying candidates, then lower held-out p95. There is no minimum
 recall. Settings freeze before test; response moderation is evaluated separately.
 The generated winner is saved as an example YAML, without automatic activation.
 
+The real [comparison](step11b-live-models/comparison.json) qualifies **Prompt Guard
+at .50**. Its calibration mean recall is 60% and FPR 1/50 (2%); the cutoff was
+frozen before test. All 200 Prompt Guard injection measurements complete without
+error. Held-out TP/FP/TN/FN are 25/0/50/25, precision 100%, FPR 0%, direct recall
+9/25 (36%), indirect recall 16/25 (64%) and mean recall 50%. Half the held-out
+attacks are missed despite qualification; the agreed gate has no minimum recall.
+The result is limited to this frozen corpus and does not establish robust Polish
+injection detection.
+
+| Held-out injection | Prompt Guard .50 | Qwen Unsafe + Jailbreak |
+| --- | --- | --- |
+| Direct TP / FN / errors (25 inputs) | 9 / 16 / 0 | 8 / 17 / 0 |
+| Indirect TP / FN / errors (25 inputs) | 16 / 9 / 0 | 8 / 12 / 5 |
+| Negative TN / FP (50 inputs) | 50 / 0 | 50 / 0 |
+| Mean direct/indirect recall | 50% | 36% among completed cases; incomplete |
+| Injection p50 / p95 | 45.112 / 71.219 ms | 1203.300 / 1746.922 ms; incomplete |
+| Maximum case time | 4.517 s | 30.003 s, service error |
+| Fresh-process verify/load | 2.388 s | 4.367 s |
+| Peak process RSS | 0.587 GiB | 4.607 GiB |
+| Qualification | Complete, FPR≤5%, zero errors | Excluded: 4 calibration + 5 test service errors |
+
+The table uses only injection rows and nearest-rank percentiles, including error
+durations. The raw Qwen summaries also contain separately evaluated moderation
+rows: 10 safe and 10 unsafe per split, all 40 complete, zero FP/FN. Error cases
+are never counted as detections or false negatives. Qwen's default Unsafe mapping
+is retained only for reporting after incomplete calibration; it is not a qualified
+recommendation.
+
+The [fixed calibration grid](step11b-live-models/calibration-selection.json) is
+computed solely from calibration rows and matches the already frozen settings;
+it does not retune from held-out results. Per-case JSONL/CSV and summaries are
+kept for both splits and both providers, with dataset checksum
+`1bddc6ebcebb09c83bc37892e4ed6b8090a3c246286c90ffccf74afc5365db47`.
+Measurements use Apple M4/16 GiB/macOS 27.0, CPU FP32/two threads, sequential
+providers. Background macOS activity is not isolated; OrbStack was started during
+the Qwen test split, while the image build began only after all measurements.
+Repeat on idle hardware for comparable capacity and latency acceptance. The test
+environment emitted SQL Sandbox ownership timeouts in application background
+workers; direct classifier measurements do not access the database.
+
+```sh
+# Output must be empty; never overwrite this recorded experiment.
+PGPORT=55412 MIX_TEST_PARTITION=step11b MIX_ENV=test \
+  mix ai_control.compare_semantic --output /tmp/step11b-new-comparison \
+  --hardware 'CPU/RAM/OS; CPU FP32; 2 threads; background-load conditions'
+```
+
 Historical [Step 10 Qwen](step10.md) remains a baseline: 240 cases, 230 completed
 and 10 long-input timeouts; test injection FPR 0/50, direct recall 32%, indirect
 recall 40% among 20 completed indirect cases (five errors). This incomplete report
-cannot qualify under Step 11B's gate. Neither provider's current recall, latency,
-cold start nor RAM is invented or inferred from offline tests. Polish is outside
+cannot qualify under Step 11B's gate. The current results above are actual model
+measurements, independent of the offline contract fixtures. Polish is outside
 the languages listed in Meta's published evaluations; local held-out measurement
 is necessary. Maximum window score is not a probability of a malicious request.
 
-To close Step 11: obtain approved Prompt Guard artifacts and confirm the pinned
-license/notice; run all real services and `--live-models`; run both providers on
-the same idle hardware; retain error-free complete comparison reports and a
-qualifying winner; run default and gated Docker smoke, fifth-process failures
-and shutdown; repeat the minimal live demo and confirm the final PR checks.
+To close Step 11: confirm a stable complete `--live-models` run, finish default
+and gated Docker smoke including fifth-process failures/shutdown, repeat capacity
+measurements on idle hardware, and confirm final PR checks. Verified artifacts,
+the local qualifying injection winner and the headless hot-activation demo are
+recorded above; they do not resolve the remaining service reliability gate.
 If the measured models do not qualify, leave MVP acceptance open. Do not lower
 the gate, treat errors as false negatives/detections, retune from held-out results,
 or change existing active policies automatically.
@@ -160,7 +273,7 @@ size deployment only after actual hardware measurements.
 
 Complete [README setup](../../README.md), all sidecars and the pinned Ollama
 catalog. Create an org, agent and API key through the UI and install operator
-grants before using tools. Import the unqualified example only into an isolated
+grants before using tools. Import the measured example first into an isolated
 demo organization; save, review and activate deliberately. Keep the token in an
 environment variable, never in documentation or a committed fixture.
 

@@ -1,0 +1,144 @@
+{
+  "runtime": "transformers-4.57.1-torch-2.8.0-cpu-fp32",
+  "split": "test",
+  "device": "cpu",
+  "revision": "a8ded8e697ce7c355e395a0df51f94adb4a2fd27",
+  "groups": {
+    "direct": {
+      "count": 25,
+      "precision": 1.0,
+      "fn": 16,
+      "errors": 0,
+      "tp": 9,
+      "fp": 0,
+      "fpr": null,
+      "recall": 0.36,
+      "tn": 0
+    },
+    "indirect": {
+      "count": 25,
+      "precision": 1.0,
+      "fn": 9,
+      "errors": 0,
+      "tp": 16,
+      "fp": 0,
+      "fpr": null,
+      "recall": 0.64,
+      "tn": 0
+    },
+    "pii": {
+      "count": 25,
+      "precision": null,
+      "fn": 0,
+      "errors": 0,
+      "tp": 0,
+      "fp": 0,
+      "fpr": 0.0,
+      "recall": null,
+      "tn": 25
+    },
+    "safe": {
+      "count": 25,
+      "precision": null,
+      "fn": 0,
+      "errors": 0,
+      "tp": 0,
+      "fp": 0,
+      "fpr": 0.0,
+      "recall": null,
+      "tn": 25
+    }
+  },
+  "provider": "prompt_guard",
+  "hardware": "Apple M4; 16 GiB RAM; macOS 27.0; CPU FP32; 2 threads; sequential providers; macOS background activity not isolated",
+  "p95_us": 71219,
+  "mapping": {
+    "threshold": 0.5,
+    "severities": [
+      "Unsafe"
+    ],
+    "injection_categories": [
+      "Jailbreak"
+    ]
+  },
+  "dataset_checksum": "1bddc6ebcebb09c83bc37892e4ed6b8090a3c246286c90ffccf74afc5365db47",
+  "p50_us": 45112,
+  "model_set": "llama-prompt-guard-2-86m.v1",
+  "cold_start_us": 2387530,
+  "cpu_threads": 2,
+  "dtype": "float32",
+  "latency_scope": "full guard transport, validation and policy label mapping; excludes LLM generation",
+  "peak_rss_bytes": 630161408,
+  "splits": {
+    "test": {
+      "groups": {
+        "direct": {
+          "count": 25,
+          "precision": 1.0,
+          "fn": 16,
+          "errors": 0,
+          "tp": 9,
+          "fp": 0,
+          "fpr": null,
+          "recall": 0.36,
+          "tn": 0
+        },
+        "indirect": {
+          "count": 25,
+          "precision": 1.0,
+          "fn": 9,
+          "errors": 0,
+          "tp": 16,
+          "fp": 0,
+          "fpr": null,
+          "recall": 0.64,
+          "tn": 0
+        },
+        "pii": {
+          "count": 25,
+          "precision": null,
+          "fn": 0,
+          "errors": 0,
+          "tp": 0,
+          "fp": 0,
+          "fpr": 0.0,
+          "recall": null,
+          "tn": 25
+        },
+        "safe": {
+          "count": 25,
+          "precision": null,
+          "fn": 0,
+          "errors": 0,
+          "tp": 0,
+          "fp": 0,
+          "fpr": 0.0,
+          "recall": null,
+          "tn": 25
+        }
+      },
+      "injection": {
+        "count": 100,
+        "precision": 1.0,
+        "fn": 25,
+        "errors": 0,
+        "tp": 25,
+        "fp": 0,
+        "fpr": 0.0,
+        "recall": 0.5,
+        "tn": 50
+      },
+      "moderation": {
+        "count": 0,
+        "precision": null,
+        "fn": 0,
+        "errors": 0,
+        "tp": 0,
+        "fp": 0,
+        "fpr": null,
+        "recall": null,
+        "tn": 0
+      }
+    }
+  }
+}

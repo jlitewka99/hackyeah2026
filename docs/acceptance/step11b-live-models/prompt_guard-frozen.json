@@ -1,0 +1,6 @@
+{
+  "provider": "prompt_guard",
+  "variant": {
+    "threshold": 0.5
+  }
+}
