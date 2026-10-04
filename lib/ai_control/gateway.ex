@@ -12,6 +12,7 @@ defmodule AiControl.Gateway do
     execute(identity, Keyword.put(opts, :operation, "chat"), fn current, request_id, opts ->
       with :ok <- input_size(params),
            {:ok, params} <- Request.validate(params),
+           :ok <- non_streaming(params),
            {:ok, policy, current} <- Policies.snapshot_for_models(current, opts[:agent_id]) do
         {result, stage} = process_chat(current, params, policy, request_id, opts)
         {result, policy, stage}
@@ -20,6 +21,130 @@ defmodule AiControl.Gateway do
       end
     end)
   end
+
+  def start_stream(identity, params, opts \\ []),
+    do: AiControl.Gateway.Stream.start(identity, params, opts)
+
+  @doc false
+  def prepare_stream(identity, params, opts) do
+    with {:ok, current} <- Policies.refresh_identity(identity),
+         :ok <- ingress(current, opts),
+         :ok <- input_size(params),
+         {:ok, params} <- Request.validate(params),
+         true <- params["stream"],
+         {:ok, policy, current} <- Policies.snapshot_for_models(current, opts[:agent_id]) do
+      opts[:stream_context].(current, policy)
+      prepare_stream_request(current, params, policy, opts)
+    else
+      false -> {:error, :invalid_request}
+      error -> error
+    end
+  end
+
+  defp prepare_stream_request(current, params, policy, opts) do
+    request_id = opts[:request_id]
+    config = Keyword.merge(Config.get(), Keyword.take(opts, [:measurements]))
+    provider = config[:provider]
+
+    with :ok <- Policies.model_access(current, policy, opts[:agent_id], params["model"]),
+         {:ok, receipt} <-
+           measure(
+             :budget_admission,
+             fn ->
+               opts[:stream_admit].(current, params["model"], policy)
+             end,
+             opts
+           ) do
+      with {:ok, safe} <- Stages.evaluate(params, current, policy, request_id, :input, opts),
+           {:ok, safe} <- Request.validate(safe),
+           {:ok, contract} <- ToolSchemas.prepare(safe),
+           true <- Code.ensure_loaded?(provider) && function_exported?(provider, :chat_stream, 2),
+           {:ok, models} <- provider.models(config),
+           {:ok, digest} <- Models.digest(safe["model"]),
+           :ok <- pinned(models, safe["model"], digest),
+           {:ok, safe, receipt} <- prepare_budget(safe, receipt, policy, provider, config),
+           :ok <- authorize_again(current, policy, opts[:agent_id], safe["model"]) do
+        {:ok,
+         %{
+           identity: current,
+           params: safe,
+           policy: policy,
+           receipt: receipt,
+           contract: contract,
+           config: config,
+           opts: opts
+         }}
+      else
+        false -> {:error, :stream_unavailable}
+        error -> error
+      end
+    end
+  end
+
+  @doc false
+  def generate_stream(prepared, session) do
+    %{params: params, config: config, opts: opts} = prepared
+
+    on_usage = fn usage -> GenServer.call(session, {:usage, usage}, :infinity) end
+
+    config =
+      Keyword.merge(config,
+        on_stream_usage: on_usage,
+        on_stream_chunk: fn bytes -> GenServer.call(session, {:received, bytes}) end
+      )
+
+    result =
+      measure(
+        :upstream,
+        fn ->
+          Slots.run(:llm, Config.get(:llm_timeout), fn ->
+            stream_provider(prepared, config, on_usage)
+          end)
+        end,
+        opts
+      )
+
+    with {:ok, response} <- result,
+         {:ok, safe} <-
+           filter_output(
+             response,
+             prepared.identity,
+             prepared.policy,
+             opts[:request_id],
+             params,
+             prepared.contract,
+             opts
+           ),
+         :ok <- response_size(safe),
+         :ok <-
+           authorize_again(prepared.identity, prepared.policy, opts[:agent_id], params["model"]),
+         do: {:ok, safe}
+  end
+
+  defp stream_provider(prepared, config, on_usage) do
+    with :ok <-
+           authorize_again(
+             prepared.identity,
+             prepared.policy,
+             prepared.opts[:agent_id],
+             prepared.params["model"]
+           ),
+         {:ok, _} <- Budgets.dispatch(prepared.receipt),
+         {:ok, response} <- config[:provider].chat_stream(prepared.params, config),
+         {:ok, usage} <- response_usage(response),
+         :ok <- on_usage.(usage),
+         do: {:ok, response}
+  end
+
+  defp non_streaming(%{"stream" => false}), do: :ok
+  defp non_streaming(_), do: {:error, :invalid_request}
+
+  defp response_size(response),
+    do:
+      if(byte_size(Jason.encode!(response)) <= Config.get(:response_bytes),
+        do: :ok,
+        else: {:error, :response_too_large}
+      )
 
   defp process_chat(current, params, policy, request_id, opts) do
     with :ok <- Policies.model_access(current, policy, opts[:agent_id], params["model"]),

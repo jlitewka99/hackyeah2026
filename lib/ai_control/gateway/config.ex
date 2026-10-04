@@ -22,6 +22,8 @@ defmodule AiControl.Gateway.Config do
     semantic_timeout: 30_000,
     input_bytes: 1_048_576,
     response_bytes: 4_194_304,
+    stream_heartbeat_ms: 5_000,
+    stream_delivery_timeout_ms: 30_000,
     connect_timeout: 2_000,
     llm_timeout: 120_000,
     guard_timeout: 10_000,
@@ -112,7 +114,7 @@ defmodule AiControl.Gateway.Config do
 
   defp validate_limits!(config) do
     for key <-
-          ~w(input_bytes response_bytes connect_timeout llm_timeout guard_timeout readiness_timeout llm_slots guard_slots tool_slots requests_per_minute ip_requests_per_minute default_max_tokens tokenizer_timeout)a do
+          ~w(input_bytes response_bytes stream_heartbeat_ms stream_delivery_timeout_ms connect_timeout llm_timeout guard_timeout readiness_timeout llm_slots guard_slots tool_slots requests_per_minute ip_requests_per_minute default_max_tokens tokenizer_timeout)a do
       if !(is_integer(config[key]) && config[key] > 0),
         do: raise(ArgumentError, "gateway limits must be positive integers")
     end

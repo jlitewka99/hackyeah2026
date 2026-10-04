@@ -10,11 +10,13 @@ defmodule AiControl.Tools.Sandbox do
   use GenServer
 
   alias AiControl.Tools
-  alias AiControl.Tools.{Executions, HTTP, Resources}
+  alias AiControl.Tools.{Discovery, Executions, HTTP, Resources}
 
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts, Keyword.take(opts, [:name]))
 
   def preflight(server, request), do: GenServer.call(server, {:preflight, request})
+
+  def catalog(server, identity, policy), do: GenServer.call(server, {:catalog, identity, policy})
 
   def run_prepared(server, request, receipt, owner, deadline) do
     GenServer.call(server, {:run_prepared, request, receipt, owner, deadline}, 15_000)
@@ -44,6 +46,9 @@ defmodule AiControl.Tools.Sandbox do
 
   @impl true
   def handle_call(:inspect_state, _from, state), do: {:reply, state, state}
+
+  def handle_call({:catalog, identity, policy}, _from, state),
+    do: {:reply, Discovery.catalog(identity, policy, state), state}
 
   def handle_call({:preflight, request}, _from, state) do
     result =

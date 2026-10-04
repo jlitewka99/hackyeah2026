@@ -24,6 +24,7 @@ defmodule AiControl.Application do
       {Phoenix.PubSub, name: AiControl.PubSub},
       AiControl.Tools.Supervisor,
       {Oban, Application.fetch_env!(:ai_control, Oban)},
+      AiControl.MCP.Sessions,
       # Start a worker by calling: AiControl.Worker.start_link(arg)
       # {AiControl.Worker, arg},
       # Start to serve requests, typically the last entry

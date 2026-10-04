@@ -181,7 +181,7 @@ application's normal database service.
 
 | Check | Result |
 | --- | --- |
-| `mix precommit` with dedicated runner URL | 549 passed, 10 excluded local-model tests; formatting, warning-free compilation, lockfile, Credo and JS checks passed |
+| `mix precommit` with dedicated runner URL | 612 passed, 11 excluded local-model tests after integrating current main; formatting, warning-free compilation, lockfile, Credo and JS checks passed |
 | `mix assets.build` | Passed |
 | `mix dialyzer` | Passed, zero type errors |
 | `mix security` | Passed configured medium threshold; dependency audit reports no vulnerabilities |
@@ -201,6 +201,12 @@ bound; feed paths come exclusively from operator configuration; extracted CLI
 benchmark output paths are operator CLI parameters and the dataset path is
 application-owned. Existing dashboard SQL, websocket configuration and policy
 upload path observations also remain. No medium/high finding was reported.
+
+The final branch integrates main `e072dd0`, including its MCP and buffered SSE
+work. The supervisor conflict was resolved by preserving both Oban and MCP
+sessions. The complete merged regression suite includes those existing tests;
+the closed `gateway.v1` runner continues to cover its shipped chat/tool scenarios.
+This merge did not alter the reviewed Step 16 frontend.
 
 The UI uses the existing English workspace components, paired HEEx templates,
 streams and stable DOM IDs. Bounded visual verification and the independent
