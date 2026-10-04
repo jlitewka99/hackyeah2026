@@ -1,4 +1,5 @@
 # AiControl
+<img width="1279" height="860" alt="image" src="https://github.com/user-attachments/assets/67b6efbb-0de4-4f0e-b907-ad7b2aa6e712" />
 
 Phoenix 1.8 application. Run all commands from the repository root.
 
