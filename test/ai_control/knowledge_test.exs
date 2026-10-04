@@ -233,6 +233,22 @@ defmodule AiControl.KnowledgeTest do
 
     assert {:error, :knowledge_write_disabled} =
              Knowledge.create(c.principal, %{"title" => "Note", "content" => "A note"})
+
+    activate_knowledge_policy(c.scope, %{
+      "knowledge" => %{"enabled" => true, "sources" => ["memory"]}
+    })
+
+    assert {:error, :forbidden} =
+             Knowledge.search(c.principal, %{
+               "query" => "support",
+               "sources" => ["document"]
+             })
+
+    assert {:error, :invalid_request} =
+             Knowledge.search(c.principal, %{
+               "query" => "support",
+               "sources" => ["pdf"]
+             })
   end
 
   test "terminal audit failure rolls back resource changes and shares", c do

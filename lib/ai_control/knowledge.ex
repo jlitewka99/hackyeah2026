@@ -413,7 +413,8 @@ defmodule AiControl.Knowledge do
     page = Map.get(params, "page", 1)
 
     with true <- is_list(sources) and sources != [] and Enum.uniq(sources) == sources,
-         true <- Enum.all?(sources, &(&1 in policy.settings["knowledge"]["sources"])),
+         true <- Enum.all?(sources, &(&1 in ~w(document memory))),
+         :ok <- source_access(policy, sources),
          true <- is_integer(limit) and limit in 1..if(search?, do: 10, else: 50),
          true <- is_integer(page) and page in 1..10_000,
          query = readable_query(current, policy) |> where([r], r.kind in ^sources),
@@ -448,9 +449,17 @@ defmodule AiControl.Knowledge do
       query = if search?, do: query, else: offset(query, ^((page - 1) * limit))
       {:ok, Repo.all(limit(query, ^limit), log: false)}
     else
+      {:error, _} = error -> error
       _ -> {:error, :invalid_request}
     end
   end
+
+  defp source_access(policy, sources),
+    do:
+      if(Enum.all?(sources, &(&1 in policy.settings["knowledge"]["sources"])),
+        do: :ok,
+        else: {:error, :forbidden}
+      )
 
   defp owner_filter(query, _, nil), do: {:ok, query}
   defp owner_filter(query, _, ""), do: {:ok, query}

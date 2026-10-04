@@ -6,6 +6,8 @@ defmodule AiControlWeb.OrganizationKnowledgeLiveTest do
   import AiControl.OrganizationsFixtures
   import Phoenix.LiveViewTest
 
+  alias AiControl.Gateway.Config
+  alias AiControl.Guards.Pii
   alias AiControl.Policies.Configuration
 
   setup %{conn: conn} do
@@ -86,6 +88,16 @@ defmodule AiControlWeb.OrganizationKnowledgeLiveTest do
   end
 
   test "blocked text is absent while safe recovery action remains", c do
+    old = Application.fetch_env!(:ai_control, Config)
+
+    Application.put_env(
+      :ai_control,
+      Config,
+      Keyword.put(old, :guards, %{"pii" => Pii})
+    )
+
+    on_exit(fn -> Application.put_env(:ai_control, Config, old) end)
+
     resource =
       document_fixture(c.scope, c.agent, %{"content" => "support email synthetic@example.test"})
 
@@ -107,5 +119,19 @@ defmodule AiControlWeb.OrganizationKnowledgeLiveTest do
     assert has_element?(view, "#knowledge-error")
     refute has_element?(view, "#knowledge-checked-content")
     assert has_element?(view, "#knowledge-delete-blocked")
+
+    member =
+      member_fixture(c.scope, :user, %{permissions: ["knowledge.read"], agents: [c.agent.id]})
+
+    {:ok, reader, _} =
+      live(
+        log_in_user(build_conn(), member.user),
+        "/organizations/#{c.scope.organization.id}/knowledge/#{resource["id"]}"
+      )
+
+    assert has_element?(reader, "#knowledge-error", "Its text is unavailable")
+    refute has_element?(reader, "#knowledge-delete-blocked")
+    refute has_element?(reader, "#knowledge-error", "remove")
+    refute has_element?(reader, "#knowledge-error", "revise")
   end
 end

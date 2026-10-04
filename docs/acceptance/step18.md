@@ -1,6 +1,8 @@
 # Step 18 acceptance — 2026-10-04
 
-Implementation branch: `JL/step-18-rag-memory`. The implementation is reviewable;
+Implementation branch: `JL/step-18-rag-memory`, integrated with `origin/main`
+at `e072dd0` (the independently completed MCP and buffered-streaming steps).
+The implementation is reviewable;
 Step 18 remains open and the pull request remains draft until all required acceptance
 is complete.
 
@@ -36,16 +38,19 @@ mapping. v1 sidecar requests remain valid; v5 may select v1 or v2.
   Qwen guard revision: `fada3b2f655b89601929198343c94cd2f64d93cc`, CPU fp32, two threads;
   LLM digest: `2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd`.
   These are narrow synthetic cases, not a general injection-resistance guarantee.
-- `PGPORT=55418 MIX_TEST_PARTITION=_step18 mix precommit`: 558 passed, 12 live
+- `PGPORT=55418 MIX_TEST_PARTITION=_step18 mix precommit`: 623 passed, 13 live
   tests excluded; formatting, warnings-as-errors compilation, lockfile checks,
-  strict Credo and three JavaScript tests passed.
+  strict Credo and five JavaScript tests passed.
 - `mix check.all`: passed, including the same suite, Dialyzer (zero errors),
   Sobelow at the configured threshold and dependency audit (no vulnerabilities).
   The low-confidence upload-path finding was reviewed: `File.read/1` receives
   only Phoenix's server-created temporary upload path, never a submitted path.
 - `mix assets.build`: passed. `bash -n docker/smoke`: passed.
 - NER Python tests: 5 passed with pinned real models enabled. Semantic service
-  contract tests: 8 passed. Tagged real-model tests: 2 passed in 36.2 seconds.
+  contract tests: 8 passed. Tagged real-model tests: 2 passed.
+- Buffered SSE integration tests check retrieved context, final-prompt token
+  reservation and revision denial before generation. Existing MCP and streaming
+  tests remain passing; this change does not implement those separate steps.
 - [NER benchmark](step18-ner-benchmark.json): 12 fixed synthetic fixtures, 60 timed
   samples; exact entity-type + UTF-8-span precision/recall both 0.7778 (14 TP,
   4 FP, 4 FN). All 90 detected-span UTF-8/redaction checks passed. p50 65.2 ms,
@@ -54,8 +59,18 @@ mapping. v1 sidecar requests remain valid; v5 may select v1 or v2.
 - UI capture matrix: list/detail/edit/new at 1440×1000 and 390×844 in both themes,
   plus empty/error/Memory mobile states. Native keyboard Tab from search reached the
   owner select; measured mobile document width equals viewport width (390 px).
-  [Finish review](step18-ui-review.md) owns visual acceptance. Preview data is synthetic;
-  its deliberately disabled guards do not qualify real-model enforcement.
+  Policy v5 controls and blocked-source recovery were also captured in both
+  viewport classes. [Finish review](step18-ui-review.md) owns visual acceptance.
+  Preview data is synthetic; initial fixtures disable guards, while the blocked
+  fixture enables the built-in PII guard. These captures do not qualify real-model
+  enforcement. The reviewer scored both material fixes resolved and returned
+  `ship` at that scope; the supplemental Knowledge/NER controls passed their
+  limited visual review.
+
+The real-model command is `PGPORT=55418 MIX_TEST_PARTITION=_step18 mix test
+test/ai_control/gateway/live_knowledge_test.exs --include live_models`. Its isolated
+services listen on NER 8018, tokenizer 8028, Qwen guard 8038 and Ollama 11438;
+the pinned model files are required before running it.
 
 ## Remaining required acceptance and limitations
 

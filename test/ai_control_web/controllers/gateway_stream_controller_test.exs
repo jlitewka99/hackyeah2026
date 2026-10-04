@@ -129,7 +129,9 @@ defmodule AiControlWeb.GatewayStreamControllerTest do
 
     Repo.update_all(
       from(r in AiControl.Knowledge.Resource, where: r.id == ^document["id"]),
-      [inc: [revision: 1]], log: false)
+      [inc: [revision: 1]],
+      log: false
+    )
 
     send(worker, :continue)
     conn = Task.await(task)
