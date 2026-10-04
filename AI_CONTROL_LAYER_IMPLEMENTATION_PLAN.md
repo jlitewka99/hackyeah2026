@@ -122,7 +122,7 @@ Checkboxy oznaczają potwierdzone zakończenie kroku, a nie samą obecność kod
 - [x] Krok 12 — Tool firewall i ograniczenia zasobów
 - [x] Krok 13 — MCP gateway
 - [ ] Krok 14 — Głęboka analiza semantyczna
-- [ ] Krok 15 — Workflowy, runaway protection i wielu agentów
+- [x] Krok 15 — Workflowy, runaway protection i wielu agentów
 - [ ] Krok 16 — Oban, raporty i testy w panelu
 - [x] Krok 17 — Streaming
 - [x] Krok 18 — RAG, pamięć i rozszerzone PII
@@ -964,6 +964,31 @@ dla gated CI. Standardowe CI PR #18 potwierdziło Tests, Quality,
 Dialyzer, Security i czteroprocesowy kontener (wszystkie success); gated job był
 skipped. To niezależna bramka od implementacji 13/15/16/17/18.
 
+**Poprawka CI PR #26:** [przebieg 37181579586](https://github.com/jlitewka99/hackyeah2026/actions/runs/37181579586)
+zaliczył Quality, Tests, Dialyzer i Security, lecz build kontenera zatrzymał się
+przed testami: publiczny tokenizer Hugging Face zwrócił HTTP 503. Downloader
+tokenizera w setup/build ponawia wyłącznie przejściowe błędy sieci i HTTP
+429/500/502/503/504, maksymalnie cztery próby z przerwami 1/2/4 s.
+Każda próba zaczyna osobny plik tymczasowy; publikacja jest atomowa dopiero po
+weryfikacji przypiętego rozmiaru i SHA-256. Błędy 400/401/403/404 i niezgodność
+artefaktu nie są ponawiane. Pięć nowych testów obejmuje HTTP 503, limit prób,
+przerwany transfer, sprzątanie oraz zachowanie istniejącego artefaktu; cały
+zestaw tokenizera ma 9 testów. Wszystkie przechodzą na hoście oraz w kontenerze
+Linux po rzeczywistym pobraniu i weryfikacji przypiętych bajtów; `mix precommit`
+przechodzi: 690 ExUnit (16 opt-in excluded) i 5 JS.
+PR #26 został scalony przed poprawką; naprawę wydzielono na branch
+`JL/fix-tokenizer-ci-download` z `main` (`6f00150`) do osobnego PR. Polityki,
+przypięte bajty, offline runtime i zakaz retry w enforcement nie zmieniły się.
+W PR #27 build po tej zmianie przechodzi, lecz start tokenizera ujawnił błąd
+uprawnień pliku tymczasowego: `0600`, właściciel root, runtime UID 10001.
+[Diagnostyka 37182388483](https://github.com/jlitewka99/hackyeah2026/actions/runs/37182388483)
+potwierdza `service=tokenizer status=3`, bez OOM. Zweryfikowany publiczny artefakt
+otrzymuje teraz `0644` przed atomową publikacją; plik tymczasowy pozostaje prywatny
+podczas pobierania. Rzeczywiste pobranie jako root i 9 testów jako UID 10001
+przechodzą w Linux. Supervisor loguje wyłącznie stałą nazwę usługi, kod wyjścia
+i zamknięte liczniki pamięci; smoke zachowuje stan kontenera przy błędzie przed
+sprzątaniem. Kontrolowany start z limitem 6 GiB bez swapu i SIGTERM przechodzą.
+
 ### Krok 12. Tool firewall i ograniczenia zasobów
 
 **Uzgodniony plan 12B — 2026-10-04 (zrealizowany):** endpoint `POST /v1/tool_calls`
@@ -1186,6 +1211,7 @@ checkbox 13 zaznaczony, checkbox 11 pozostaje otwarty.
 - UI: jedna zbiorcza runda desktop **1440px** / mobile **390px**, oba motywy i klawiatura; brak overflow, widoczny focus. Detektor uruchomiono raz z wynikiem `[]`. Finish reviewer: **ship, bez materialnych poprawek**. [Raport UI](docs/acceptance/step14-ui-review.md) i [raport dokumentera](docs/acceptance/step14-design-documentation.md). Zastany `.impeccable/design.json` pozostaje nieaktualny i niezmieniony; odświeżenie przez `impeccable document` to osobne zadanie.
 - Kontener zawiera przypięty tokenizer Granite i używa zewnętrznego Ollama. Próba łącznego odbioru wcześniejszych modeli zakończyła się **1/11 passed**, timeoutami/niedostępnością i **exit 137 / OOMKilled=true**; supervisor odnotował ubity Qwen3Guard. VM Dockera udostępniała ok. **7.82 GiB**, a prace build/model nakładały się. Pełna kwalifikacja `run_security_tests.sh --live-models` nie jest zaliczona: wcześniejsza próba dodatkowo miała nieprawidłowy realny `GATEWAY_MODELS` w mieszanym zestawie stub/real. Skrypt rozszerzono o Granite i obowiązkowy real NER w trybie live. Użytkownik polecił nie powtarzać działających wcześniej komponentów; braku pozytywnej łącznej kwalifikacji nie zastąpiono deklaracją sukcesu.
 - Finalny obraz zbudował się poprawnie. **Nowy odbiór Granite w kontenerze przeszedł** z zewnętrznym Ollama: zgodny z celem zapis dostał `yes` i wykonał efekt; email z poprawnym schematem/grantem, ale sprzeczny z celem, dostał `no` i nie został wysłany. Evidence zawiera prawdziwy usage, hash i digest, a niewybrane kontrole są pominięte. Cold pierwszy guard trwał **54.54 s**, drugi **6.63 s** przy niezmienionym deadline 60 s. To celowany odbiór Granite z wyłączonymi wcześniejszymi guardami polityki dla tych dwóch syntetycznych akcji, bez deklarowania pełnej łącznej kwalifikacji. Digest obrazu i beztreściowe wyniki: [raport kontenera](docs/acceptance/step14-granite-container.json).
+- Po utworzeniu PR #29 scalono aktualny `origin/main` (`8bcf703`, PR #27/#28). Jedyny konflikt dotyczył downloadera tokenizera: zachowano osobny manifest Granite oraz atomową publikację po weryfikacji rozmiaru/SHA-256, setup retry przejściowych błędów i uprawnienia `0644` dla nieuprzywilejowanego runtime. Parametr manifestu jest opcjonalny; domyślny manifest wybiera się przy wywołaniu. **6 testów downloadera** przeszło, w tym nowy przypadek łączący osobny manifest, retry, checksumę i uprawnienia. Składnia skryptów kontenera i `git diff --check` poprawne. Zachowano odbiór workflowów z main; nie powtarzano pełnych testów ani odbioru modeli/UI. Powyższe pomiary modelu i obraz kontenera pochodzą sprzed tego merge.
 
 **Zastrzeżenia i uruchomienie:**
 
@@ -1196,7 +1222,7 @@ checkbox 13 zaznaczony, checkbox 11 pozostaje otwarty.
 
 ### Krok 15. Workflowy, runaway protection i wielu agentów
 
-**Stan na 2026-10-04:** implementacja na `JL/step-15-workflows`; odbiór deterministyczny zakończony, kwalifikacja integracji z rzeczywistymi modelami nadal otwarta. Checkbox kroku pozostaje niezaznaczony, a PR jest draftem do czasu tej kwalifikacji. Nie dodano MCP, Granite ani Oban.
+**Stan na 2026-10-04:** implementacja [PR #25](https://github.com/jlitewka99/hackyeah2026/pull/25) została scalona. Ponowny odbiór na aktualnym `main` (`6f00150`, po PR #26) zaliczył wszystkie siedem wcześniejszych integracji oraz pełny cykl workflow z rzeczywistymi modelami. Luka kwalifikacji kroku 15 została zamknięta; checkbox zaznaczony. Uzupełnienie testu i dowodów na `JL/step-15-live-acceptance`. Nie dodano MCP, Granite ani Oban.
 
 **Implementacja i migracja:**
 
@@ -1225,7 +1251,15 @@ checkbox 13 zaznaczony, checkbox 11 pozostaje otwarty.
 - `mix assets.build`, `mix dialyzer` (0 błędów) i `mix security` przeszły. Sobelow zachował ostrzeżenia low confidence z main: zapytania Dashboard/manifestów eksportu, ścieżki plików benchmarku/feedów/importu oraz konfigurację origin endpointu. Nie wyciszano ich ani nie uznano za potwierdzone podatności; dependency audit nie zgłosił podatności.
 - Impeccable: Operate, `buildPath: code`, zachowany wygląd Events/Budgets. Detektor uruchomiono raz: 0 primary findings i 5 istniejących uwag typograficznych. Odbiór przeglądarkowy: desktop 1280px/mobile 390px, oba motywy, długie cele, pusty wynik, błąd filtra, inline stop i klawiatura. Izolowany syntetyczny run po stop zachował 140 użytych i 400 niepewnie zarezerwowanych tokenów; PubSub odświeżał widoki. Ograniczenia przydziałów, paginacja i błędy ładowania mają testy LiveView. Końcowy werdykt impeccable jest zapisany w [raporcie UI](docs/acceptance/step15-ui-review.md); zakres dokumentera w [raporcie dokumentacji](docs/acceptance/step15-design-documentation.md).
 - Po późniejszej integracji kroku 16 reviewer i dokumenter sprawdzili źródła wspólnej nawigacji i selektora sygnatur; przechwycone obrazy poprzedzają te elementy main. Szablony/style workflowów nie zmieniły się; nie zadeklarowano nowego odbioru wizualnego ani nie uruchamiano kolejnego detektora.
-- Uruchomiono istniejące integracje NER, modeli narzędzi, SSE i Knowledge: **2/7 passed**. Oba rzeczywiste testy v5 RAG przeszły na portach kroku 18; pięć testów na domyślnych portach nie przeszło readiness NER/Semantic albo otrzymało Ollama SSE `503`. Po przekierowaniu konfiguracji testowej do istniejących usług na `11438/8018/8028/8038`: **5/7 passed** — NER, modele narzędzi i SSE przeszły, ale oba powtórzone przypadki RAG zwróciły `guard_unavailable`. Nie uzyskano jednego przebiegu 7/7 ani odbioru pełnego cyklu run → narzędzie → delegacja → complete z rzeczywistym downstream. Kwalifikacja modeli kroku 11 i rollback migracji pozostają otwarte. Wyniki tej sesji nie unieważniają odbioru zapisanego przy innych krokach. To istotna luka odbioru, dlatego PR pozostaje draftem.
+- Historyczne próby istniejących integracji NER, modeli narzędzi, SSE i Knowledge: **2/7 passed**, następnie **5/7 passed**. Pierwsza próba nie miała usług na domyślnych portach; druga używała portów `11438/8018/8028/8038`, ale oba powtórzone przypadki RAG zwróciły `guard_unavailable`. Wtedy brakowało wspólnego udanego przebiegu i pełnego workflow z rzeczywistym downstream; PR początkowo pozostawiono jako draft. Poniższy odbiór zamyka tę konkretną lukę, zachowując wcześniejsze wyniki.
+
+**Ponowny odbiór na aktualnym main — 2026-10-04:**
+
+- Na `6f00150` ten sam zestaw NER/narzędzia/SSE/Knowledge przeszedł **7/7 w jednym przebiegu** (124,8 s, seed `666512`), w tym oba testy RAG. Użyto gotowych rzeczywistych usług na `11438/8018/8028/8038` oraz oddzielnej bazy `ai_control_teststep15live`. Usług nie modyfikowano ani nie zatrzymywano. Nie zwiększono timeoutów, nie dodano retry i nie wyłączono wymaganych guardów.
+- Nowy opt-in `test/ai_control/workflows/live_workflow_test.exs` przeszedł **1/1** na końcowym kodzie (46,9 s, seed `289581`; pierwsza próba również przeszła). Prawdziwy HTTP przechodzi przez create/idempotent retry → LLM → sandbox `file.read` → delegacja → LLM/narzędzie z własnym kluczem agenta → complete. Rzeczywiste Ollama, dokładny tokenizer, NER v2, Qwen injection/moderation i guardy deterministyczne; wszystkie transporty mock są wyłączone. Bez godzinowego limitu tokenów dwa receipts są rozliczone, root sumuje rzeczywiste usage obu agentów, rezerwacje wynoszą 0, a wspólny licznik narzędzi 2. Brak kontekstu, podmiana uczestnika, odziedziczenie grantu, complete przez dziecko i kontynuacja po zakończeniu są odrzucane.
+- [CI aktualnego main 37181696853](https://github.com/jlitewka99/hackyeah2026/actions/runs/37181696853) zakończył się sukcesem: Quality, Tests, Dialyzer, Security oraz kontener z rzeczywistymi NER/Qwen/tokenizerem i runnerem release. Poprzedni job PR #26 nie pobrał tokenizera z powodu HTTP `503` upstream; ten historyczny błąd zachowano. Opcjonalny gated Prompt Guard CI został pominięty zgodnie z konfiguracją; jego lokalny odbiór zapisano osobno w 11B.
+- Końcowe kontrole uzupełnienia: `mix precommit` **690 passed, 17 excluded** (opt-in live/runner), **5 JS**; assets, Dialyzer (0 błędów/skipów), security i `git diff --check` zaliczone. Sobelow zachowuje istniejące uwagi low confidence, dependency audit bez podatności. Nowy test live wykonano osobno powyżej. Nie dodano migracji ani nie powtarzano odbioru UI; historyczny rollback migracji pozostaje niewykonany.
+- Szczegóły, komendy odtworzenia i końcowe kontrole uzupełnienia: [odbiór kroku 15](docs/acceptance/step15.md). Odbiór dotyczy funkcji workflow w opisanym środowisku; nie zamyka jakości modeli ani odporności pod obciążeniem z kroku 11.
 
 **Zastrzeżenia:**
 
@@ -1239,7 +1273,7 @@ checkbox 13 zaznaczony, checkbox 11 pozostaje otwarty.
 
 Szczegóły kontraktów: [docs/workflows.md](docs/workflows.md). Rzeczywiste wyniki i pozostały odbiór: [docs/acceptance/step15.md](docs/acceptance/step15.md).
 
-**Gotowe, gdy:** pętla lub delegacja nie pozwala obejść budżetu, a odbiór obejmuje również dostępne rzeczywiste integracje; checkbox zaznaczyć po zamknięciu powyższej luki kwalifikacji.
+**Gotowe, gdy:** pętla lub delegacja nie pozwala obejść budżetu, a odbiór obejmuje również dostępne rzeczywiste integracje. Kryterium spełnione przez testy granic/współbieżności oraz powyższy rzeczywisty odbiór; ograniczenia eksploatacyjne pozostają jawne.
 
 ### Krok 16. Oban, raporty i testy w panelu
 

@@ -46,6 +46,8 @@ The cold first guard took **54.54 seconds** and the second **6.63 seconds**, wit
 
 ## Remaining qualification and limitations
 
+The PR branch subsequently merged `origin/main` at `8bcf703` (PR #27/#28). The sole conflict was the tokenizer downloader: the resolved version retains the separate Granite manifest and main's verified atomic publication, setup-only transient retries and `0644` runtime permissions for both tokenizers. Six downloader tests passed, including the new explicit-manifest integration case; container shell syntax and `git diff --check` passed. Previously successful application, model and UI acceptance was not repeated. Model measurements and the container image recorded above predate this merge; the newly accepted workflow evidence from main is preserved separately.
+
 The combined live gate remains open. A future full acceptance run needs adequate Docker/host memory, sequential build and model qualification, all pinned services, and the existing test command. A single Ollama server with `OLLAMA_MAX_LOADED_MODELS=1` can avoid keeping Qwen and Granite resident together; cold switching increases latency. The draft PR explicitly preserves this gap.
 
 IBM trained and tested Granite in English. Twelve synthetic cases cannot establish Polish detection accuracy, BYOC robustness, adversarial coverage or false-positive rates. An 8B model increases latency; multiple selected criteria share the 60-second deadline. Groundedness checks consistency with retrieved sources and does not guarantee that they are true. Interrupted inference can leave guard usage unavailable; completed calls retain actual token usage. Prompts, arguments, sources and reasoning are not recorded in application audit or exports.
