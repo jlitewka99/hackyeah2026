@@ -13,7 +13,8 @@ defmodule AiControl.Repo.Migrations.CreateToolExecutions do
             type: :binary_id,
             with: [organization_id: :organization_id],
             on_delete: :delete_all
-          ), null: false
+          ),
+          null: false
 
       add :api_key_id, :binary_id, null: false
       add :request_id, :binary_id, null: false

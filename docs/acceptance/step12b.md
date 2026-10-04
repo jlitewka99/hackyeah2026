@@ -27,6 +27,11 @@ Sobelow retains the existing low-confidence `File.read!` upload-path finding in
 was introduced. These are local checks; this document does not claim CI or
 production throughput results.
 
+The first CI Quality job found one migration formatting difference omitted by
+the local formatter cache. The migration is corrected; `check` and `precommit`
+now force full formatting passes. A fresh formatter check and repeated precommit
+pass with the same 495 ExUnit and three JavaScript results. No runtime logic changes.
+
 ## API, guards and effects
 
 Endpoint tests exercise authentication before parsing, IP/organization/agent

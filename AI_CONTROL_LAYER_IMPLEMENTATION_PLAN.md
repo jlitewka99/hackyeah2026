@@ -678,6 +678,11 @@ incumbent DESIGN.md i odłożony sidecar. [Raport odbioru](docs/acceptance/step1
 i [instrukcja narzędzi](docs/tools.md) opisują migrację i konfigurację operatora.
 **Pełny krok 12 jest odebrany lokalnie; krok 11 pozostaje otwarty.**
 
+**Poprawka po CI 12B:** pierwszy job Quality wykazał różnicę formatowania nowej
+migracji, pominiętą przez lokalny cache formattera. Poprawiono zapis migracji;
+`check` i `precommit` wymuszają teraz pełne formatowanie przez `--force`.
+Ponowiony precommit przechodzi: 495 testów Elixir i 3 JavaScript, bez zmiany logiki.
+
 **Praca równoległa:** 12A (katalog, autoryzacja, walidatory i sandboxowe adaptery) realizować po ukończeniu 7 równolegle z 8–10. 12B łączy te moduły z endpointem, budżetami, kontrolami wyników i semantyką po scaleniu pierwszej fali; dopiero wtedy odbierać pełny krok 12.
 
 **Plan implementacji 12A — 2026-10-03:**
