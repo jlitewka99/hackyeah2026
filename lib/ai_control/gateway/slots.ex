@@ -59,6 +59,7 @@ defmodule AiControl.Gateway.Slots do
          Keyword.get(opts, :limits, %{
            llm: Config.get(:llm_slots),
            guard: Config.get(:guard_slots),
+           granite: 1,
            tool: Config.get(:tool_slots)
          })
      }}

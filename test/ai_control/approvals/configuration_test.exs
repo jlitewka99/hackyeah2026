@@ -17,15 +17,22 @@ defmodule AiControl.Approvals.ConfigurationTest do
 
     {:ok, new} = Configuration.validate(upgraded)
 
-    assert Map.drop(new.settings, ["schema_version", "review"]) ==
+    base_settings =
+      new.settings
+      |> Map.drop(["schema_version", "review", "granite"])
+      |> update_in(["guards"], &Map.delete(&1, "granite"))
+      |> update_in(["rules"], &Map.delete(&1, "granite_violation"))
+
+    assert base_settings ==
              Map.delete(old.settings, "schema_version")
 
-    assert Map.drop(new.source, ["schema_version", "review"]) ==
+    assert Map.drop(new.source, ["schema_version", "review", "granite"]) ==
              Map.delete(old.source, "schema_version")
 
     rebuilt = upgraded |> Draft.from_source() |> Draft.source()
     assert Configuration.validate(rebuilt) == {:ok, new}
     assert Configuration.upgrade(upgraded, 6) == upgraded
+    refute new.settings["granite"]["enabled"]
   end
 
   test "unknown selectors cannot introduce review rules or guard overrides" do

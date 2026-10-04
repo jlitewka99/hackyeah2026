@@ -31,7 +31,7 @@ defmodule AiControl.Security.SecurityAssessment do
          stage: context.stage,
          results: results,
          detections: Enum.flat_map(results, & &1.detections),
-         failed_guards: results |> Enum.reject(&(&1.status == :ok)) |> Enum.map(& &1.guard),
+         failed_guards: failed_guards(results),
          duration_us: Enum.sum(Enum.map(results, & &1.duration_us))
        }}
     else
@@ -44,11 +44,17 @@ defmodule AiControl.Security.SecurityAssessment do
       assessment.stage in [:input, :output] && results?(assessment.results) &&
       assessment.detections == Enum.flat_map(assessment.results, & &1.detections) &&
       assessment.failed_guards ==
-        assessment.results |> Enum.reject(&(&1.status == :ok)) |> Enum.map(& &1.guard) &&
+        failed_guards(assessment.results) &&
       assessment.duration_us == Enum.sum(Enum.map(assessment.results, & &1.duration_us))
   end
 
   def valid?(_), do: false
+
+  defp failed_guards(results),
+    do:
+      results
+      |> Enum.reject(&(&1.status == :ok or (&1.guard == "granite" and &1.status == :skipped)))
+      |> Enum.map(& &1.guard)
 
   defp results?(results) when is_list(results),
     do:

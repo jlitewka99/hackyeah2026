@@ -44,7 +44,9 @@ defmodule AiControl.Gateway.Readiness do
     policies
     |> Enum.flat_map(fn policy ->
       guards =
-        Snapshot.required_guards(policy, :input) ++ Snapshot.required_guards(policy, :output)
+        Snapshot.required_guards(policy, :input) ++
+          Snapshot.required_guards(policy, :output) ++
+          if(Snapshot.enabled?(policy, "granite", :input), do: ["granite"], else: [])
 
       Enum.map(
         guards,

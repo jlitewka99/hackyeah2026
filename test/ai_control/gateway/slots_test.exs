@@ -108,4 +108,42 @@ defmodule AiControl.Gateway.SlotsTest do
     assert :ok = Slots.run(:llm, 100, fn -> :ok end)
     Enum.each(workers, &send(&1, :finish))
   end
+
+  test "Granite has one independent slot and cancellation and timeout release it" do
+    parent = self()
+
+    owner =
+      start_supervised!(
+        {Task,
+         fn ->
+           Slots.run(:granite, 5_000, fn ->
+             send(parent, {:granite, self()})
+
+             receive do
+               :finish -> :ok
+             end
+           end)
+         end}
+      )
+
+    assert_receive {:granite, worker}
+
+    assert {:error, {:capacity_exceeded, 1}} =
+             Slots.run(:granite, 100, fn -> flunk("saturated Granite ran") end)
+
+    assert :ok = Slots.run(:guard, 100, fn -> :ok end)
+    monitor = Process.monitor(worker)
+    Process.exit(owner, :kill)
+    assert_receive {:DOWN, ^monitor, :process, ^worker, :killed}
+    _ = :sys.get_state(Slots)
+
+    assert {:error, :upstream_timeout} =
+             Slots.run(:granite, 10, fn ->
+               receive do
+                 :never -> :ok
+               end
+             end)
+
+    assert :ok = Slots.run(:granite, 100, fn -> :ok end)
+  end
 end

@@ -6,7 +6,7 @@ defmodule AiControl.Gateway.Measurements do
   @keys @stages ++
           for(
             stage <- ~w(input output),
-            guard <- Configuration.guards(3),
+            guard <- Configuration.guards(6),
             do: "guard.#{stage}.#{guard}"
           )
   def keys, do: @keys

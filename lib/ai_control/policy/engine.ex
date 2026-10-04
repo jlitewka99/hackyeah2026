@@ -13,14 +13,14 @@ defmodule AiControl.Policy.Engine do
           context,
           assessment,
           policy,
-          Snapshot.required_guards(policy, context.stage)
+          Snapshot.required_guards(policy, context.stage, assessment.results)
         ),
       else: {:error, :invalid_security_data}
   end
 
   @doc "Intermediate phase only; the gateway must complete every phase before downstream."
   def evaluate_phase(context, assessment, policy, guards) do
-    catalog = Configuration.guards(3)
+    catalog = Configuration.guards(6)
 
     if valid_inputs?(context, assessment, policy) && is_list(guards) && guards != [] &&
          Enum.all?(guards, &(&1 in catalog)) &&

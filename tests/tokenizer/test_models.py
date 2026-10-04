@@ -8,7 +8,7 @@ import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 
-from models import download
+from models import download, verify
 
 
 class DownloadTest(unittest.TestCase):
@@ -85,6 +85,27 @@ class DownloadTest(unittest.TestCase):
                 self.assertEqual(artifact.read_bytes(), self.data)
                 self.assertEqual(len(list(Path(directory).iterdir())), 1)
         self.sleep.assert_not_called()
+
+    def test_explicit_manifest_keeps_retry_verification_and_runtime_permissions(self):
+        data = b"separate-pinned-granite-tokenizer"
+        entry = {**self.entry, "url": "https://example.test/granite-tokenizer.json",
+                 "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+        manifest = {"files": [entry]}
+        with tempfile.TemporaryDirectory() as directory:
+            with patch("models.urllib.request.urlopen",
+                       side_effect=[self.error(503), io.BytesIO(data)]) as request:
+                download(directory, manifest)
+            artifact = Path(directory, "tokenizer.json")
+            self.assertEqual(artifact.read_bytes(), data)
+            self.assertEqual(stat.S_IMODE(artifact.stat().st_mode), 0o644)
+            self.assertEqual(len(list(Path(directory).iterdir())), 1)
+            self.assertEqual(request.call_args.args[0], entry["url"])
+            self.assertEqual(request.call_count, 2)
+            self.sleep.assert_called_once_with(1)
+            verify(directory, manifest)
+            artifact.write_bytes(b"x" * len(data))
+            with self.assertRaisesRegex(RuntimeError, "tokenizer_checksum_mismatch"):
+                verify(directory, manifest)
 
 
 if __name__ == "__main__":

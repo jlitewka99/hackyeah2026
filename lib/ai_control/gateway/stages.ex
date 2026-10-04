@@ -2,11 +2,14 @@ defmodule AiControl.Gateway.Stages do
   @moduledoc "Assess and audit each current text version before using it at the next stage."
   alias AiControl.{Gateway, Security}
   alias AiControl.Gateway.{Config, Content, Request, Response, Slots}
+  alias AiControl.Guards.Granite
   alias AiControl.Policy.Engine
   alias AiControl.Policy.Snapshot
+  alias AiControl.Security.GraniteEvidence
   alias AiControl.Security.{GuardResult, SecurityAssessment}
+  alias Granite.Plan
 
-  @phases [~w(pii secret signatures), ["ner"], ["semantic", "moderation"]]
+  @phases [~w(pii secret signatures), ["ner"], ["semantic", "moderation"], ["granite"]]
 
   def evaluate(value, identity, policy, request_id, stage, opts \\ []) do
     Gateway.measure(
@@ -17,7 +20,9 @@ defmodule AiControl.Gateway.Stages do
             Enum.any?(guards, &Snapshot.enabled?(policy, &1, stage))
           end)
 
-        if length(phases) < 2 do
+        opts = Keyword.put(opts, :granite_identity, identity)
+
+        if length(phases) < 2 and not Snapshot.enabled?(policy, "granite", stage) do
           complete(value, identity, policy, request_id, stage, opts)
         else
           layered(value, identity, policy, request_id, stage, phases, opts)
@@ -30,7 +35,10 @@ defmodule AiControl.Gateway.Stages do
   defp layered(value, identity, policy, request_id, stage, phases, opts) do
     phases
     |> Enum.with_index()
-    |> Enum.reduce_while({:ok, value, []}, fn {guards, index}, {:ok, current, previous} ->
+    |> Enum.reduce_while({:ok, value, [], false}, fn {guards, index},
+                                                     {:ok, current, previous, findings} ->
+      opts = Keyword.merge(opts, granite_previous: previous, granite_findings: findings)
+
       with {:ok, context} <- Gateway.context(identity, policy, request_id, stage),
            {:ok, results} <- results(current, context, policy, guards, opts),
            {:ok, assessment} <- SecurityAssessment.new(context, previous ++ results),
@@ -39,13 +47,13 @@ defmodule AiControl.Gateway.Stages do
            {:ok, safe} <- enforce(current, decision, stage, opts),
            :ok <- safe_contract(current, safe, stage, opts) do
         evidence = Enum.map(previous ++ results, &%{&1 | detections: []})
-        {:cont, {:ok, safe, evidence}}
+        {:cont, {:ok, safe, evidence, findings or Enum.any?(results, &(&1.detections != []))}}
       else
         error -> {:halt, classify_error(error)}
       end
     end)
     |> case do
-      {:ok, safe, _} -> {:ok, safe}
+      {:ok, safe, _, _} -> {:ok, safe}
       error -> error
     end
   end
@@ -66,7 +74,7 @@ defmodule AiControl.Gateway.Stages do
   defp complete(value, identity, policy, request_id, stage, opts) do
     guards =
       List.flatten(@phases)
-      |> Enum.reject(&(&1 in ~w(ner moderation) && !Snapshot.enabled?(policy, &1, stage)))
+      |> Enum.reject(&(&1 in ~w(ner moderation granite) && !Snapshot.enabled?(policy, &1, stage)))
 
     with {:ok, context} <- Gateway.context(identity, policy, request_id, stage),
          {:ok, results} <- results(value, context, policy, guards, opts),
@@ -142,6 +150,27 @@ defmodule AiControl.Gateway.Stages do
     end
   end
 
+  defp assess("granite", fields, value, context, policy, opts) do
+    deadline = System.monotonic_time(:millisecond) + Config.get(:granite_timeout)
+    config = Keyword.merge(Config.get(), opts) |> Keyword.put(:granite_value, value)
+    plan = Plan.build(fields, context, policy, config)
+    opts = Keyword.merge(opts, granite_plan: plan, granite_deadline: deadline)
+
+    if Enum.any?(plan, &Plan.selected?/1) do
+      configured_guard(
+        Map.get(Config.get(:guards), "granite"),
+        "granite",
+        fields,
+        value,
+        context,
+        policy,
+        opts
+      )
+    else
+      Granite.skipped(plan)
+    end
+  end
+
   defp assess(guard, fields, value, context, policy, opts) do
     if Snapshot.enabled?(policy, guard, context.stage) do
       configured_guard(
@@ -159,9 +188,14 @@ defmodule AiControl.Gateway.Stages do
     end
   end
 
+  defp configured_guard(nil, "granite", _, _, _, _, opts),
+    do: Granite.unavailable(opts[:granite_plan])
+
   defp configured_guard(nil, guard, _, _, _, _, _), do: unavailable(guard)
 
   defp configured_guard(module, guard, fields, value, context, policy, opts) do
+    started = System.monotonic_time(:microsecond)
+
     result =
       Gateway.measure(
         {:guard, context.stage, guard},
@@ -169,34 +203,64 @@ defmodule AiControl.Gateway.Stages do
         opts
       )
 
+    opts = Keyword.put(opts, :granite_elapsed_us, System.monotonic_time(:microsecond) - started)
     validate_result(result, guard, value, context.stage, opts)
   end
 
   defp call_guard(module, guard, fields, context, policy, opts) do
     timeout =
-      if guard in ~w(semantic moderation),
-        do: Config.get(:semantic_timeout),
-        else: Config.get(:guard_timeout)
+      cond do
+        guard == "granite" ->
+          max(1, opts[:granite_deadline] - System.monotonic_time(:millisecond))
 
-    config = Keyword.merge(Config.get(), Keyword.take(opts, [:semantic_prompt]))
+        guard in ~w(semantic moderation) ->
+          Config.get(:semantic_timeout)
 
-    Slots.run(:guard, timeout, fn ->
+        true ->
+          Config.get(:guard_timeout)
+      end
+
+    config =
+      Keyword.merge(
+        Config.get(),
+        Keyword.take(opts, [
+          :semantic_prompt,
+          :granite_plan,
+          :granite_deadline,
+          :granite_identity,
+          :run_context
+        ])
+      )
+
+    Slots.run(if(guard == "granite", do: :granite, else: :guard), timeout, fn ->
       module.assess(fields, context, policy, config)
     end)
   end
+
+  defp validate_result({:error, _}, "granite", _, _, opts),
+    do: Granite.unavailable(opts[:granite_plan], opts[:granite_elapsed_us])
 
   defp validate_result({:error, {:capacity_exceeded, _}} = error, _, _, _, _), do: error
 
   defp validate_result({:ok, result}, guard, value, stage, opts) do
     if GuardResult.valid?(result) && result.guard == guard &&
+         (guard != "granite" ||
+            GraniteEvidence.matches_plan?(result.evidence, opts[:granite_plan])) &&
          adapter(opts).locations_valid?(
            value,
            Enum.map(result.detections, & &1.location) |> Enum.reject(&is_nil/1),
            stage
          ),
        do: result,
-       else: unavailable(guard)
+       else:
+         if(guard == "granite",
+           do: Granite.unavailable(opts[:granite_plan], opts[:granite_elapsed_us]),
+           else: unavailable(guard)
+         )
   end
+
+  defp validate_result(_, "granite", _, _, opts),
+    do: Granite.unavailable(opts[:granite_plan], opts[:granite_elapsed_us])
 
   defp validate_result(_, guard, _, _, _), do: unavailable(guard)
 

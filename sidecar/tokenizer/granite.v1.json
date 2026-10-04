@@ -1,0 +1,14 @@
+{
+  "model": "granite4.1-guardian:8b",
+  "digest": "f82c0882cec110279601307cdd632d868e29f16eaa59947bef51096e5f740492",
+  "runtime": "0.35.1",
+  "revision": "ab01ccca5dcfb80246369a086a4a87a29198f5af",
+  "files": [
+    {
+      "path": "tokenizer.json",
+      "bytes": 7153421,
+      "sha256": "e2bad66439538cb4d5a7580680932432ed9ece9d3b8577e675512bdf11599253",
+      "url": "https://huggingface.co/ibm-granite/granite-guardian-4.1-8b/resolve/ab01ccca5dcfb80246369a086a4a87a29198f5af/tokenizer.json"
+    }
+  ]
+}

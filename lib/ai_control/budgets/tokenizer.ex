@@ -6,14 +6,29 @@ defmodule AiControl.Budgets.Tokenizer do
               {:ok, non_neg_integer()} | {:error, atom()}
   @callback ready?(keyword()) :: boolean()
   def count(model, prompt, config) do
-    with {:ok, digest} <- Models.digest(model),
-         {:ok, response} <-
+    with {:ok, digest} <- Models.digest(model) do
+      count_pinned(model, digest, prompt, config)
+    end
+  end
+
+  def count_pinned(model, digest, prompt, config) do
+    with {:ok, response} <-
            request(:post, "/count", %{model: model, digest: digest, prompt: prompt}, config),
          %{"tokens" => tokens, "digest" => ^digest, "runtime" => "0.35.1"} <- response,
          true <- is_integer(tokens) && tokens >= 0 do
       {:ok, tokens}
     else
       _ -> {:error, :tokenizer_unavailable}
+    end
+  end
+
+  def pinned_ready?(model, digest, config) do
+    case request(:get, "/ready", nil, config) do
+      {:ok, %{"status" => "ready", "models" => models, "runtime" => "0.35.1"}} ->
+        models[model] == digest
+
+      _ ->
+        false
     end
   end
 

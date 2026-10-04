@@ -80,7 +80,7 @@ defmodule AiControlWeb.ReportingHTML do
           type="select"
           label="Guard"
           prompt="All guards"
-          options={AiControl.Policies.Configuration.guards(3)}
+          options={AiControl.Policies.Configuration.guards(6)}
         />
         <.input field={@form[:agent_id]} type="text" label="Agent ID" placeholder="Agent UUID" />
         <.input

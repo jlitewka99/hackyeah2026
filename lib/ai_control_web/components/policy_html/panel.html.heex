@@ -118,6 +118,7 @@
             {cond do
               !settings["enabled"] -> "Disabled"
               settings["required"] -> "Required"
+              guard == "granite" -> "Selected checks required"
               true -> "Optional"
             end} · {Enum.join(settings["stages"], ", ")}
             <span :if={Map.has_key?(settings, "severities")}> · Labels: {Enum.join(
@@ -167,6 +168,10 @@
             {label(field)}: {if is_nil(limit), do: "Not configured", else: limit}
           </dd>
         </div>
+        <.granite_settings
+          :if={is_map(@current.version.settings["granite"])}
+          granite={@current.version.settings["granite"]}
+        />
       </dl>
     </details>
     <button
@@ -308,8 +313,9 @@
         >{if schema_version(@form) == 6, do: "Apply workflow defaults", else: "Upgrade to v6"}</button>
       </div>
       <p :if={upgrade_available?(@form)} class="muted mb-6">
-        Human approval starts disabled in v6. Upgrade this draft to require workflow context and finite shared limits, and configure Knowledge and NER rule versions and imported signature sets. Existing explicit tool limits are preserved. Saving and activation remain separate steps.
+        Human approval and Granite start disabled in v6. Upgrade this draft to require workflow context and finite shared limits, and configure Knowledge and NER rule versions and imported signature sets. Existing explicit tool limits are preserved. Saving and activation remain separate steps.
       </p>
+      <.granite_editor :if={schema_version(@form) == 6} form={@form} errors={@errors} />
       <section :if={schema_version(@form) == 6} id="policy-review" class="list-section mb-6">
         <h3>Human approval</h3>
         <p class="muted mt-2 mb-4">

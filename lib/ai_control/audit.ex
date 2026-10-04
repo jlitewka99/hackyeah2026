@@ -381,7 +381,7 @@ defmodule AiControl.Audit do
 
   def record_phase_decision(context, assessment, decision, guards) do
     if is_list(guards) && guards != [] &&
-         Enum.all?(guards, &(&1 in Configuration.guards(3))),
+         Enum.all?(guards, &(&1 in Configuration.guards(6))),
        do: decision_event(context, assessment, decision, guards),
        else: {:error, :invalid_audit_data}
   end
@@ -579,8 +579,9 @@ defmodule AiControl.Audit do
       failed_guards: assessment.failed_guards,
       redactions: decision.redactions,
       policy_evidence: %{
-        required_guards: Snapshot.required_guards(decision.policy, decision.stage),
-        settings: decision.policy.settings,
+        required_guards:
+          Snapshot.required_guards(decision.policy, decision.stage, assessment.results),
+        settings: audit_settings(decision.policy.settings),
         rules:
           Map.new(decision.policy.rules, fn {category, rule} ->
             {category,
@@ -589,6 +590,9 @@ defmodule AiControl.Audit do
       }
     }
   end
+
+  defp audit_settings(%{"schema_version" => 6} = settings), do: Map.delete(settings, "granite")
+  defp audit_settings(settings), do: settings
 
   defp phase_evidence(data, nil), do: data
   defp phase_evidence(data, guards), do: Map.put(data, :evaluated_guards, guards)
