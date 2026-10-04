@@ -3,6 +3,7 @@ defmodule AiControlWeb.PolicyHTML do
   use AiControlWeb, :html
 
   alias AiControl.Policies.Configuration
+  alias AiControl.Tools.Catalog
 
   embed_templates "policy_html/*"
 
@@ -24,6 +25,32 @@ defmodule AiControlWeb.PolicyHTML do
   def category_catalog(form), do: Configuration.categories(schema_version(form))
   def severities, do: Configuration.severities()
   def safety_categories, do: Configuration.safety_categories()
+
+  def tool_catalog, do: Catalog.all()
+
+  def tool_label(tool),
+    do:
+      if(Enum.any?(tool_catalog(), &(&1["name"] == tool)),
+        do: tool,
+        else: tool <> " (unsupported)"
+      )
+
+  def tool_selected?(form, tool),
+    do: Map.get(form[:tool_selection].value || %{}, tool) in [true, "true"]
+
+  def unknown_tools(form) do
+    known = Enum.map(tool_catalog(), & &1["name"])
+    Map.keys(form[:tool_selection].value || %{}) -- known
+  end
+
+  def tool_id(tool), do: "policy-tool-" <> Base.url_encode64(tool, padding: false)
+  def tool_description("file.read"), do: "Read a virtual file."
+  def tool_description("file.write"), do: "Create or replace a virtual file."
+  def tool_description("file.delete"), do: "Delete a virtual file."
+  def tool_description("http.get"), do: "Read an exact endpoint pinned by the operator."
+  def tool_description("database.select"), do: "Read bounded rows from a demo table."
+  def tool_description("email.send"), do: "Queue a message in the local demo mailbox."
+  def tool_description("command.run"), do: "Run a permitted status or echo function."
 
   def label_rule?(form, category),
     do: schema_version(form) == 3 && category in ~w(prompt_injection content_safety)

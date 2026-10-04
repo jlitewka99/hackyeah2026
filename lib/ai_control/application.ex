@@ -22,6 +22,7 @@ defmodule AiControl.Application do
       AiControl.Gateway.Supervisor,
       {DNSCluster, query: Application.get_env(:ai_control, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: AiControl.PubSub},
+      AiControl.Tools.Supervisor,
       # Start a worker by calling: AiControl.Worker.start_link(arg)
       # {AiControl.Worker, arg},
       # Start to serve requests, typically the last entry

@@ -43,6 +43,7 @@ defmodule AiControlWeb.Router do
     get "/auth", ApiAuthController, :show, log: false
     get "/models", GatewayController, :models, log: false
     post "/chat/completions", GatewayController, :chat, log: false
+    post "/tool_calls", ToolController, :create, log: false
   end
 
   scope "/", AiControlWeb do

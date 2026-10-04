@@ -190,6 +190,8 @@ h2 { font-size: 1.0625rem; line-height: 1.4; font-weight: 600; letter-spacing: -
 .policy-rule-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; align-items: center; padding-block: 1.25rem; border-bottom: 1px solid var(--line); }
 .policy-details { padding-block: 1.5rem; border-bottom: 1px solid var(--line); }
 .policy-details summary, #policy-import-panel summary { cursor: pointer; min-height: 2.75rem; display: list-item; padding-block: .625rem; font-weight: 550; }
+#policy-tools .checkbox-label { display: flex; min-height: 2.75rem; width: 100%; overflow-wrap: anywhere; }
+#policy-tools .field-checkbox { flex-shrink: 0; }
 .policy-budget-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 .policy-notice { background: var(--surface-subtle); border: 1px solid var(--line); border-radius: .75rem; padding: 1rem; }
 .policy-errors { color: var(--danger); background: var(--danger-bg); }

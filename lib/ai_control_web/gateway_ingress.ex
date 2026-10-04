@@ -7,7 +7,8 @@ defmodule AiControlWeb.GatewayIngress do
 
   def init(opts), do: opts
 
-  def call(%{request_path: path} = conn, _) when path in ["/v1/models", "/v1/chat/completions"] do
+  def call(%{request_path: path} = conn, _)
+      when path in ["/v1/models", "/v1/chat/completions", "/v1/tool_calls"] do
     case Limiter.check_ip(conn.remote_ip) do
       :ok -> conn
       error -> conn |> GatewayError.respond(error) |> halt()

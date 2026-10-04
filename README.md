@@ -634,8 +634,8 @@ tools:
 ```
 
 Only the shipped immutable sets are accepted. `tools.allowed_tools` validates
-unique tool identifiers and defaults to empty. Step 12A enforces this list in the
-tool core and sandbox; production execution remains in step 12B.
+unique tool identifiers and defaults to empty. Step 12B enforces this list in
+`POST /v1/tool_calls` together with operator resources, guards, audit and budgets.
 The separate Signatures dashboard remains step 11. Step 8 applies these adapters
 to generated text and decoded tool arguments before returning any output.
 
@@ -701,8 +701,8 @@ errors, warm p50/p95, cold load and peak RSS; PII is its own group and a negativ
 for injection, rather than a PII recognizer benchmark. The [acceptance record](docs/acceptance/step10.md)
 records results and limits. All Prompt Guard implementation, gated weight access
 and same-hardware comparison belong to Step 11B, together with final MVP quality
-selection (FPR ≤ 5%, then mean direct/indirect recall, then p95). Full output
-filtering, budget settlement and tool integration finish in 12B/11B.
+selection (FPR ≤ 5%, then mean direct/indirect recall, then p95). Tool execution and filtering are integrated in 12B. Final model qualification
+and shared MVP acceptance remain in 11B.
 
 ### One container on Coolify
 
@@ -774,15 +774,19 @@ organizations. A controlled backend inspects the redacted input and supplies
 synthetic Polish names, addresses and escaped tool arguments to the real NER
 output pipeline.
 
-## Tool firewall core (step 12A)
+## Tool execution firewall (steps 12A–12B)
 
 The closed tool catalog, verified-agent requests, policy ACL, operator resource
 grants, and tenant-isolated demo adapters are available under `AiControl.Tools`.
 See [the tool sandbox guide](docs/tools.md) for supported operations, configuration,
 examples, and security tests. Demo files, database rows, mailbox, and commands use
 in-memory resources; HTTP uses exact URLs and operator-pinned IPs through Req.
-Production execution with budgets, guards, audit, result filtering, and
-`POST /v1/tool_calls` remains in step 12B.
+The public `POST /v1/tool_calls` endpoint requires an agent Bearer key and UUID
+`Idempotency-Key`. Its full firewall filters input and output, commits budgets and
+audit before effects, and records content-free durable execution states. Configure
+`TOOLS_SANDBOXES` with operator grants and stable context UUIDs before use. Duplicate
+keys return 409 with ID/state without replaying effects or results. See the
+[Step 12B acceptance](docs/acceptance/step12b.md) for verification and limits.
 
 
 ## Tests and quality checks

@@ -4,15 +4,21 @@ defmodule AiControl.Tools.Sandbox do
 
   Files and tables are virtual, email stays in this process, and commands are
   Elixir functions. No host files, SQL, shell, or SMTP are reachable. HTTP alone
-  performs I/O to exact operator-pinned endpoints. This is not the production
-  executor: step 12B must add budgets, guards, audit, and output filtering.
+  performs I/O to exact operator-pinned endpoints. The API uses prepared execution
+  through the full firewall. run/3 remains a trusted local adapter aid.
   """
   use GenServer
 
   alias AiControl.Tools
-  alias AiControl.Tools.{HTTP, Resources}
+  alias AiControl.Tools.{Executions, HTTP, Resources}
 
-  def start_link(opts), do: GenServer.start_link(__MODULE__, opts)
+  def start_link(opts), do: GenServer.start_link(__MODULE__, opts, Keyword.take(opts, [:name]))
+
+  def preflight(server, request), do: GenServer.call(server, {:preflight, request})
+
+  def run_prepared(server, request, receipt, owner, deadline) do
+    GenServer.call(server, {:run_prepared, request, receipt, owner, deadline}, 15_000)
+  end
 
   def run(server, identity, params) do
     with {:ok, request} <- Tools.prepare(identity, params) do
@@ -29,6 +35,7 @@ defmodule AiControl.Tools.Sandbox do
      %{
        organization_id: Keyword.fetch!(opts, :organization_id),
        grants: Keyword.get(opts, :grants, %{}),
+       contexts: Keyword.get(opts, :contexts, %{}),
        files: Keyword.get(opts, :files, %{}),
        tables: Keyword.get(opts, :tables, %{}),
        mailbox: []
@@ -37,6 +44,45 @@ defmodule AiControl.Tools.Sandbox do
 
   @impl true
   def handle_call(:inspect_state, _from, state), do: {:reply, state, state}
+
+  def handle_call({:preflight, request}, _from, state) do
+    result =
+      with {:ok, _} <- target(request, state),
+           {:ok, workflow} <- Ecto.UUID.cast(Map.get(state.contexts, request.agent_id)) do
+        {:ok,
+         %{
+           workflow_id: workflow,
+           grant: Map.get(state.grants, request.agent_id, %{}),
+           files: state.files
+         }}
+      else
+        :error -> {:error, :tool_not_allowed}
+        error -> error
+      end
+
+    {:reply, result, state}
+  end
+
+  def handle_call({:run_prepared, request, receipt, owner, deadline}, _from, state) do
+    ref = Process.monitor(owner)
+
+    result =
+      with :ok <- owner_ready(ref, owner, deadline),
+           true <- Map.get(state.contexts, request.agent_id) == receipt.workflow_id,
+           {:ok, target} <- target(request, state),
+           :ok <- owner_ready(ref, owner, deadline),
+           {:ok, _} <- Executions.dispatch(receipt, request),
+           :ok <- owner_ready(ref, owner, deadline) do
+        execute(request.tool, request.arguments, target, state)
+      else
+        false -> {{:error, :tool_not_allowed}, state}
+        error -> {error, state}
+      end
+
+    Process.demonitor(ref, [:flush])
+    {reply, updated} = result
+    {:reply, reply, updated}
+  end
 
   def handle_call({:run, request}, _from, state) do
     with true <- request.organization_id == state.organization_id,
@@ -48,6 +94,31 @@ defmodule AiControl.Tools.Sandbox do
     else
       false -> {:reply, {:error, :forbidden}, state}
       error -> {:reply, error, state}
+    end
+  end
+
+  defp owner_ready(ref, owner, deadline) do
+    receive do
+      {:DOWN, ^ref, :process, _, _} -> {:error, :tool_cancelled}
+    after
+      0 ->
+        cond do
+          !Process.alive?(owner) -> {:error, :tool_cancelled}
+          System.monotonic_time(:millisecond) >= deadline -> {:error, :tool_timeout}
+          true -> :ok
+        end
+    end
+  end
+
+  defp target(request, state) do
+    with true <- request.organization_id == state.organization_id,
+         :ok <- Tools.authorize(request),
+         grant = Map.get(state.grants, request.agent_id, %{}),
+         {:ok, target} <- Resources.authorize(request, grant, state.files) do
+      {:ok, target}
+    else
+      false -> {:error, :forbidden}
+      error -> error
     end
   end
 

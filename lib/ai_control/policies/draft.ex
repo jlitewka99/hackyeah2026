@@ -11,6 +11,7 @@ defmodule AiControl.Policies.Draft do
     field :schema_version, :integer, default: 1
     field :detector_sets, :map, default: %{}
     field :tools, :map, default: %{}
+    field :tool_selection, :map
     field :profile, :string
     field :allowed_models, :string
     field :allowed_agents, {:array, :string}, default: []
@@ -20,13 +21,14 @@ defmodule AiControl.Policies.Draft do
     field :budgets, :map, default: %{}
   end
 
-  @fields ~w(schema_version detector_sets tools profile allowed_models allowed_agents agent_models rules guards budgets)a
+  @fields ~w(schema_version detector_sets tools tool_selection profile allowed_models allowed_agents agent_models rules guards budgets)a
 
   def from_source(source) do
     %__MODULE__{
       schema_version: source["schema_version"],
       detector_sets: Map.get(source, "detector_sets", %{}),
       tools: Map.get(source, "tools", %{}),
+      tool_selection: Map.new(get_in(source, ["tools", "allowed_tools"]) || [], &{&1, "true"}),
       profile: source["profile"],
       allowed_models: Enum.join(source["allowed_models"], "\n"),
       allowed_agents: source["allowed_agents"],
@@ -93,11 +95,23 @@ defmodule AiControl.Policies.Draft do
     if draft.schema_version in [2, 3] do
       Map.merge(source, %{
         "detector_sets" => draft.detector_sets,
-        "tools" => normalize_tools(draft.tools)
+        "tools" => selected_tools(draft)
       })
     else
       source
     end
+  end
+
+  defp selected_tools(%{tool_selection: nil, tools: tools}), do: normalize_tools(tools)
+
+  defp selected_tools(%{tool_selection: selection, tools: tools}) do
+    selected = for {tool, value} <- selection, value in [true, "true"], do: tool
+    original = Map.get(tools, "allowed_tools", [])
+
+    %{
+      "allowed_tools" =>
+        Enum.filter(original, &(&1 in selected)) ++ Enum.sort(selected -- original)
+    }
   end
 
   defp normalize_tools(%{"allowed_tools" => values} = tools) when is_list(values),

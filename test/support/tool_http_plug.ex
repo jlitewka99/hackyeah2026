@@ -26,6 +26,15 @@ defmodule AiControl.TestToolHTTPPlug do
       "/invalid" ->
         send_resp(conn, 200, <<255>>)
 
+      "/wait" ->
+        send(owner, {:tool_http_waiting, self()})
+
+        receive do
+          :release -> send_resp(conn, 200, "Synthetic delayed report")
+        after
+          3_000 -> send_resp(conn, 504, "Synthetic timeout")
+        end
+
       _ ->
         send_resp(conn, 500, "sensitive-upstream")
     end

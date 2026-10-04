@@ -57,7 +57,7 @@ defmodule AiControlWeb.PolicyLive do
   end
 
   def event("toggle_section", %{"section" => section}, socket)
-      when section in ~w(effective guards resources budgets import) do
+      when section in ~w(effective guards resources budgets tools import) do
     sections = socket.assigns.open_sections
 
     sections =
