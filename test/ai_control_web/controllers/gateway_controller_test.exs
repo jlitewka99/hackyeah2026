@@ -100,7 +100,7 @@ defmodule AiControlWeb.GatewayControllerTest do
     for {body, status, code} <- [
           {String.duplicate("s", 1_048_577), 413, "input_too_large"},
           {"{private_secret", 400, "invalid_request"},
-          {Jason.encode!(Map.put(request(), "stream", true)), 400, "invalid_request"}
+          {Jason.encode!(Map.put(request(), "stream", "true")), 400, "invalid_request"}
         ] do
       result = post(conn, "/v1/chat/completions", body)
       data = json_response(result, status)

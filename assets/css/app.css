@@ -240,6 +240,7 @@ h2 { font-size: 1.0625rem; line-height: 1.4; font-weight: 600; letter-spacing: -
 .policy-yaml { font-family: ui-monospace, SFMono-Regular, monospace; font-size: .875rem; line-height: 1.6; caret-color: var(--focus); }
 .policy-file-input { display: block; max-width: 100%; font-size: .875rem; }
 .policy-file-input::file-selector-button { padding: .625rem 1rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--surface); color: var(--ink); margin-right: .75rem; cursor: pointer; }
+.knowledge-file-input::file-selector-button { min-height: 44px; }
 @media (max-width: 640px) {
   .policy-summary, .policy-rule-row, .policy-budget-grid, .policy-diff-row { grid-template-columns: minmax(0, 1fr); }
   .policy-heading { gap: 1rem; }

@@ -7,7 +7,7 @@
 # General application configuration
 import Config
 
-config :mime, :types, %{"application/yaml" => ["yaml", "yml"]}
+config :mime, :types, %{"application/yaml" => ["yaml", "yml"], "text/event-stream" => ["sse"]}
 
 config :ai_control, :scopes,
   user: [

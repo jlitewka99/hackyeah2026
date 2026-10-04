@@ -45,6 +45,11 @@ defmodule AiControlWeb.GatewayError do
     )
   end
 
+  def payload(code, request_id) do
+    {_, message} = classify(code)
+    %{error: %{code: Atom.to_string(code), message: message, request_id: request_id}}
+  end
+
   defp classify(:invalid_request), do: {400, "Unsupported or invalid request."}
   defp classify(:knowledge_conflict), do: {409, "The resource changed. Refresh and try again."}
 

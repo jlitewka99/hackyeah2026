@@ -26,6 +26,10 @@ defmodule AiControlWeb.Router do
     plug AiControlWeb.ApiKeyAuth
   end
 
+  pipeline :chat_api do
+    plug :accepts, ["json", "sse"]
+  end
+
   pipeline :agents_read do
     plug :require_permission, "agents.read"
   end
@@ -58,7 +62,6 @@ defmodule AiControlWeb.Router do
     pipe_through [:api, :agent_api]
     get "/auth", ApiAuthController, :show, log: false
     get "/models", GatewayController, :models, log: false
-    post "/chat/completions", GatewayController, :chat, log: false
     post "/tool_calls", ToolController, :create, log: false
     post "/knowledge/search", KnowledgeController, :search, log: false
     get "/memory", KnowledgeController, :index, log: false
@@ -66,6 +69,15 @@ defmodule AiControlWeb.Router do
     post "/memory", KnowledgeController, :create, log: false
     patch "/memory/:id", KnowledgeController, :update, log: false
     delete "/memory/:id", KnowledgeController, :delete, log: false
+  end
+
+  scope "/v1", AiControlWeb do
+    pipe_through [:chat_api, :agent_api]
+    post "/chat/completions", GatewayController, :chat, log: false
+  end
+
+  scope "/", AiControlWeb do
+    post "/mcp", MCPController, :create, log: false
   end
 
   scope "/", AiControlWeb do

@@ -55,6 +55,16 @@ config :ai_control, AiControl.Tools.Config,
        _ -> raise "TOOLS_SANDBOXES must be a JSON object"
      end)
 
+config :ai_control, AiControl.MCP.Config,
+  idle_timeout_ms: String.to_integer(System.get_env("MCP_SESSION_IDLE_TIMEOUT_MS", "1800000")),
+  max_agent_sessions: String.to_integer(System.get_env("MCP_MAX_AGENT_SESSIONS", "32")),
+  max_sessions: String.to_integer(System.get_env("MCP_MAX_SESSIONS", "1000")),
+  allowed_origins:
+    (case Jason.decode(System.get_env("MCP_ALLOWED_ORIGINS", "[]")) do
+       {:ok, origins} when is_list(origins) -> origins
+       _ -> raise "MCP_ALLOWED_ORIGINS must be a JSON array of exact origins"
+     end)
+
 if config_env() == :prod do
   encoded_key =
     System.get_env("AUDIT_FINGERPRINT_KEY") || raise "AUDIT_FINGERPRINT_KEY is required"

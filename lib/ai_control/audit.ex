@@ -5,6 +5,7 @@ defmodule AiControl.Audit do
   alias AiControl.Audit.{Event, Filters}
   alias AiControl.Budgets.Usage
   alias AiControl.Gateway.Measurements
+  alias AiControl.Gateway.StreamEvidence
   alias AiControl.Knowledge.Evidence
   alias AiControl.Organizations
   alias AiControl.Organizations.{Access, Grants}
@@ -27,7 +28,7 @@ defmodule AiControl.Audit do
                   @policy_events
   @snapshot_fields ~w(status role permissions agent_count model_count grants_fingerprint grants_fingerprint_key_id user_id previous_superadmin_id next_superadmin_id membership_id invitation_id policy_version_id policy_checksum policy_profile policy_source)a
 
-  @gateway_codes ~w(completed invalid_request input_too_large forbidden agent_not_allowed model_not_allowed policy_unavailable rate_limited capacity_exceeded guard_unavailable policy_blocked redaction_unavailable audit_unavailable upstream_timeout upstream_unavailable upstream_rejected upstream_invalid_response response_too_large model_unavailable model_digest_mismatch request_budget_exceeded token_budget_exceeded budget_unavailable budget_conflict tokenizer_unavailable knowledge_disabled knowledge_write_disabled knowledge_conflict)
+  @gateway_codes ~w(completed stream_ready stream_cancelled stream_delivery_timeout stream_unavailable invalid_request input_too_large forbidden agent_not_allowed model_not_allowed policy_unavailable rate_limited capacity_exceeded guard_unavailable policy_blocked redaction_unavailable audit_unavailable upstream_timeout upstream_unavailable upstream_rejected upstream_invalid_response response_too_large model_unavailable model_digest_mismatch request_budget_exceeded token_budget_exceeded budget_unavailable budget_conflict tokenizer_unavailable knowledge_disabled knowledge_write_disabled knowledge_conflict)
   def gateway_codes, do: @gateway_codes
 
   def record_knowledge(identity, request_id, operation, code, policy, resources) do
@@ -160,6 +161,9 @@ defmodule AiControl.Audit do
 
   defp observation?(nil), do: true
 
+  defp observation?(%{operation: "chat", timings: timings, stream: stream} = value),
+    do: map_size(value) == 3 && Measurements.valid?(timings) && StreamEvidence.valid?(stream)
+
   defp observation?(%{operation: operation, timings: timings} = value),
     do: map_size(value) == 2 && operation in ~w(chat models) && Measurements.valid?(timings)
 
@@ -229,9 +233,11 @@ defmodule AiControl.Audit do
   end
 
   defp gateway_event_type("completed"), do: "gateway.completed"
+  defp gateway_event_type("stream_ready"), do: "gateway.stream_ready"
+  defp gateway_event_type("stream_cancelled"), do: "gateway.cancelled"
 
   defp gateway_event_type(code)
-       when code in ~w(policy_unavailable guard_unavailable audit_unavailable upstream_timeout upstream_unavailable upstream_rejected upstream_invalid_response response_too_large model_unavailable model_digest_mismatch),
+       when code in ~w(stream_delivery_timeout stream_unavailable policy_unavailable guard_unavailable audit_unavailable upstream_timeout upstream_unavailable upstream_rejected upstream_invalid_response response_too_large model_unavailable model_digest_mismatch),
        do: "gateway.failed"
 
   defp gateway_event_type(_), do: "gateway.rejected"

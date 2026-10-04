@@ -274,7 +274,7 @@ defmodule AiControlWeb.OrganizationKnowledgeLive do
     do: "Memory writes are disabled in the active policy."
 
   def error_message(:policy_blocked),
-    do: "The active policy blocked this content. You can remove the resource or revise its text."
+    do: "The active policy blocked this content. Its text is unavailable."
 
   def error_message(:knowledge_conflict),
     do: "This resource changed. Refresh before saving again."

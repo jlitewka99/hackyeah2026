@@ -92,6 +92,8 @@ jobs:
         run: mix deps.unlock --check-unused
       - name: Run Credo
         run: mix credo --strict
+      - name: Verify incremental Stream benchmark contract
+        run: python3 -m unittest discover -s tests/semantic_stream -v
 
   tests:
     name: Tests

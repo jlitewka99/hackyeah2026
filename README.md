@@ -471,8 +471,10 @@ updating the catalog is an explicit operator action.
 Supported requests contain text `messages`, function `tools`, assistant
 `tool_calls` history and tool results. Optional controls are `tool_choice`,
 `temperature`, `top_p`, `max_tokens` (1–32768), `seed`, `stop`, `n: 1` and
-`stream: false`. Images, audio, streaming, unknown fields and unsupported formats
-return `400`. The gateway returns one assistant choice and validated token usage.
+boolean `stream` (defaults to `false`). Buffered SSE accepts
+`stream_options: {"include_usage": true}` only with `stream: true`.
+Images, audio, unknown fields and unsupported formats return `400`.
+The gateway returns one assistant choice and validated token usage.
 It passes tool proposals through security assessment; it does not execute tools.
 Provider reasoning and unknown response fields are discarded. Ollama reasoning
 is disabled by default (`OLLAMA_REASONING_EFFORT=none`); `default`, `low`, `medium`
@@ -484,6 +486,47 @@ curl http://localhost:4000/v1/chat/completions \
   -H 'Content-Type: application/json' \
   -d '{"model":"qwen3.5:4b","messages":[{"role":"user","content":"Describe Kraków in one sentence."}],"stream":false,"max_tokens":128}'
 ```
+
+For buffered SSE, use a client that handles comments and `event: error`:
+
+```sh
+curl --no-buffer http://localhost:4000/v1/chat/completions \
+  -H "Authorization: Bearer $AI_CONTROL_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream' \
+  -d '{"model":"qwen3.5:4b","messages":[{"role":"user","content":"Describe Kraków in one sentence."}],"stream":true,"stream_options":{"include_usage":true},"max_tokens":128}'
+```
+
+The connection opens after input controls, synchronous audit, model verification
+and budget preparation. During generation it sends only `: keepalive` comments
+every five seconds. The complete upstream response, including fragmented tool
+arguments, passes the existing output controls and required audit before any
+public delta. This preserves output filtering and does not reduce time to the
+first content token. Approved frames use gateway IDs and model names: assistant
+role, content/tool proposals, finish reason, optional usage, then `data: [DONE]`.
+Client usage is omitted by default; upstream usage is always requested for billing.
+
+Preflight refusals retain the normal JSON HTTP status. After SSE opens, refusals
+and failures use `event: error` with fixed `error.code`, `error.message` and
+`error.request_id`; no violating content or `[DONE]` follows. Check this event even
+when HTTP status is 200. Disconnects and write failures cancel upstream generation
+and free its slot. Approved delivery, including the final marker, has a 30-second
+watchdog. `GATEWAY_RESPONSE_BYTES` bounds received SSE bytes, the assembled
+response and the redacted result separately (4 MiB by default). It is not a token
+limit. Heartbeats and protocol envelopes also consume upstream wire bytes.
+
+Valid final usage is settled once even if output is blocked or delivery is
+cancelled. Cancellation before dispatch releases reserved tokens; cancellation
+after dispatch without final usage leaves them `uncertain`. Chunk counts never
+estimate generated tokens. Existing Events/JSONL include a closed `stream` map
+with buffered mode, delivery status and received/sent byte and chunk counters.
+Sent counters describe approved data frames accepted by the socket adapter;
+they exclude heartbeats and `[DONE]` and do not prove client receipt.
+
+The real incremental Qwen Stream comparison is an offline experiment and does
+not activate a guard or change policies. Reproduction and limitations are in
+[the harness instructions](sidecar/semantic_stream/README.md) and
+[the Step 17 acceptance report](docs/acceptance/step17.md).
 
 Each request retains one immutable policy snapshot. Input is synchronously audited
 before even querying backend model metadata; output is assessed and audited before
@@ -556,7 +599,7 @@ remains step 14; RAG, memory and further PII work remain step 18.
 
 ## Output filtering
 
-Step 8 buffers the single `stream: false` response and validates its public
+Steps 8 and 17 buffer the single response for both JSON and SSE and validate its public
 envelope and tool contract before scanning it. PII, secrets and signatures run
 first, then NER, then the configured semantic adapter. Every phase uses the same
 policy snapshot, audits its decision, applies any redaction and validates the
@@ -861,6 +904,15 @@ audit before effects, and records content-free durable execution states. Configu
 keys return 409 with ID/state without replaying effects or results. See the
 [Step 12B acceptance](docs/acceptance/step12b.md) for verification and limits.
 
+
+## MCP gateway (step 13)
+
+`/mcp` exposes the governed sandbox through MCP 2025-11-25 Streamable HTTP with
+JSON responses and existing Bearer agent keys. **API keys → Connect with MCP**
+shows the public endpoint and connection headers. Tools and authorized virtual
+files use the existing execution firewall, output filtering, durable tool-call
+budget and audit. Clients manage key-bound sessions and need no extra idempotency
+header. See [MCP setup, limits and smoke test](docs/mcp.md).
 
 ## Tests and quality checks
 

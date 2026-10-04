@@ -108,6 +108,12 @@ defmodule AiControl.Gateway.KnowledgeTest do
     refute_received {:generated, _}
     activate_knowledge_policy(c.scope)
 
+    assert {:error, :input_too_large} =
+             Gateway.chat(
+               c.principal,
+               Map.put(rag(), "context", %{"query" => String.duplicate("x", 2049)})
+             )
+
     assert {:error, :invalid_request} =
              Gateway.chat(
                c.principal,

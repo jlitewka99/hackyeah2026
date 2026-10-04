@@ -31,4 +31,36 @@ defmodule AiControl.GatewayFixtures do
       ],
       "usage" => %{"prompt_tokens" => 12, "completion_tokens" => 4, "total_tokens" => 16}
     }
+
+  def stream_chunk(delta, finish \\ nil) do
+    Jason.encode!(%{
+      "id" => "backend-id",
+      "created" => 1,
+      "model" => "qwen3.5:4b",
+      "object" => "chat.completion.chunk",
+      "choices" => [
+        %{"index" => 0, "delta" => delta, "finish_reason" => finish}
+      ]
+    })
+  end
+
+  def stream_body(parts \\ ["Bezpieczna odpowiedź"]) do
+    chunks = Enum.map(parts, &stream_chunk(%{"content" => &1}))
+
+    Enum.map_join(
+      chunks ++ [stream_chunk(%{}, "stop"), stream_usage(), "[DONE]"],
+      &("data: " <> &1 <> "\n\n")
+    )
+  end
+
+  def stream_usage do
+    Jason.encode!(%{
+      "id" => "backend-id",
+      "created" => 1,
+      "model" => "qwen3.5:4b",
+      "object" => "chat.completion.chunk",
+      "choices" => [],
+      "usage" => response()["usage"]
+    })
+  end
 end

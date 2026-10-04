@@ -19,7 +19,12 @@
       >Memory</.link>
     </nav>
     <p :if={@error} id="knowledge-error" role="alert" class="report-error mt-6">
-      {error_message(@error)}
+      <%= if @error == :policy_blocked &&
+            (@live_action == :new || (@live_action == :edit && @resource)) do %>
+        The active policy blocked this content. Revise the text and submit it again.
+      <% else %>
+        {error_message(@error)}
+      <% end %>
     </p>
     <%= if @live_action == :index do %>
       <section class="list-section" aria-labelledby="knowledge-list-heading">
@@ -146,7 +151,11 @@
             <p class="muted text-sm mb-3">
               TXT or Markdown in UTF-8, up to 64 KiB. Uploaded text replaces the text field.
             </p>
-            <.live_file_input upload={@uploads.document} id="knowledge-document-upload" />
+            <.live_file_input
+              upload={@uploads.document}
+              id="knowledge-document-upload"
+              class="policy-file-input knowledge-file-input"
+            />
             <p :for={entry <- @uploads.document.entries} class="text-sm mt-2">
               {entry.client_name} · {entry.progress}%
             </p>

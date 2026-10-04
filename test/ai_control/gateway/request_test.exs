@@ -47,7 +47,10 @@ defmodule AiControl.Gateway.RequestTest do
 
   test "unsupported formats and identity parameters fail explicitly" do
     for changes <- [
-          %{"stream" => true},
+          %{"stream" => "true"},
+          %{"stream_options" => %{"include_usage" => true}},
+          %{"stream" => true, "stream_options" => %{"include_usage" => 1}},
+          %{"stream" => true, "stream_options" => %{"extra" => true}},
           %{"n" => 2},
           %{"user_id" => Ecto.UUID.generate()},
           %{"organization_id" => Ecto.UUID.generate()},
@@ -61,6 +64,20 @@ defmodule AiControl.Gateway.RequestTest do
         ] do
       assert {:error, :invalid_request} = Request.validate(Map.merge(request(), changes))
     end
+  end
+
+  test "streaming options preserve the requested delivery contract" do
+    assert {:ok, %{"stream" => true}} = Request.validate(Map.put(request(), "stream", true))
+
+    assert {:ok, value} =
+             Request.validate(
+               Map.merge(request(), %{
+                 "stream" => true,
+                 "stream_options" => %{"include_usage" => false}
+               })
+             )
+
+    assert value["stream_options"] == %{"include_usage" => false}
   end
 
   test "response allowlist discards reasoning and opaque provider fields" do

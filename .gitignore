@@ -62,3 +62,4 @@ __pycache__/
 
 /sidecar/prompt_guard/models/
 /sidecar/semantic/models/
+/sidecar/semantic_stream/models/

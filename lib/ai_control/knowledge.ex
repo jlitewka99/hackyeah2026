@@ -316,7 +316,8 @@ defmodule AiControl.Knowledge do
              {:ok, saved} <- Repo.insert_or_update(changeset, log: false),
              :ok <- replace_shares(saved, shares),
              {:ok, _} <-
-               audit(current, id, operation, "completed", policy, [Evidence.resource(saved)]) do
+               audit(current, id, operation, "completed", policy, [Evidence.resource(saved)]),
+             :ok <- recheck(current, policy, [Evidence.resource(saved)]) do
           {:ok, project(saved, checked, shares, true)}
         end
       end)
