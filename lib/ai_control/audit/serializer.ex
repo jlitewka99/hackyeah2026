@@ -3,6 +3,7 @@ defmodule AiControl.Audit.Serializer do
   alias AiControl.Audit.Event
   alias AiControl.Gateway.Measurements
   alias AiControl.Security.{SemanticEvidence, Validation}
+  alias AiControl.Tools.Catalog
 
   @fields ~w(id organization_id actor_type user_id agent_id api_key_id request_id kind event_type target_id stage action policy_version policy_checksum rule_ids reason_codes fingerprint_digest fingerprint_key_id occurred_at duration_us)a
   @snapshot ~w(status role permissions agent_count model_count grants_fingerprint grants_fingerprint_key_id user_id previous_superadmin_id next_superadmin_id membership_id invitation_id policy_version_id policy_checksum policy_profile policy_source)
@@ -13,6 +14,10 @@ defmodule AiControl.Audit.Serializer do
     %{}
     |> put("operation", if(data["operation"] in ~w(chat models), do: data["operation"]))
     |> put("timings", if(Measurements.valid?(data["timings"]), do: data["timings"]))
+    |> put(
+      "tool_execution",
+      project(data["tool_execution"], ~w(execution_id workflow_id execution_status tool charged))
+    )
     |> put(
       "budget",
       project(
@@ -100,13 +105,20 @@ defmodule AiControl.Audit.Serializer do
     do: Validation.score?(value)
 
   defp safe_field?(key, value)
-       when key in ~w(reservation_id user_id previous_superadmin_id next_superadmin_id membership_id invitation_id policy_version_id),
+       when key in ~w(execution_id workflow_id reservation_id user_id previous_superadmin_id next_superadmin_id membership_id invitation_id policy_version_id),
        do: Validation.uuid?(value)
 
   defp safe_field?(key, value) when key in ~w(grants_fingerprint policy_checksum),
     do: Validation.checksum?(value)
 
   defp safe_field?("overrun", value), do: is_boolean(value)
+  defp safe_field?("charged", value), do: is_boolean(value)
+
+  defp safe_field?("execution_status", value),
+    do: value in ~w(pending dispatching completed rejected output_blocked failed uncertain)
+
+  defp safe_field?("tool", value), do: Enum.any?(Catalog.all(), &(&1["name"] == value))
+
   defp safe_field?("cost", value) when value in ["not configured", "unavailable"], do: true
 
   defp safe_field?("cost", value),

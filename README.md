@@ -433,9 +433,14 @@ hour. Access is rechecked before refreshing. Agent rename and policy drafts surv
 updates. Code that wraps a context in its own transaction must emit its notification
 after committing; nested operations suppress premature notifications.
 
-Step 11A does not complete step 11: real tool execution integration remains 12B,
-and model comparison and full MVP acceptance remain 11B. A proposal or pattern
-detection does not demonstrate that a tool executed.
+Step 12B is now part of the base application. Tool dispatch events do not count
+as terminal requests. Events and export expose only the allowlisted execution
+receipt identifiers, status, tool and charged flag; tool arguments and result
+content remain private. Tool audit records without operation/timing observations
+retain those gaps. Successful claim, dispatch and finish commits notify reporting.
+A proposal or pattern detection does not demonstrate that a tool executed.
+Step 11A does not complete step 11: model comparison, combined dashboard/tool
+qualification and full MVP acceptance remain 11B.
 
 ## LLM gateway
 

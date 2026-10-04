@@ -70,3 +70,21 @@ The build thread reported `mix precommit` passing with 476 tests passed and 7 ex
 Clear. The verdict-pass ship covers the scored fix, not a new full-surface review.
 
 Final disposition: **ship**.
+
+## Integrated Budgets footer recheck
+
+The build thread reported rebasing onto main commit `84a8f2d`, which includes Step 12B. This targeted recheck covers only the resulting factual footer correction in `lib/ai_control_web/live/organization_budgets_live.html.heex` and its local visual regressions. The preceding review records its original scope and verdict; this addendum does not extend that review to the merged implementation.
+
+The reviewer opened all four new `.impeccable/review/budgets-integrated-{desktop-light,desktop-dark,mobile-light,mobile-dark}.png` captures and inspected the footer source. Every capture is valid and shows the corresponding theme and viewport class.
+
+### verdict
+
+**Resolved:** “Workflow execution receipts are available in Events.” replaces the stale unconnected-reporting claim in the template and all four captures. The footer retains its neutral supporting typography and wraps within the mobile content width. No local visual regressions were observed. No browser, detector, backend acceptance review, or test suite was run by this reviewer.
+
+The build thread reported the final precommit passing with 513 Elixir tests and 9 excluded, three JavaScript tests passing, and the assets build passing.
+
+### remaining
+
+Clear for this correction. The earlier ship verdict is preserved; this recheck's ship covers the footer correction and its local presentation only.
+
+Recheck disposition: **ship**.

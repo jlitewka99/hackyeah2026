@@ -7,8 +7,67 @@ defmodule AiControl.DashboardTest do
   import AiControl.SecurityFixtures
 
   alias AiControl.{Audit, Budgets, Dashboard, Organizations, Policies, Security}
-  alias AiControl.Audit.Filters
+  alias AiControl.Audit.{Filters, Serializer}
   alias AiControl.Gateway.Config
+
+  test "committed tool audit remains readable without counting dispatch as a terminal request" do
+    context = AiControl.ToolsFixtures.tool_fixture()
+
+    evidence = %{
+      execution_id: Ecto.UUID.generate(),
+      workflow_id: context.workflow,
+      execution_status: "dispatching",
+      tool: "file.read",
+      charged: true
+    }
+
+    assert {:ok, _} =
+             Audit.record_tool(
+               context.principal,
+               Ecto.UUID.generate(),
+               "tool.dispatching",
+               "dispatching",
+               0,
+               nil,
+               evidence
+             )
+
+    {:ok, filters} = Filters.parse()
+    assert {:ok, %{total: 0}} = Dashboard.activity(context.scope, filters)
+    assert {:ok, result} = AiControl.ToolsFixtures.tool_call(context)
+    {:ok, filters} = Filters.parse()
+
+    assert {:ok, %{total: 1, counts: %{"allow" => 1}}} =
+             Dashboard.activity(context.scope, filters)
+
+    assert {:ok, events} = Audit.list_events(context.scope)
+    event = Enum.find(events, &(&1.event_type == "tool.completed"))
+    serialized = Serializer.event(event)
+    assert serialized.data["tool_execution"]["execution_id"] == result.execution_id
+    assert serialized.data["tool_execution"]["execution_status"] == "completed"
+    assert serialized.data["tool_execution"]["charged"]
+
+    malicious = Map.update!(event.data, "tool_execution", &Map.put(&1, "arguments", "private"))
+    assert Serializer.data(malicious) == serialized.data
+    refute Jason.encode!(serialized) =~ "Zażółć gęślą jaźń"
+
+    assert {:ok, _} =
+             Audit.record_tool(
+               context.principal,
+               Ecto.UUID.generate(),
+               "tool.failed",
+               "tool_upstream_unavailable",
+               0,
+               nil,
+               %{evidence | execution_status: "failed"}
+             )
+
+    {:ok, filters} = Filters.parse()
+    assert {:ok, report} = Dashboard.activity(context.scope, filters)
+    assert report.total == 2
+    assert report.counts["service_error"] == 1
+    assert report.errors == [%{id: "tool_upstream_unavailable", count: 1}]
+  end
 
   test "requests and detections count once across phase evidence and percentiles use measured samples" do
     scope = organization_fixture()

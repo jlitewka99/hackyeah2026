@@ -1,12 +1,12 @@
 # Step 11A design documentation
 
-Checked 2026-10-04 using the shipped `impeccable_documenter` workflow for an ordinary extension. This pass records evidence from current source and supplied captures. It did not operate a browser, rerun the detector, run application tests, or refresh the design tokens.
+Initially checked 2026-10-04 using the shipped `impeccable_documenter` workflow for an ordinary extension. Documentation was rechecked after the final backend integration onto main's Step 12B merge `84a8f2d` and the single factual Budgets footer correction. The initial pass records source and supplied synthetic captures from that handoff; the recheck records later backend source and four supplemental Budgets captures separately below. These passes did not operate a browser, rerun the detector, run application tests, or refresh the design tokens.
 
 ## Checked evidence
 
 Read `PRODUCT.md`, incumbent `DESIGN.md`, `.impeccable/config.json`, `.impeccable/design.json`, the reporting direction contract, and the shipped documentation reference. Source sampling covered `assets/css/app.css`, the workspace layout, all five reporting HEEx templates and their paired LiveView modules, `ReportingHTML`, and `ReportingLive`.
 
-All 26 capture files were opened. Each showed its expected route or supplemental state and theme. The five-route matrix contains all four desktop/mobile and light/dark combinations:
+All 26 capture files were opened in the initial handoff. Each showed its expected route or supplemental state and theme. They precede the final backend integration and later main tool-policy UI/styles, and do not test those later changes. The five-route matrix contains all four desktop/mobile and light/dark combinations:
 
 | Surface | Capture prefix | Observed document widths |
 | --- | --- | --- |
@@ -32,10 +32,26 @@ The separate `.ex` and `.html.heex` page files preserve the repository conventio
 
 ## Review scope and preserved drift
 
-The [finish reviewer record](step11a-ui-review.md) contains the initial full review and its single material finding: the p50 span lacked a cell role. Current Overview source includes `role="cell"`. The final **ship** disposition is scoped to scoring that fix and checking its regressions; it does not announce a new full-surface review. Browser behavior and test results in that record remain build-thread-reported evidence.
+The [finish reviewer record](step11a-ui-review.md) contains the initial full review and its single material finding: the p50 span lacked a cell role. Current Overview source includes `role="cell"`. The original **ship** disposition is scoped to scoring that fix and checking its regressions; it does not announce a new full-surface review or acceptance of the later main changes. Browser behavior and test results in that record remain build-thread-reported evidence.
 
-The supplied `/private/tmp/step11-impeccable-detect.json` contains five typography advisories and no primary findings. Its values include the reporting summary size and mobile latency size alongside other workspace styles. This evidence pass neither canonizes those advisory values into the design system nor repairs them.
+The earlier supplied `/private/tmp/step11-impeccable-detect.json` contains five typography advisories and no primary findings. Its values include the reporting summary size and mobile latency size alongside other workspace styles. This evidence pass neither canonizes those advisory values into the design system nor repairs them; the detector was not rerun after the integration.
 
-No new visual world or approved durable system change was established. `DESIGN.md`, `.impeccable/design.json`, `PRODUCT.md` and `.impeccable/config.json` were left unchanged; application source, implementation plan and reviewer record were not edited by this documenter. The known pre-existing sidecar drift remains deferred to the user's separate `impeccable document` task. Documentation of the extension stays local to this report and the reporting surface brief.
+No new visual world or approved durable system change was established for Step 11A. `DESIGN.md`, `.impeccable/design.json`, `PRODUCT.md` and `.impeccable/config.json` were left unchanged; application source, implementation plan and reviewer record were not edited by this documenter. The known pre-existing sidecar drift remains deferred to the user's separate `impeccable document` task. Documentation of the extension stays local to this report and the reporting surface brief.
 
-These synthetic captures establish the checked UI states and system continuity. They do not measure real-model performance or complete MVP acceptance and tool execution integration in Steps 11B/12B.
+## Final backend integration recheck
+
+Step 12B is now on main at merge `84a8f2d`, which is an ancestor of the reporting branch checked here. Main introduced its own tool-policy UI/styles. After rebasing, the Budgets template received one factual footer correction: **Workflow execution receipts are available in Events.** replaces **Tool execution reporting is not connected in this release.** The current template diff confirms that single copy change. The build thread reports no other reporting template changes and no reporting layout/style changes. The original 26 captures and reviewer verdict retain their historical synthetic UI acceptance scope; this documentation recheck does not qualify main's other later UI changes.
+
+The recheck sampled `Dashboard`, `Audit.Serializer`, `Audit.Export`, `OrganizationEventLive`, `Tools.Executions` and `Audit.notify/1`. Current source establishes these integration facts:
+
+- Overview and per-agent terminal counts exclude the nonterminal `tool.dispatching` gateway event before deduplicating request evidence.
+- Event details and JSONL export share the serializer projection of five allowlisted `tool_execution` receipt fields: `execution_id`, `workflow_id`, `execution_status`, `tool` and `charged`.
+- The tool-receipt transaction wrapper notifies reporting only after `Repo.transaction/2` returns a successful execution result; failed transactions do not take that notification branch.
+
+These are source checks, not new captured interaction tests or a new UI finish review. Synthetic UI captures do not establish real-model performance, and Step 12B being on main does not complete the joint MVP/model qualification that remains Step 11B.
+
+## Targeted Budgets footer evidence
+
+Opened all four additional captures at `.impeccable/review/budgets-integrated-{desktop-light,desktop-dark,mobile-light,mobile-dark}.png`. Each shows the corrected workflow-receipt sentence under Effective limits. The desktop images are 1440×1967; the mobile images are 390×2902. The sentence fits the incumbent footer region in both desktop themes and wraps within the narrow content region in both mobile themes. The existing neutral surfaces, thin separators and read-only accounting presentation continue in these supplied views.
+
+This is a scoped documentation check of the factual footer correction, supplementing the original 26 historical captures. The finish reviewer performs a separate targeted footer/regression recheck. No new review hunt, detector pass, durable token update or acceptance of the other later main UI changes is implied.

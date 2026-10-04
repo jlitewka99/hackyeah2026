@@ -22,7 +22,7 @@ defmodule AiControl.Dashboard do
       {sql, params} = Repo.to_sql(:all, query)
 
       prefix =
-        "WITH events AS (#{sql}), terminal AS (SELECT DISTINCT ON (request_id) * FROM events WHERE kind = 'gateway' ORDER BY request_id, occurred_at DESC, id DESC) "
+        "WITH events AS (#{sql}), terminal AS (SELECT DISTINCT ON (request_id) * FROM events WHERE kind = 'gateway' AND event_type <> 'tool.dispatching' ORDER BY request_id, occurred_at DESC, id DESC) "
 
       outcomes =
         Repo.query!(
@@ -36,7 +36,7 @@ defmodule AiControl.Dashboard do
             ELSE 'allow' END
             WHEN reason_codes::text[] @> ARRAY['policy_blocked']::text[] THEN 'block'
             WHEN reason_codes::text[] && ARRAY['request_budget_exceeded','token_budget_exceeded','tool_budget_exceeded']::text[] THEN 'budget_denied'
-            WHEN event_type = 'gateway.failed' OR reason_codes::text[] && ARRAY['budget_unavailable','tokenizer_unavailable','budget_conflict']::text[] THEN 'service_error'
+            WHEN event_type IN ('gateway.failed', 'tool.failed', 'tool.uncertain') OR reason_codes::text[] && ARRAY['budget_unavailable','tokenizer_unavailable','budget_conflict','guard_unavailable','audit_unavailable']::text[] THEN 'service_error'
             ELSE 'rejected'
             END AS outcome, count(*)
             FROM terminal t
@@ -110,7 +110,7 @@ defmodule AiControl.Dashboard do
             SELECT code, count(*)
             FROM terminal
             CROSS JOIN LATERAL unnest(reason_codes) code
-            WHERE event_type = 'gateway.failed' OR code IN ('budget_unavailable','budget_conflict','tokenizer_unavailable')
+            WHERE event_type IN ('gateway.failed', 'tool.failed', 'tool.uncertain') OR code IN ('budget_unavailable','budget_conflict','tokenizer_unavailable','guard_unavailable','audit_unavailable')
             GROUP BY code
             ORDER BY count(*) DESC, code
             """,
@@ -242,7 +242,7 @@ defmodule AiControl.Dashboard do
 
       query =
         from(e in query,
-          where: e.kind == :gateway and e.agent_id in ^ids,
+          where: e.kind == :gateway and e.event_type != "tool.dispatching" and e.agent_id in ^ids,
           distinct: e.request_id,
           order_by: [asc: e.request_id, desc: e.occurred_at, desc: e.id]
         )

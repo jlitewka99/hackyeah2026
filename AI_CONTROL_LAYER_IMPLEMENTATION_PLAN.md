@@ -647,13 +647,21 @@ wizualnego; zastanego driftu nie naprawiano w tym rozszerzeniu.
    Rekordy mają `type: event`, `schema_version: 1` i bezpieczną projekcję zdarzenia;
    końcowy `export_complete` zawiera liczbę wyeksportowanych zdarzeń.
    Serializacja nie kopiuje dowolnego `data` ani zagnieżdżonych map.
+8. Podczas implementacji scalono 12B na `main` (`84a8f2d`); branch 11A został
+   zaktualizowany do tej wersji. Zdarzenie `tool.dispatching` nie jest końcowym
+   żądaniem. Events i eksport pokazują zamkniętą projekcję potwierdzenia wykonania:
+   `execution_id`, `workflow_id`, `execution_status`, `tool` i `charged`, bez
+   argumentów i treści wyniku. Zakończone wykonania są uwzględniane w decyzjach,
+   a udane commity zajęcia, dispatch i zakończenia wysyłają sygnał raportowy.
+   Nie dorabiamy rodzaju operacji ani pomiarów, których audyt narzędzia nie zapisał.
 
 **Odbiór techniczny 11A:**
 
 - Przygotowano brakujące zależności przez `mix deps.get --check-locked`, bez zmian
   lockfile, oraz izolowany PostgreSQL na porcie 55411. Podczas planowania worktree
   nie miał zależności Mix i testów bazowych wtedy nie uruchomiono.
-- `mix precommit`: 476 testów Elixir, 0 błędów, 7 testów rzeczywistych modeli
+- Po integracji z aktualnym `main`: `mix precommit` — 513 testów Elixir,
+  0 błędów, 9 testów rzeczywistych modeli
   wyłączonych zgodnie z istniejącą konfiguracją; 3 testy JavaScript przechodzą.
   Formatowanie, kompilacja bez ostrzeżeń, kontrola lockfile i Credo przechodzą.
 - Nowe testy obejmują izolację organizacji, niezależne przydziały, aktualizację
@@ -661,6 +669,8 @@ wizualnego; zastanego driftu nie naprawiano w tym rozszerzeniu.
   stopki po przerwaniu, zamkniętą serializację oraz rollback bez PubSub.
   Osobny test na rzeczywistych commitach, poza sandboxem transakcyjnym, potwierdza
   odebranie `events.export` przez drugie połączenie między porcjami READ COMMITTED.
+  Test integracji z 12B wykonuje rzeczywisty sandboxowy `file.read`, sprawdza
+  bezpieczne potwierdzenie, brak treści wyniku i brak zliczania samego dispatch.
 - Testy metryk sprawdzają deduplikację faz, nearest-rank p50/p95, brak pomiarów,
   rozliczenie zablokowanego wyjścia rzeczywistego pipeline, granicę godziny UTC,
   rezerwacje, agentów spoza przydziału, zero kosztu, brak wyceny, koszt nieznany
@@ -685,10 +695,11 @@ wizualnego; zastanego driftu nie naprawiano w tym rozszerzeniu.
   żądania kończy się przed końcowym zapisem audytu; etapy mogą się nakładać i nie są
   odejmowane od siebie. Przerwane wykonanie workera może nie zapisać pomiaru
   upstream; taki czas nie staje się szacowaną próbką.
-- Propozycja wywołania narzędzia i wykrycie wzorca nie dowodzą wykonania. Pełne
-  wyniki narzędzi oraz ich wspólny odbiór pozostają w 12B; porównanie modeli,
-  kwalifikacja bezpieczeństwa i odbiór całego MVP pozostają w 11B. Checkbox kroku
-  11 nadal pozostaje niezaznaczony.
+- Propozycja wywołania narzędzia i wykrycie wzorca nie dowodzą wykonania. W scalonym
+  12B wykonanie potwierdza trwały rekord z własnym statusem. 11A prezentuje jego
+  bezpieczne evidence; pełna matryca wspólnego odbioru dashboardu i narzędzi,
+  porównanie modeli, kwalifikacja bezpieczeństwa i odbiór całego MVP pozostają
+  w 11B. Checkbox kroku 11 nadal pozostaje niezaznaczony.
 - Duży eksport zajmuje połączenie bazy podczas pobierania (timeout transakcji
   5 minut). Pobranie bez `export_complete` jest niepełne, również przy błędzie już
   po rozpoczęciu odpowiedzi HTTP 200. Nie jest to kopia bazy w jednym snapshotcie;

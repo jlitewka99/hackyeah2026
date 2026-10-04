@@ -36,7 +36,9 @@ defmodule AiControl.Audit.CommittedExportTest do
               request_id: Ecto.UUID.generate(),
               target_id: Ecto.UUID.generate()
             })
-          end), log: false)
+          end),
+          log: false
+        )
 
         {:ok, filters} = Filters.parse(%{"kind" => "gateway"})
 
