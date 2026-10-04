@@ -8,6 +8,7 @@ defmodule AiControl.Gateway.Supervisor do
     Supervisor.init(
       [
         {Task.Supervisor, name: AiControl.Gateway.Tasks},
+        {DynamicSupervisor, name: AiControl.Gateway.Streams},
         AiControl.Gateway.Slots
       ],
       strategy: :one_for_all

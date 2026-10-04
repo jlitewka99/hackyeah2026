@@ -1010,15 +1010,36 @@ modeli/NER pozostają wyłączone. Granica 12B pozostaje bez zmian.
 
 **Gotowe, gdy:** awaria zadania w tle nie zmienia decyzji bezpieczeństwa ani nie usuwa jej podstawowego audytu.
 
-### Krok 17. Streaming
+### Krok 17. Bezpieczny streaming SSE z pełnym buforowaniem
 
-- Dodać obsługę SSE po ukończeniu filtrowania pełnych odpowiedzi.
-- Osobno porównać Qwen3Guard-Stream z buforowanym Gen; potwierdzić wspierany runtime, tokenizer i integrację specjalnej głowicy. Dostępność wariantu Stream nie oznacza gotowej obsługi przez zwykłe `/chat/completions` w Ollama.
-- Detektory z ograniczonym oknem wykorzystują bufor kroczący; argumenty narzędzi, kontrole całej odpowiedzi i nieograniczone wzorce wymagają pełnego buforowania.
-- Żaden fragment nie zostaje wysłany przed odpowiednią kontrolą.
-- Dodać limity bufora, obsługę anulowania, rozliczanie częściowego użycia i zdarzenie błędu przy blokadzie.
+**Przyjęty zakres:** API, audyt i osobny eksperyment Qwen Stream–Gen; bez nowej strony frontendowej. Wczesne udostępnianie tokenów i bufor kroczący pozostają poza tym wdrożeniem. Produkcyjny pipeline stosuje wszystkie dotychczasowe kontrole pełnej odpowiedzi.
 
-**Gotowe, gdy:** sekret rozdzielony między chunkami nie wycieka do klienta.
+- `POST /v1/chat/completions` przyjmuje boolean `stream` oraz `stream_options.include_usage` wyłącznie dla `stream: true`; nieznane opcje nadal są odrzucane. Endpoint obsługuje `Accept: text/event-stream`. Domyślne `stream: false` zachowuje JSON i dotychczasowy pipeline.
+- Osobna ścieżka `Gateway.start_stream/3` korzysta z tych samych mechanizmów tożsamości, pojedynczego snapshotu polityki, guardów, kontraktu narzędzi, uprawnień i trwałego budżetu. `Provider.chat_stream/2` jest opcjonalnym callbackiem.
+- Przed otwarciem SSE wykonywane są kontrola/audyt wejścia, sprawdzenie możliwości providera i przypiętego modelu oraz przygotowanie rezerwacji. Odmowy nadal mają normalny status HTTP i JSON. Podczas generacji gateway wysyła wyłącznie komentarze heartbeat co 5 sekund.
+- Ollama odbierana jest przez `Req.into`, bez retry i przekierowań. Końcowe usage jest żądane zawsze. Parser obsługuje podziały ramek i bajtów UTF-8, wiele ramek w odczycie oraz CRLF. Składa treść i fragmenty wszystkich tool calls; odrzuca nieprawidłowe struktury/indeksy/usage, zmianę metadanych, brak zakończenia i przekroczenie limitu.
+- Pełna odpowiedź przechodzi `Response.normalize`, walidację kontraktu oraz `Stages.evaluate`. Publiczne ramki są tworzone dopiero z zaakceptowanego, ewentualnie zredagowanego wyniku: rola, treść/tool calls, finish reason, opcjonalne usage i `[DONE]`. ID i model pochodzą z gatewaya.
+- Sesja pod supervisorem monitoruje właściciela połączenia i pracownika generacji. Rozłączenie, błąd zapisu lub timeout zatrzymują transport i zwalniają slot. Zachowane są timeouty etapów; zatwierdzone dostarczanie, włącznie z końcowym markerem, jest ograniczone do 30 sekund. Każdy wynik `Plug.Conn.chunk/2` jest sprawdzany.
+- `GATEWAY_RESPONSE_BYTES` (domyślnie 4 MiB) ogranicza odebrane dane SSE, złożoną odpowiedź i wynik po redakcji. Wiarygodne usage jest synchronicznie rozliczane przez sesję i idempotentnie checkpointowane także przy późniejszym błędzie ramki, blokadzie wyjścia lub anulowaniu. Przed dispatch rezerwacja jest zwalniana; po dispatch bez końcowego usage pozostaje `uncertain`. Chunki nie są tokenami.
+- Zamknięty serializer audytu przenosi `stream.mode = buffered`, wynik dostarczania, liczniki odebranych/wysłanych bajtów/chunków oraz czasy. `gateway.stream_ready` jest synchronicznym zapisem przed pierwszą treścią i nie trafia do agregacji wyników końcowych. Metadane są dostępne przez istniejące Events i JSONL.
+- Harness `sidecar/semantic_stream` używa rzeczywistych wag `Qwen3Guard-Stream-0.6B`, przypiętej rewizji `74e1479150e9029d6778993f00491108323bb6f8`, checksummów tokenizera/pliku wag/kodu specjalnej architektury oraz CPU FP32 (PyTorch 2.8.0, Transformers 4.57.1). Inferencja jest offline. Pełne syntetyczne pary tokenizuje tokenizer Stream; kolejne tokeny trafiają do `stream_moderate_from_ids` z zachowaniem i zamknięciem stanu. Fragmenty SSE nie pełnią roli tokenów modelu.
+
+**Wyniki odbioru lokalnego (2026-10-04):** `mix precommit`: 555 testów ExUnit i 3 testy JS, 11 testów integracyjnych wyłączonych domyślnie; osobny rzeczywisty test SSE z Ollamą 0.35.1 i przypiętym `qwen3.5:4b`: 1/1. Testy obejmują Unicode/CRLF, tool calls i split-secret BLOCK/REDACT, brak treści przed kontrolą, guard/audyt fail-closed, snapshot przy aktywacji nowej polityki, heartbeat, rozłączenie podczas generacji i zatwierdzonego dostarczania, timeouty, cleanup slotów, idempotentne rozliczenie, limit po redakcji oraz preflight modelu. Testy kontraktu harnessu: 3/3. Dialyzer i security przeszły; asset build przeszedł. Szczegóły i granice odbioru: [raport kroku 17](docs/acceptance/step17.md).
+
+**Rzeczywisty pomiar Stream:** 40/40 zamrożonych polskich par, 20 szkodliwych i 20 bezpiecznych; recall 100%, false positives 10% (część testowa: 100% / 20%). Cold verify/load 4,492 s, warm p50/p95 1,475/2,360 s, peak RSS 1,948 GiB, Apple M4 / CPU FP32 / 2 wątki. Pierwsze `Unsafe` wśród 22 detekcji: indeks tokenu assistant min/mediana/max 1/18/27, czas 96,62/835,16/1526,39 ms; indeksy obejmują tokeny szablonu. [Wyniki per case](docs/acceptance/step17-stream/cases.jsonl) i [konfiguracja pomiaru](docs/acceptance/step17-stream/summary.json). Wynik nie zmienia aktywnych polityk.
+
+**Rzeczywisty pomiar Gen:** świeża inferencja na tych samych 40 parach i tym samym mapowaniu `Unsafe`: 40/40, zero błędów, recall 100%, false positives 0% (także na części testowej). Cold verify/load 8,233 s, warm p50/p95 2,300/13,476 s, peak RSS 2,562 GiB. Oba pomiary: Apple M4, 10 rdzeni, 16 GiB RAM, CPU FP32 i 2 wątki. Gen klasyfikuje po pełnej odpowiedzi; Stream zachowuje każdy przyrostowy sygnał `Unsafe`, stąd większe false positives. [Wyniki Gen](docs/acceptance/step17-gen/summary.json) i [per case](docs/acceptance/step17-gen/cases.jsonl). Czasy na obciążonym hostcie nie rozstrzygają przewagi wydajności w produkcji.
+
+**Zastrzeżenia i otwarty odbiór:**
+
+- Pełne buforowanie nie przyspiesza pierwszego tokenu treści. Heartbeat utrzymuje połączenie i nie świadczy o akceptacji odpowiedzi.
+- Po otwarciu HTTP 200 błędy mają postać `event: error` ze stałym kodem/komunikatem/request ID i bez `[DONE]`. Zatwierdzone dane przyjęte przez adapter gniazda nie dowodzą odbioru przez aplikację klienta. Liczniki wysłanych danych pomijają heartbeat i końcowy marker.
+- Bez końcowego usage po dispatch pozostaje niepewne rozliczenie; nie rekonstruujemy go z fragmentów treści. Awaria samego magazynu audytu nie daje gwarancji zapisu zdarzenia anulowania; brak wymaganego audytu blokuje ujawnienie treści.
+- Qwen Stream jest eksperymentem klasyfikacji przyrostowej, nie nowym produkcyjnym guardem ani zwykłym modelem Ollama Chat Completions. Mały syntetyczny zbiór, różne tokenizery/sposoby klasyfikacji Stream i Gen, tokeny szablonu oraz obciążenie lokalnego hosta ograniczają uogólnienie wyników. Recall z tych 40 par nie gwarantuje bezpieczeństwa wcześniejszego ujawniania tokenów.
+- Początkowy brak miejsca (`ENOSPC`) podczas pobierania modeli rozwiązano przez usunięcie naszych częściowych wag oraz ponowne użycie checksum-verified wag Gen z istniejącego worktree. Pomiar obu modeli został ukończony bez atrap i bez usuwania cudzych plików. Presja pamięci/dysku pozostaje ograniczeniem porównania czasów.
+- **Otwarty odbiór:** wymagane kontrole CI są jeszcze oczekiwane. Krok 17 pozostaje niezaznaczony; PR jest draft do czasu ich ukończenia.
+
+**Gotowe, gdy:** split-secret w treści i argumentach narzędzi nie wycieka, testy cyklu życia i rozliczenia przechodzą, rzeczywisty odbiór SSE oraz porównanie Stream–Gen są zapisane, a wymagane kontrole CI przechodzą.
 
 ### Krok 18. RAG, pamięć i rozszerzone PII
 

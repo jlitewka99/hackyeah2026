@@ -5,11 +5,26 @@ defmodule AiControlWeb.GatewayController do
   alias AiControlWeb.GatewayError
 
   def chat(conn, _params) do
-    Gateway.chat(conn.assigns.api_principal, conn.body_params,
+    opts = [
       request_id: conn.assigns.request_id,
       ingress_checked?: conn.assigns[:gateway_ingress_checked] == true
-    )
-    |> respond(conn)
+    ]
+
+    if conn.body_params["stream"] == true do
+      case Gateway.start_stream(conn.assigns.api_principal, conn.body_params, opts) do
+        {:ok, pid} ->
+          AiControlWeb.StreamResponse.send(
+            conn,
+            pid,
+            get_in(conn.body_params, ["stream_options", "include_usage"]) == true
+          )
+
+        error ->
+          respond(error, conn)
+      end
+    else
+      Gateway.chat(conn.assigns.api_principal, conn.body_params, opts) |> respond(conn)
+    end
   end
 
   def models(conn, _params) do

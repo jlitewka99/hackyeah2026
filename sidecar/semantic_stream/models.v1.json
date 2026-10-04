@@ -1,0 +1,68 @@
+{
+  "model_id": "Qwen/Qwen3Guard-Stream-0.6B",
+  "model_set": "qwen3guard-stream-0.6b.v1",
+  "revision": "74e1479150e9029d6778993f00491108323bb6f8",
+  "runtime": "transformers-cpu-fp32",
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 11343,
+      "sha256": "832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e",
+      "url": "https://huggingface.co/Qwen/Qwen3Guard-Stream-0.6B/resolve/74e1479150e9029d6778993f00491108323bb6f8/LICENSE"
+    },
+    {
+      "path": "config.json",
+      "bytes": 1509,
+      "sha256": "b3bcfee86ed04c86e3c92000a2768d3c879564ac45e7e97909bce2e5767503cd",
+      "url": "https://huggingface.co/Qwen/Qwen3Guard-Stream-0.6B/resolve/74e1479150e9029d6778993f00491108323bb6f8/config.json"
+    },
+    {
+      "path": "configuration_qwen3.py",
+      "bytes": 11817,
+      "sha256": "db0bc8f36ab1857247263250cd37d62a3be8dacb58c75f486ddfbc0510dbb83e",
+      "url": "https://huggingface.co/Qwen/Qwen3Guard-Stream-0.6B/resolve/74e1479150e9029d6778993f00491108323bb6f8/configuration_qwen3.py"
+    },
+    {
+      "path": "generation_config.json",
+      "bytes": 161,
+      "sha256": "52a5a5dd9227794548c6de5e0a1c8bc795a662912bdae6a3a7e4226c542e835c",
+      "url": "https://huggingface.co/Qwen/Qwen3Guard-Stream-0.6B/resolve/74e1479150e9029d6778993f00491108323bb6f8/generation_config.json"
+    },
+    {
+      "path": "merges.txt",
+      "bytes": 1671853,
+      "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+      "url": "https://huggingface.co/Qwen/Qwen3Guard-Stream-0.6B/resolve/74e1479150e9029d6778993f00491108323bb6f8/merges.txt"
+    },
+    {
+      "path": "model.safetensors",
+      "bytes": 1194258680,
+      "sha256": "e0a2eac6cc79cca5bf35bf8fb356f94c333dd9715f4f0dd58883b01f2fe33419",
+      "url": "https://huggingface.co/Qwen/Qwen3Guard-Stream-0.6B/resolve/74e1479150e9029d6778993f00491108323bb6f8/model.safetensors"
+    },
+    {
+      "path": "modeling_qwen3_guard.py",
+      "bytes": 29009,
+      "sha256": "7bd84a5e3452ae798452f3aed75c6a2e2709f9d89afbfb3cda26b2b390300f43",
+      "url": "https://huggingface.co/Qwen/Qwen3Guard-Stream-0.6B/resolve/74e1479150e9029d6778993f00491108323bb6f8/modeling_qwen3_guard.py"
+    },
+    {
+      "path": "tokenizer.json",
+      "bytes": 11422654,
+      "sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+      "url": "https://huggingface.co/Qwen/Qwen3Guard-Stream-0.6B/resolve/74e1479150e9029d6778993f00491108323bb6f8/tokenizer.json"
+    },
+    {
+      "path": "tokenizer_config.json",
+      "bytes": 9732,
+      "sha256": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+      "url": "https://huggingface.co/Qwen/Qwen3Guard-Stream-0.6B/resolve/74e1479150e9029d6778993f00491108323bb6f8/tokenizer_config.json"
+    },
+    {
+      "path": "vocab.json",
+      "bytes": 3383407,
+      "sha256": "87a257b04b17642a0688c98cd1df89c398bda4fee532d6f88b38a659ecb4ac8d",
+      "url": "https://huggingface.co/Qwen/Qwen3Guard-Stream-0.6B/resolve/74e1479150e9029d6778993f00491108323bb6f8/vocab.json"
+    }
+  ]
+}
