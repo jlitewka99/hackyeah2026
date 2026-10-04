@@ -32,8 +32,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build CPU release with pinned offline models
         run: docker build --tag ai-control:step10 .
+      - name: Verify production HTTPS configuration despite runtime LOCAL_DOCKER override
+        run: bash docker/config-smoke ai-control:step10 0
       - name: Real NER, Qwen Guard and DeepSeek tokenizer, release tasks and process supervision
         run: bash docker/smoke ai-control:step10
+      - name: Build and verify local HTTP image
+        run: |
+          docker build --build-arg LOCAL_DOCKER=1 --tag ai-control:local .
+          bash docker/config-smoke ai-control:local 1
       - name: Preserve Linux NER measurements
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -143,6 +149,8 @@ jobs:
         env:
           TEST_RUNNER_DATABASE_URL: ecto://postgres:postgres@localhost/ai_control_runner_ci
         run: mix test --warnings-as-errors
+      - name: Local Docker launcher regressions
+        run: python3 -m unittest discover -s tests/docker -v
       - name: Install asset tools
         run: mix assets.setup
       - name: Build assets

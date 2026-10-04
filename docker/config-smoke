@@ -1,0 +1,32 @@
+#!/bin/bash
+# Verify both build variants without a database, model services or API credentials.
+set -euo pipefail
+if [[ $# != 2 || "$2" != 0 && "$2" != 1 ]]; then
+  printf 'Usage: bash docker/config-smoke IMAGE {0|1}\n' >&2
+  exit 1
+fi
+
+docker run --rm --network none \
+  -e EXPECTED_LOCAL_DOCKER="$2" -e LOCAL_DOCKER=1 \
+  -e DATABASE_URL=ecto://postgres:synthetic@localhost/ai_control_config_smoke \
+  -e SECRET_KEY_BASE=synthetic-ci-secret-key-base-do-not-use-in-production-01234567890123456789 \
+  -e AUDIT_FINGERPRINT_KEY=c3ludGhldGljLWNpLWZpbmdlcnByaW50LWtleS0zMi1ieXRlcw== \
+  "$1" /app/bin/ai_control eval '
+    expected = System.fetch_env!("EXPECTED_LOCAL_DOCKER") == "1"
+    ^expected = Application.fetch_env!(:ai_control, :local_docker)
+    ^expected = Application.fetch_env!(:ai_control, :dev_routes)
+    ^expected = Application.fetch_env!(:swoosh, :local)
+    secure = !expected
+    ^secure = Application.fetch_env!(:ai_control, :secure_cookies)
+    endpoint = Application.fetch_env!(:ai_control, AiControlWeb.Endpoint)
+    scheme = if expected, do: "http", else: "https"
+    port = if expected, do: 4000, else: 443
+    ^scheme = endpoint[:url][:scheme]
+    ^port = endpoint[:url][:port]
+    force_ssl = endpoint[:force_ssl]
+    true = if expected, do: force_ssl == false, else: is_list(force_ssl)
+    ^expected = Enum.any?(AiControlWeb.Router.__routes__(), &String.starts_with?(&1.path, "/dev/mailbox"))
+    AiControl.Gateway.DeepSeek = AiControl.Gateway.Config.get(:provider)
+    %{"deepseek-flash" => "deepseek-flash"} = AiControl.Gateway.Config.get(:models)
+    IO.puts("Build configuration verified: local=#{expected}")
+  '

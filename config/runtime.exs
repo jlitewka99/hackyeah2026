@@ -1,5 +1,9 @@
 import Config
 
+# This flag is baked into the image; setting an environment variable at runtime
+# cannot turn a production release into the local HTTP build.
+local_docker? = Application.get_env(:ai_control, :local_docker, false)
+
 # The generating model is fixed; operator secrets never come from public requests.
 gateway_config = [
   granite_url:
@@ -157,12 +161,17 @@ if config_env() == :prod do
       You can generate one by calling: mix phx.gen.secret
       """
 
-  host = System.get_env("PHX_HOST") || "example.com"
+  host = if(local_docker?, do: "localhost", else: System.get_env("PHX_HOST") || "example.com")
+
+  public_url =
+    if local_docker?,
+      do: [host: host, port: 4000, scheme: "http"],
+      else: [host: host, port: 443, scheme: "https"]
 
   config :ai_control, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
   config :ai_control, AiControlWeb.Endpoint,
-    url: [host: host, port: 443, scheme: "https"],
+    url: public_url,
     http: [
       # Enable IPv6 and bind on all interfaces.
       # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.

@@ -3,7 +3,7 @@ defmodule AiControl.Testing.ProcessExecutor do
   alias AiControl.Background
   alias AiControl.Testing.Protocol
 
-  @local_env ~w(NER_BASE_URL SEMANTIC_BASE_URL PROMPT_GUARD_BASE_URL TOKENIZER_BASE_URL)
+  @local_env ~w(NER_BASE_URL SEMANTIC_BASE_URL PROMPT_GUARD_BASE_URL TOKENIZER_BASE_URL GRANITE_OLLAMA_BASE_URL GRANITE_TOKENIZER_BASE_URL)
 
   def available? do
     match?({:ok, _}, database()) && match?({:ok, _}, command())

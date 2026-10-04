@@ -1,0 +1,86 @@
+name: ai-control-local
+
+x-release-environment: &release-environment
+  DATABASE_URL: ecto://postgres:${POSTGRES_PASSWORD:?Run ./docker/local up first}@db/ai_control_local
+  SECRET_KEY_BASE: ${SECRET_KEY_BASE:?Run ./docker/local up first}
+  AUDIT_FINGERPRINT_KEY: ${AUDIT_FINGERPRINT_KEY:?Run ./docker/local up first}
+  AUDIT_FINGERPRINT_KEY_ID: local-v1
+  APPROVAL_ENCRYPTION_KEY: ${APPROVAL_ENCRYPTION_KEY:?Run ./docker/local up first}
+  APPROVAL_ENCRYPTION_KEY_ID: local-v1
+  PHX_HOST: localhost
+  GRANITE_OLLAMA_BASE_URL: http://ollama:11434
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run ./docker/local up first}
+      POSTGRES_DB: ai_control_local
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres -d ai_control_local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  db-init:
+    image: postgres:17
+    environment:
+      PGHOST: db
+      PGUSER: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Run ./docker/local up first}
+    volumes:
+      - ./docker/init-db:/init-db:ro
+    entrypoint: [/bin/sh, /init-db]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  ollama:
+    image: ollama/ollama:0.35.1
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+      OLLAMA_NO_CLOUD: "1"
+      OLLAMA_NUM_PARALLEL: "1"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: [CMD, ollama, list]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  model-init:
+    image: ai-control:local
+    pull_policy: never
+    environment: *release-environment
+    command: [/app/bin/ai_control, eval, "AiControl.LocalSetup.prepare_model!()"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+  app:
+    image: ai-control:local
+    build:
+      context: .
+      args:
+        LOCAL_DOCKER: "1"
+    environment:
+      <<: *release-environment
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      TEST_RUNNER_DATABASE_URL: ecto://postgres:${POSTGRES_PASSWORD:?Run ./docker/local up first}@db/ai_control_runner
+      TEST_RUNNER_EXECUTABLE: /app/bin/ai_control
+    ports:
+      - "127.0.0.1:4000:4000"
+    stop_grace_period: 25s
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+      model-init:
+        condition: service_completed_successfully
+
+volumes:
+  postgres_data:
+  ollama_data:

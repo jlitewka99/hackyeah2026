@@ -1,0 +1,130 @@
+#!/bin/bash
+set -euo pipefail
+
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$root"
+
+usage() {
+  printf 'Usage: ./docker/local {up|down|logs|status}\n'
+}
+
+if [[ $# != 1 ]]; then usage >&2; exit 1; fi
+case "$1" in
+  up|down|logs|status) ;;
+  -h|--help) usage; exit 0 ;;
+  *) usage >&2; exit 1 ;;
+esac
+
+organizer_email=${AI_CONTROL_ORGANIZER_EMAIL:-}
+organizer_password=${AI_CONTROL_ORGANIZER_PASSWORD:-}
+unset AI_CONTROL_ORGANIZER_EMAIL AI_CONTROL_ORGANIZER_PASSWORD
+
+if ! command -v docker >/dev/null || ! docker compose version >/dev/null 2>&1; then
+  printf 'Install Docker with Docker Compose before starting the local environment.\n' >&2
+  exit 1
+fi
+if ! docker info >/dev/null 2>&1; then
+  printf 'Docker is unavailable. Start Docker Desktop or OrbStack and try again.\n' >&2
+  exit 1
+fi
+
+temporary_env=''
+cleanup() {
+  if [[ -n "$temporary_env" ]]; then rm -f "$temporary_env"; fi
+  unset organizer_email organizer_password AI_CONTROL_ORGANIZER_EMAIL AI_CONTROL_ORGANIZER_PASSWORD DEEPSEEK_API_KEY
+}
+trap cleanup EXIT
+
+if [[ ! -f .env.local ]]; then
+  if [[ "$1" != up ]]; then
+    printf 'No local configuration yet. Run ./docker/local up first.\n' >&2
+    exit 1
+  fi
+  if ! command -v openssl >/dev/null; then
+    printf 'OpenSSL is required to generate the local keys.\n' >&2
+    exit 1
+  fi
+  umask 077
+  temporary_env=$(mktemp "$root/.env.local.XXXXXX")
+  database_password=$(openssl rand -hex 24)
+  session_key=$(openssl rand -base64 64 | tr -d '\r\n')
+  audit_key=$(openssl rand -base64 32 | tr -d '\r\n')
+  approval_key=$(openssl rand -base64 32 | tr -d '\r\n')
+  {
+    printf 'POSTGRES_PASSWORD=%s\n' "$database_password"
+    printf 'SECRET_KEY_BASE=%s\n' "$session_key"
+    printf 'AUDIT_FINGERPRINT_KEY=%s\n' "$audit_key"
+    printf 'APPROVAL_ENCRYPTION_KEY=%s\n' "$approval_key"
+  } > "$temporary_env"
+  mv "$temporary_env" .env.local
+  temporary_env=''
+  unset database_password session_key audit_key approval_key
+  printf 'Created .env.local with persistent local secrets.\n'
+fi
+chmod 600 .env.local
+
+compose() {
+  docker compose --project-directory "$root" --env-file "$root/.env.local" -f "$root/compose.yaml" "$@"
+}
+
+case "$1" in
+  up)
+    if [[ -z "${DEEPSEEK_API_KEY:-}" ]]; then
+      if [[ ! -t 0 ]]; then
+        printf 'Set DEEPSEEK_API_KEY in your environment before starting. Generation uses the DeepSeek API.\n' >&2
+        exit 1
+      fi
+      read -r -s -p 'DeepSeek API key (not saved): ' DEEPSEEK_API_KEY
+      printf '\n'
+      if [[ -z "$DEEPSEEK_API_KEY" ]]; then
+        printf 'DEEPSEEK_API_KEY is required to start the local environment.\n' >&2
+        exit 1
+      fi
+    fi
+    export DEEPSEEK_API_KEY
+    if ! compose up --build --detach --wait --wait-timeout 3600; then
+      printf 'Local startup failed. Inspect ./docker/local logs (especially model-init and app).\n' >&2
+      exit 1
+    fi
+
+    if ! compose exec -T app curl --fail --silent --show-error --max-time 15 http://127.0.0.1:4000/ready >/dev/null; then
+      printf 'The gateway is not ready. Verify DEEPSEEK_API_KEY and required guards; inspect ./docker/local logs.\n' >&2
+      exit 1
+    fi
+
+    organizer_state=$(compose exec -T app /app/bin/ai_control eval \
+      'IO.puts(if AiControl.Release.organizer_exists?(), do: "LOCAL_ORGANIZER_EXISTS", else: "LOCAL_ORGANIZER_MISSING")')
+    if [[ "$organizer_state" == *LOCAL_ORGANIZER_MISSING* ]]; then
+      if [[ -z "$organizer_email" ]]; then
+        if [[ ! -t 0 ]]; then
+          printf 'Set AI_CONTROL_ORGANIZER_EMAIL and AI_CONTROL_ORGANIZER_PASSWORD for a non-interactive first start.\n' >&2
+          exit 1
+        fi
+        read -r -p 'Organizer email: ' organizer_email
+      fi
+      if [[ -z "$organizer_password" ]]; then
+        if [[ ! -t 0 ]]; then
+          printf 'Set AI_CONTROL_ORGANIZER_PASSWORD for a non-interactive first start.\n' >&2
+          exit 1
+        fi
+        read -r -s -p 'Organizer password (12 characters minimum, 72 bytes maximum): ' organizer_password
+        printf '\n'
+      fi
+      export AI_CONTROL_ORGANIZER_EMAIL="$organizer_email" AI_CONTROL_ORGANIZER_PASSWORD="$organizer_password"
+      compose exec -T -e AI_CONTROL_ORGANIZER_EMAIL -e AI_CONTROL_ORGANIZER_PASSWORD \
+        app /app/bin/ai_control eval 'AiControl.Release.bootstrap_organizer()'
+      unset AI_CONTROL_ORGANIZER_EMAIL AI_CONTROL_ORGANIZER_PASSWORD
+      unset organizer_email organizer_password
+      printf 'Organizer account created.\n'
+    elif [[ "$organizer_state" != *LOCAL_ORGANIZER_EXISTS* ]]; then
+      printf 'Could not verify the organizer account. Inspect ./docker/local logs.\n' >&2
+      exit 1
+    fi
+
+    printf 'Local environment ready: http://localhost:4000/users/log-in\n'
+    printf 'Organizer mailbox: http://localhost:4000/dev/mailbox\n'
+    ;;
+  down) compose down ;;
+  logs) compose logs --follow --tail 100 ;;
+  status) compose ps --all ;;
+esac

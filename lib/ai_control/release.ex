@@ -44,6 +44,17 @@ defmodule AiControl.Release do
     end
   end
 
+  def organizer_exists? do
+    load_app()
+
+    {:ok, exists?, _} =
+      Ecto.Migrator.with_repo(AiControl.Repo, fn _ ->
+        AiControl.Repo.get_by(AiControl.Accounts.User, [organizer: true], log: false) != nil
+      end)
+
+    exists?
+  end
+
   defp repos do
     Application.fetch_env!(@app, :ecto_repos)
   end
