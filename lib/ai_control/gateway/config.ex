@@ -18,6 +18,7 @@ defmodule AiControl.Gateway.Config do
     },
     ner_url: "http://127.0.0.1:8001",
     semantic_url: "http://127.0.0.1:8003",
+    prompt_guard_url: "http://127.0.0.1:8004",
     semantic_timeout: 30_000,
     input_bytes: 1_048_576,
     response_bytes: 4_194_304,
@@ -73,6 +74,9 @@ defmodule AiControl.Gateway.Config do
   end
 
   defp validate_semantic!(config) do
+    if !origin?(config[:prompt_guard_url]),
+      do: raise(ArgumentError, "prompt_guard_url must be an HTTP origin")
+
     if !origin?(config[:semantic_url]),
       do: raise(ArgumentError, "semantic_url must be an HTTP origin")
 

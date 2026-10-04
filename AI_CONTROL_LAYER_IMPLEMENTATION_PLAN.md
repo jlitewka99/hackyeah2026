@@ -15,6 +15,12 @@ narzędzi przechodzi kontrole wejścia/wyjścia, trwałą idempotencję, budżet
 Checkbox 11 pozostaje otwarty: dashboard, Events i kwalifikacja modeli MVP nie są
 częścią 12B. Odbiór lokalny nie oznacza scalenia PR.
 
+**Aktualizacja 11B — 2026-10-04:** scalone 11A i 12B odblokowały implementację.
+Dodano Prompt Guard, polityki v4, wybór providera w panelu i wspólną matrycę
+testów. Odbiór techniczny opisano przy 11B; pełny odbiór MVP nadal blokują
+brak zatwierdzonych wag Prompt Guard, rzeczywistych pomiarów i odbioru kontenera.
+Checkbox 11 pozostaje otwarty, a PR ma status draft.
+
 Przykładowe zlecenie:
 
 > Wykonaj krok 9 z AI_CONTROL_LAYER_IMPLEMENTATION_PLAN.md na bazie ukończonego i scalonego kroku 7. Przeczytaj zasady pracy równoległej z sekcji 2.1, zaimplementuj budżety i rozliczenia bez ponownej implementacji NER, dodaj wymagane testy, uruchom mix precommit i opisz stan integracji w planie.
@@ -713,6 +719,93 @@ wizualnego; zastanego driftu nie naprawiano w tym rozszerzeniu.
 - Impeccable zgłasza zastany drift `.impeccable/design.json`. Odświeżenie przez
   `impeccable document` pozostaje osobnym zadaniem; rozszerzenie zachowuje DESIGN.md
   i istniejący sidecar.
+
+**Implementacja 11B — 2026-10-04, branch `JL/step-11b-mvp-acceptance`:**
+
+11A i 12B są już scalone na `main` (`6159428`, wcześniejszy merge 12B `84a8f2d`),
+więc zależności implementacji 11B są odblokowane. Branch zsynchronizowano też
+z `c2bca28`, dokumentacyjnym zapisem CI 11A bez zmian implementacji.
+Zakres techniczny obejmuje:
+
+1. Politykę v4 z `guards.semantic.provider: qwen | prompt_guard`; Qwen zachowuje
+   severity + Jailbreak, Prompt Guard używa `rules.prompt_injection.threshold`
+   0–1, z włączeniem granicy progu. Upgrade draftu domyślnie zachowuje Qwen;
+   zapisane wersje i checksumy v1/v2/v3 pozostają zgodne. Zapis i jawna aktywacja
+   są osobne. Moderacja odpowiedzi zawsze pozostaje przy Qwen.
+2. Adapter z kontraktem `assess/4`, `ready?/1`, wspólnym ograniczonym transportem
+   Req bez retry/przekierowań, maksymalnym deadline 30 s, kontrolą modelu/revision,
+   skończonych score i pełnego pokrycia UTF-8. Snapshot wybiera provider także
+   podczas aktywacji innej polityki. Readiness sprawdza każdy wymagany aktywny
+   provider; awaria nie zmienia modelu automatycznie.
+3. Osobny offline sidecar Prompt Guard 2 86M na `127.0.0.1:8004`, przypięty revision
+   `a8ded8e697ce7c355e395a0df51f94adb4a2fd27`, weryfikowane rozmiary i SHA-256
+   wag/tokenizera. Małe pliki są przypięte publicznymi Git blob SHA-1 — nie są
+   przedstawiane jako SHA-256. Okna: 512 tokenów razem ze specjalnymi, overlap 64,
+   oryginalne token IDs bez truncation; maksimum malicious score, bez twierdzenia
+   o skalibrowanym prawdopodobieństwie. Limit 128 okien/2 MiB i jedna klasyfikacja
+   naraz; timeout, przeciążenie i niepełny scan są błędami usługi.
+4. Opcjonalny build `WITH_PROMPT_GUARD=1` z tokenem przez BuildKit secret,
+   weryfikacja przed offline startem, nadzór piątego procesu i healthcheck.
+   Standardowy CI nie potrzebuje gated dostępu; jawny workflow-dispatch
+   `prompt_guard=true` wymaga zatwierdzonego `HF_TOKEN`. Nie składano wniosku
+   o dostęp ani nie akceptowano umowy za operatora. Dokumentacja zawiera
+   **Built with Llama** i obowiązek zachowania LICENSE/USE_POLICY/NOTICE.
+5. Wspólny panel Policies: provider, odpowiedni próg lub etykiety, czytelny diff
+   przed aktywacją z wyjaśnieniem zmiany sposobu oceny. Overview pokazuje aktywny
+   provider; Events wyjaśnia zapisany score/etykiety i historyczny próg. Angielski
+   interfejs, istniejący system, osobne `.ex`/`.html.heex` i uprawnienia zachowane.
+   Panel uruchamiania benchmarku pozostaje w kroku 16.
+6. Benchmark z providerem, progiem i severity, zamrożony dataset/checksum/split.
+   `mix ai_control.compare_semantic` kolejno mierzy Qwen oraz Prompt Guard;
+   kalibracja tylko progi .50–.90 co .05 i Qwen Unsafe lub Unsafe+Controversial,
+   zawsze Jailbreak. Ustawienia zapisuje przed testem. Kwalifikacja wymaga 100
+   unikalnych injection przypadków/split, 25/grupę, zero błędów, cold start,
+   peak RSS i CPU FP32/dwóch wątków. FPR≤5%, potem średni recall direct/indirect,
+   potem p95; **nie dodano minimalnego recall**. Moderacja jest osobno.
+   Zwycięska przykładowa YAML powstaje tylko po kwalifikacji, bez aktywacji.
+   Katalogi wyników muszą być puste; historyczny raport Qwen nie jest nadpisywany.
+7. `run_security_tests.sh` kończy się podsumowaniem i niezerowym kodem błędu.
+   Wspólna matryca obejmuje chat → narzędzia → dashboard → zamkniętą projekcję
+   JSONL, rozliczenie zablokowanego wyjścia, tokenizację po redakcji, wszystkie
+   pola/JSON argumenty, snapshot, współbieżną idempotencję, audyt i izolację.
+   Tryb `--live-models` wymaga realnych Prompt Guard, Qwen, NER, tokenizera i LLM.
+
+**Odbiór techniczny i bramki 11B:**
+
+- `mix precommit`: 526 testów Elixir i 3 JavaScript przechodzą, 10 jawnie
+  uruchamianych testów modeli wyłączonych. Assets i Dialyzer przechodzą.
+  `mix security`: brak podatności zależności; istniejące low-confidence zgłoszenia
+  Dashboard SQL i uploadu polityki opisano bez dodawania wyciszeń.
+- Python: Prompt Guard 8, Qwen 8, tokenizer 4 przechodzą; NER 3 przechodzą,
+  istniejący opcjonalny test wag w tym trybie jest pomijany. Security runner
+  z jawnym katalogiem zweryfikowanego tokenizera: zero błędnych grup.
+- `--live-models`: 4/10 testów przechodzą, 6 błędów zależności Prompt Guard,
+  Qwen i tokenizera; wcześniejszy brak Python tokenizer artifacts usunięto przez
+  pobranie i weryfikację przypiętych plików. Pełny live odbiór nadal nie przeszedł.
+- Porównanie przy niedostępnych usługach poprawnie kończy się błędem:
+  obaj kandydaci niekompletni, `winner: null`, bez kwalifikującej polityki.
+- Impeccable: desktop/mobile, oba motywy, klawiatura, błąd progu i recovery,
+  save/diff i historyczne evidence; jeden detector bez zgłoszeń. Niezależny
+  reviewer wskazał czytelność diffu; poprawiono nazwy modeli i wyjaśnienie
+  przejścia score → etykiety. Verdict pass: `ship`, jedyna wskazana poprawka
+  oceniona jako resolved; to ocena poprawki, nie ponowny odbiór całej powierzchni.
+  Szczegóły: [raport UI](docs/acceptance/step11b-ui-review.md).
+- Docker: lokalny daemon/socket jest niedostępny. Build, realne gated wagi,
+  smoke piątego procesu i shutdown pozostają do wykonania. Dodano ścieżkę CI,
+  lecz nie przypisuje to wyników nieuruchomionemu odbiorowi.
+
+**Zastrzeżenia i status MVP:** brak zatwierdzonego dostępu/wag Prompt Guard blokuje
+rzeczywiste pomiary, wybór modelu i zakończenie MVP. Wersja przykładowa
+`docs/prompt-guard-example.yaml` jest jawnie **niezakwalifikowana**. Historyczny
+Qwen ma niski recall i 10 timeoutów długich tekstów; nie kwalifikuje się jako
+kompletny pomiar. Polski nie jest wśród języków opublikowanej ewaluacji Meta.
+Brak wyników nie jest zastępowany fixture ani szacowaniem. Kernel PyTorch może
+skończyć pracę dopiero po deadline; odpowiedź jest wstrzymana, a sidecar pozostaje
+zajęty. Sandbox pozostaje ograniczonym demo z 12B, bez dowolnego dostępu do hosta
+ani gwarancji exactly-once zewnętrznych efektów; blokada wyjścia nie cofa efektu.
+Pełne mapowanie FR-01–FR-22, odtwarzalne komendy, demo zmiany bez restartu i bramki
+opisano w `docs/acceptance/step11b.md` oraz `docs/prompt-guard.md`.
+**Checkbox 11 pozostaje niezaznaczony. PR jest draft do pełnego odbioru.**
 
 ### Krok 12. Tool firewall i ograniczenia zasobów
 

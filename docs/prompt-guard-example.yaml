@@ -1,0 +1,27 @@
+# Unqualified example for operator acceptance. This is not the measured MVP winner.
+# Import, save, inspect the diff and explicitly activate after model access/readiness.
+schema_version: 4
+profile: balanced
+allowed_models: ["qwen3.5:4b"]
+allowed_agents: ["*"]
+guards:
+  semantic:
+    provider: prompt_guard
+    enabled: true
+    required: true
+    stages: [input, output]
+  moderation:
+    enabled: true
+    required: true
+rules:
+  prompt_injection:
+    action: block
+    threshold: 0.80
+budgets:
+  organization:
+    requests_per_hour: 20
+    tokens_per_hour: 20000
+  workflow:
+    tool_calls: 5
+tools:
+  allowed_tools: [file.read]

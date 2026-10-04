@@ -1,16 +1,26 @@
 defmodule AiControl.Guards.Semantic do
-  @moduledoc "Qwen Jailbreak labels mapped by policy; binary signals are not probabilities."
+  @moduledoc "Snapshot-owned injection provider; model signals are not calibrated probabilities."
   @behaviour AiControl.Gateway.Guard
 
-  alias AiControl.Guards.Semantic.Local
+  alias AiControl.Guards.Semantic.{Local, PromptGuard}
   alias AiControl.Security.{Detection, GuardResult}
 
   @impl true
-  def assess(fields, context, snapshot, config),
-    do: assess_as("semantic", "injection", fields, context, snapshot, config)
+  def assess(fields, context, snapshot, config) do
+    if selected_provider(snapshot) == "prompt_guard",
+      do: PromptGuard.assess(fields, context, snapshot, config),
+      else: assess_as("semantic", "injection", fields, context, snapshot, config)
+  end
+
+  def selected_provider(snapshot),
+    do: get_in(snapshot.settings, ["guards", "semantic", "provider"]) || "qwen"
 
   @impl true
-  def ready?(config), do: provider(config).ready?(config)
+  def ready?(config) do
+    if config[:injection_provider] == "prompt_guard",
+      do: PromptGuard.ready?(config),
+      else: provider(config).ready?(config)
+  end
 
   def assess_as(guard, task, fields, _context, snapshot, config) do
     started = System.monotonic_time()

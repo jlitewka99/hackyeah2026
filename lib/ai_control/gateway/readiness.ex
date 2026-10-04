@@ -2,6 +2,7 @@ defmodule AiControl.Gateway.Readiness do
   @moduledoc "Bounded readiness of effective policies, pinned models and required guard adapters."
   alias AiControl.{Gateway, Policies, Repo}
   alias AiControl.Gateway.{Config, Slots}
+  alias AiControl.Guards.Semantic
   alias AiControl.Policy.Snapshot
   alias Ecto.Adapters.SQL
 
@@ -42,13 +43,23 @@ defmodule AiControl.Gateway.Readiness do
   defp guards_ready?(policies, config) do
     policies
     |> Enum.flat_map(fn policy ->
-      Snapshot.required_guards(policy, :input) ++ Snapshot.required_guards(policy, :output)
+      guards =
+        Snapshot.required_guards(policy, :input) ++ Snapshot.required_guards(policy, :output)
+
+      Enum.map(
+        guards,
+        &{&1,
+         if(&1 == "semantic",
+           do: Semantic.selected_provider(policy),
+           else: "qwen"
+         )}
+      )
     end)
     |> Enum.uniq()
-    |> Enum.all?(fn guard ->
+    |> Enum.all?(fn {guard, provider} ->
       case config[:guards][guard] do
         nil -> false
-        module -> module.ready?(config) == true
+        module -> module.ready?(Keyword.put(config, :injection_provider, provider)) == true
       end
     end)
   end

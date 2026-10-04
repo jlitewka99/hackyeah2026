@@ -16,5 +16,7 @@ priv/static/cache_manifest.json
 **/.venv
 sidecar/ner/models
 sidecar/tokenizer/models
+sidecar/semantic/models
+sidecar/prompt_guard/models
 *.log
 erl_crash.dump

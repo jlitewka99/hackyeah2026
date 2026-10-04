@@ -147,6 +147,12 @@
                   {if control.id in ~w(semantic moderation ner),
                     do: "Model-based",
                     else: "Deterministic"} · {Enum.join(control.settings["stages"], ", ")}
+                  <span
+                    :if={control.id in ~w(semantic moderation)}
+                    id={"active-provider-#{control.id}"}
+                  >
+                    · {AiControlWeb.PolicyHTML.provider_label(control.settings["provider"])}
+                  </span>
                 </p>
               </div><span>{cond do
                 !control.settings["enabled"] -> "Disabled"

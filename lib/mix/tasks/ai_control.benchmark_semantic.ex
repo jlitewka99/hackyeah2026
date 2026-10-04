@@ -1,30 +1,73 @@
 defmodule Mix.Tasks.AiControl.BenchmarkSemantic do
-  @shortdoc "Benchmark Polish semantic fixtures against the local Qwen sidecar"
-  @moduledoc "Benchmark pinned Qwen via Req; reports contain IDs and measurements, never text."
+  @shortdoc "Benchmark frozen Polish fixtures against a pinned injection provider"
+  @moduledoc "Benchmark providers via Req; reports contain IDs and measurements, never text."
   use Mix.Task
 
   alias AiControl.Gateway.Config
   alias AiControl.Guards.{Moderation, Semantic}
-  alias AiControl.Guards.Semantic.Local
+  alias AiControl.Guards.Semantic.{Local, PromptGuard}
   alias AiControl.Policies.Configuration
   alias AiControl.Policy.Snapshot
 
   @impl true
   def run(args) do
-    {opts, _, invalid} =
+    {opts, rest, invalid} =
       OptionParser.parse(args,
-        strict: [output: :string, url: :string, split: :string, hardware: :string]
+        strict: [
+          output: :string,
+          url: :string,
+          split: :string,
+          hardware: :string,
+          provider: :string,
+          threshold: :float,
+          severities: :string
+        ]
       )
 
-    if invalid != [],
+    if invalid != [] || rest != [],
       do:
         Mix.raise(
           "Use --output DIRECTORY --url ORIGIN --split calibration|test|all --hardware DESCRIPTION"
         )
 
     Mix.Task.run("app.start")
-    config = Config.get() |> Keyword.put(:semantic_url, opts[:url] || Config.get(:semantic_url))
-    if !Local.ready?(config), do: Mix.raise("Pinned semantic service is not ready")
+    config = benchmark_config(opts)
+    {cases, checksum} = dataset()
+    split = benchmark_split(opts)
+    opts = prepare_output(opts, config[:benchmark_provider], split)
+    {snapshot, settings} = benchmark_snapshot(opts, config[:benchmark_provider])
+
+    rows =
+      cases
+      |> Enum.filter(fn item ->
+        (split == "all" || item["split"] == split) &&
+          (config[:benchmark_provider] == "qwen" || item["task"] == "injection")
+      end)
+      |> Enum.map(&assess_case(&1, snapshot, config))
+
+    write_report(rows, checksum, split, config, Keyword.put(opts, :settings, settings))
+  end
+
+  defp benchmark_config(opts) do
+    provider = opts[:provider] || "qwen"
+    if provider not in ~w(qwen prompt_guard), do: Mix.raise("Unsupported provider")
+
+    config =
+      Config.get()
+      |> Keyword.put(:semantic_url, opts[:url] || Config.get(:semantic_url))
+      |> Keyword.put(:benchmark_provider, provider)
+      |> Keyword.put(:injection_provider, provider)
+
+    config =
+      if provider == "prompt_guard" && opts[:url],
+        do: Keyword.put(config, :prompt_guard_url, opts[:url]),
+        else: config
+
+    if !Semantic.ready?(config), do: Mix.raise("Pinned semantic service is not ready")
+    config
+  end
+
+  defp dataset do
     raw = File.read!("priv/benchmarks/semantic-pl.v1.jsonl")
     checksum = Base.encode16(:crypto.hash(:sha256, raw), case: :lower)
 
@@ -32,9 +75,37 @@ defmodule Mix.Tasks.AiControl.BenchmarkSemantic do
       do: Mix.raise("Dataset checksum mismatch")
 
     cases = raw |> String.split("\n", trim: true) |> Enum.map(&Jason.decode!/1)
+    {cases, checksum}
+  end
+
+  defp benchmark_split(opts) do
     split = opts[:split] || "all"
     if split not in ~w(all calibration test), do: Mix.raise("Unsupported split")
-    {:ok, %{settings: settings}} = Configuration.validate(Configuration.default(3))
+    split
+  end
+
+  defp prepare_output(opts, provider, split) do
+    output = opts[:output] || "docs/acceptance/step11b-models/#{provider}-#{split}"
+
+    if File.dir?(output) && File.ls!(output) != [],
+      do: Mix.raise("Benchmark output must be empty to preserve historical measurements")
+
+    Keyword.put(opts, :output, output)
+  end
+
+  defp benchmark_snapshot(opts, provider) do
+    severities = String.split(opts[:severities] || "Unsafe", ",")
+
+    source =
+      Configuration.default(4)
+      |> Map.put("guards", %{"semantic" => %{"provider" => provider, "severities" => severities}})
+      |> Map.put("rules", %{
+        "prompt_injection" => %{
+          "threshold" => if(provider == "qwen", do: 0, else: opts[:threshold] || 0.8)
+        }
+      })
+
+    {:ok, %{settings: settings}} = Configuration.validate(source)
 
     rules =
       Map.new(settings["rules"], fn {name, rule} ->
@@ -49,12 +120,7 @@ defmodule Mix.Tasks.AiControl.BenchmarkSemantic do
     {:ok, snapshot} =
       Snapshot.new(%{version: "semantic-benchmark-v1", settings: settings, rules: rules})
 
-    rows =
-      cases
-      |> Enum.filter(&(split == "all" || &1["split"] == split))
-      |> Enum.map(&assess_case(&1, snapshot, config))
-
-    write_report(rows, checksum, split, config, opts)
+    {snapshot, settings}
   end
 
   defp assess_case(item, snapshot, config) do
@@ -81,7 +147,11 @@ defmodule Mix.Tasks.AiControl.BenchmarkSemantic do
     case result do
       {:ok, result} ->
         Map.merge(row, %{
-          "blocked" => result.detections != [],
+          "blocked" =>
+            result.detections != [] &&
+              snapshot.rules[
+                if(item["task"] == "injection", do: "prompt_injection", else: "content_safety")
+              ].action == :block,
           "error" => nil,
           "evidence" => result.evidence
         })
@@ -92,18 +162,39 @@ defmodule Mix.Tasks.AiControl.BenchmarkSemantic do
   end
 
   defp write_report(rows, checksum, split, config, opts) do
-    health = Req.get!(config[:semantic_url] <> "/ready", retry: false, redirect: false).body
+    module = if config[:benchmark_provider] == "prompt_guard", do: PromptGuard, else: Local
+
+    url =
+      if config[:benchmark_provider] == "prompt_guard",
+        do: config[:prompt_guard_url],
+        else: config[:semantic_url]
+
+    health =
+      Req.get!(url <> "/ready",
+        retry: false,
+        redirect: false,
+        receive_timeout: 5_000,
+        request_timeout: 5_000
+      ).body
 
     summary = %{
       dataset_checksum: checksum,
-      model_set: Local.model_set(),
-      revision: Local.revision(),
+      provider: config[:benchmark_provider],
+      model_set: module.model_set(),
+      revision: module.revision(),
       runtime: "transformers-4.57.1-torch-2.8.0-cpu-fp32",
+      device: health["device"],
+      dtype: health["dtype"],
+      cpu_threads: health["cpu_threads"],
       hardware: opts[:hardware] || "unspecified",
       cold_start_us: health["cold_start_us"],
       peak_rss_bytes: health["peak_rss_bytes"],
       split: split,
-      mapping: %{severities: ["Unsafe"], injection_categories: ["Jailbreak"]},
+      mapping: %{
+        severities: opts[:settings]["guards"]["semantic"]["severities"],
+        threshold: opts[:settings]["rules"]["prompt_injection"]["threshold"],
+        injection_categories: ["Jailbreak"]
+      },
       latency_scope:
         "full guard transport, validation and policy label mapping; excludes LLM generation",
       p50_us: percentile(rows, 0.5),
@@ -118,7 +209,7 @@ defmodule Mix.Tasks.AiControl.BenchmarkSemantic do
         |> Map.new(fn {name, items} -> {name, split_metrics(items)} end)
     }
 
-    output = opts[:output] || "docs/acceptance/step10-qwen"
+    output = opts[:output]
     File.mkdir_p!(output)
 
     File.write!(
@@ -145,11 +236,26 @@ defmodule Mix.Tasks.AiControl.BenchmarkSemantic do
     )
 
     if Enum.any?(rows, & &1["error"]), do: Mix.raise("Benchmark has service errors; see report")
+
+    validate_measurements!(health)
+  end
+
+  defp validate_measurements!(health) do
+    if !is_integer(health["cold_start_us"]) || health["cold_start_us"] < 0 ||
+         !is_integer(health["peak_rss_bytes"]) || health["peak_rss_bytes"] <= 0,
+       do: Mix.raise("Benchmark lacks cold start or peak RSS measurements; see report")
+
+    if health["device"] != "cpu" || health["dtype"] != "float32" || health["cpu_threads"] != 2,
+      do: Mix.raise("Benchmark requires CPU FP32 with exactly two threads; see report")
   end
 
   defp wait_for_idle(config, deadline) do
     health =
-      Req.get!(config[:semantic_url] <> "/ready",
+      Req.get!(
+        if(config[:benchmark_provider] == "prompt_guard",
+          do: config[:prompt_guard_url],
+          else: config[:semantic_url]
+        ) <> "/ready",
         retry: false,
         redirect: false,
         receive_timeout: 5_000,

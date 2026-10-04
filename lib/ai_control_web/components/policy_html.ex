@@ -53,10 +53,48 @@ defmodule AiControlWeb.PolicyHTML do
   def tool_description("command.run"), do: "Run a permitted status or echo function."
 
   def label_rule?(form, category),
-    do: schema_version(form) == 3 && category in ~w(prompt_injection content_safety)
+    do:
+      schema_version(form) in [3, 4] &&
+        (category == "content_safety" ||
+           (category == "prompt_injection" && injection_provider(form) == "qwen"))
+
+  def injection_provider(form), do: nested(form, :guards, "semantic", "provider", "qwen")
+  def provider_label("prompt_guard"), do: "Llama Prompt Guard 2 86M"
+  def provider_label(_), do: "Qwen3Guard Gen 0.6B"
+
+  def diff_label("guards.semantic.provider"), do: "Injection provider"
+  def diff_label("rules.prompt_injection.threshold"), do: "Injection sensitivity"
+  def diff_label(path), do: path
+
+  def diff_value(%{path: "guards.semantic.provider"}, settings, _side),
+    do: provider_label(get_in(settings, ["guards", "semantic", "provider"]))
+
+  def diff_value(%{path: "rules.prompt_injection.threshold"}, settings, _side) do
+    if label_rule_settings?(settings, "prompt_injection"),
+      do:
+        "Severity labels: #{Enum.join(settings["guards"]["semantic"]["severities"], ", ")} · Jailbreak",
+      else: "Score threshold: #{settings["rules"]["prompt_injection"]["threshold"]}"
+  end
+
+  def diff_value(change, _settings, side), do: Map.fetch!(change, side)
+
+  def provider_change_notice(settings) do
+    if get_in(settings, ["guards", "semantic", "provider"]) == "prompt_guard",
+      do:
+        "Injection now uses the maximum malicious score across all windows and the new score threshold. Response moderation continues to use Qwen.",
+      else:
+        "Injection now uses the new version's selected severity labels with the Jailbreak category. Label mapping replaces the malicious-score threshold; zero is not a score cutoff. Response moderation continues to use Qwen."
+  end
+
+  def label_rule_settings?(settings, category),
+    do:
+      settings["schema_version"] in [3, 4] &&
+        (category == "content_safety" ||
+           (category == "prompt_injection" &&
+              get_in(settings, ["guards", "semantic", "provider"]) != "prompt_guard"))
 
   def rule_actions(form, category) do
-    if label_rule?(form, category),
+    if category in ~w(prompt_injection content_safety) && schema_version(form) in [3, 4],
       do: [{"Allow", "allow"}, {"Block", "block"}],
       else: [{"Allow", "allow"}, {"Redact", "redact"}, {"Block", "block"}]
   end

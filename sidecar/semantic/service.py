@@ -156,6 +156,7 @@ def make_app(loader=Qwen):
         import sys
         return {"status": "ready", "model_set": MANIFEST["model_set"], "revision": MANIFEST["revision"],
                 "cold_start_us": state["cold_start_us"], "peak_rss_bytes": rss if sys.platform == "darwin" else rss * 1024,
+                "device": "cpu", "dtype": "float32", "cpu_threads": int(os.environ.get("SEMANTIC_CPU_THREADS", "2")),
                 "busy": gate._value == 0}
 
     @app.post("/analyze")

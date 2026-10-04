@@ -9,5 +9,5 @@ defmodule AiControl.Guards.Moderation do
     do: Semantic.assess_as("moderation", "moderation", fields, context, snapshot, config)
 
   @impl true
-  def ready?(config), do: Semantic.ready?(config)
+  def ready?(config), do: Semantic.ready?(Keyword.put(config, :injection_provider, "qwen"))
 end

@@ -1,0 +1,43 @@
+{
+  "model_id": "meta-llama/Llama-Prompt-Guard-2-86M",
+  "model_set": "llama-prompt-guard-2-86m.v1",
+  "revision": "a8ded8e697ce7c355e395a0df51f94adb4a2fd27",
+  "runtime": "transformers-4.57.1-torch-2.8.0-cpu-fp32",
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 7554,
+      "git_blob_sha1": "be16bdcf5eac8030d7d92c9cc0503480471263c4"
+    },
+    {
+      "path": "USE_POLICY.md",
+      "bytes": 5796,
+      "git_blob_sha1": "b3f1fcefae19f6396ba6081636479a3b8e39d5f7"
+    },
+    {
+      "path": "config.json",
+      "bytes": 871,
+      "git_blob_sha1": "523fd77f2094749c94c3cec5f1230508c54d71d5"
+    },
+    {
+      "path": "special_tokens_map.json",
+      "bytes": 286,
+      "git_blob_sha1": "2c9cb07c8fdeeb5ac3ceafb170592e990b204dcd"
+    },
+    {
+      "path": "tokenizer_config.json",
+      "bytes": 19674,
+      "git_blob_sha1": "58c511edbc1ccdea19453c3a8ecd838fd42bc917"
+    },
+    {
+      "path": "model.safetensors",
+      "bytes": 1115268200,
+      "sha256": "e72017dbbe89c1232dcbc4a74ce0c389db5b468c42afd05850347b2a8c5f6b09"
+    },
+    {
+      "path": "tokenizer.json",
+      "bytes": 16351353,
+      "sha256": "3e7e96867c2acdd575f0862c74822e05d1d15b93d9d9a4a2144b1ce83ae3339f"
+    }
+  ]
+}

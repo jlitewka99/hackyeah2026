@@ -59,7 +59,7 @@ defmodule AiControl.Policies.Draft do
               do: Map.put(config, "entities", guard["entities"]),
               else: config
 
-          config = Map.merge(config, Map.take(guard, ~w(severities categories)))
+          config = Map.merge(config, Map.take(guard, ~w(severities categories provider)))
           {id, config}
         end)
     }
@@ -92,7 +92,7 @@ defmodule AiControl.Policies.Draft do
       "budgets" => mapping(draft.budgets, &limits/1)
     }
 
-    if draft.schema_version in [2, 3] do
+    if draft.schema_version in [2, 3, 4] do
       Map.merge(source, %{
         "detector_sets" => draft.detector_sets,
         "tools" => selected_tools(draft)
@@ -174,7 +174,7 @@ defmodule AiControl.Policies.Draft do
         do: Map.put(base, "entities", config["entities"]),
         else: base
 
-    base = Map.merge(base, Map.take(config, ~w(severities categories)))
+    base = Map.merge(base, Map.take(config, ~w(severities categories provider)))
 
     case config["stages"] do
       value when value in ["", nil] -> base
