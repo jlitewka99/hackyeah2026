@@ -687,6 +687,13 @@ wizualnego; zastanego driftu nie naprawiano w tym rozszerzeniu.
   SQL jest stały albo pochodzi z `Repo.to_sql`, wartości filtrów są bindowane.
   Pozostaje też zastane zgłoszenie niskiej pewności przy imporcie pliku polityki.
   Nie dodano wyciszeń skanera. Wyniki istniejących zadań CI są dostępne w checks PR.
+- [CI 37164674966](https://github.com/jlitewka99/hackyeah2026/actions/runs/37164674966)
+  na commicie implementacji `5f61d00` zakończyło wszystkie pięć zadań sukcesem:
+  Quality, Tests/assets, Dialyzer, Security oraz kontener z rzeczywistymi NER,
+  Qwen i tokenizerem, transportem release, awariami procesów i SIGTERM.
+  [PR #16](https://github.com/jlitewka99/hackyeah2026/pull/16) scalono do `main`
+  2026-10-04. Zapis wyniku CI powstał po scaleniu i jest osobnym uzupełnieniem
+  dokumentacji, bez zmian implementacji.
 - Impeccable: istniejący neutralny system, angielski interfejs, płaskie sekcje,
   desktop 1440×1000 i mobile 390×844, oba motywy; potwierdzono brak poziomego
   overflow, czytelne identyfikatory, stany puste i błędny zakres czasu. Menu mobilne
