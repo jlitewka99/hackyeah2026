@@ -135,8 +135,8 @@ Zmiana dotyczy pracy **po ukończeniu i scaleniu kroku 7**. Nie zmienia zakresu 
 1–7 — ukończone i scalone
 8, 9, 10, 12A — cztery równoległe branche
 12B, 11A — integracja narzędzi i dashboard równolegle
-11B — wspólny odbiór MVP
-13, 15, 16, 17, 18 — kolejne niezależne obszary po MVP
+11B — implementacja techniczna; 11B.1–11B.3 zamykają odbiór MVP
+13, 15, 16, 17, 18 — implementacja równolegle z otwartym odbiorem 11B
 14, 19 — analiza z kontekstem workflow/RAG i zatwierdzanie
 20 — końcowy odbiór pełnej roadmapy
 ```
@@ -171,7 +171,48 @@ Po pierwszej fali scalać kolejno **8 → 9 → 10 → 12A**, sprawdzając integ
 
 Testy po scaleniu obejmują także interakcje między branchami: tokenizację treści po redakcji, rozliczenie zablokowanej odpowiedzi, timeout NER/semantyki bez downstream, poprawność JSON argumentów po redakcji, snapshot podczas zmiany polityki oraz liczniki narzędzi przy równoczesnych wykonaniach. Każdy zakres kończy się `mix precommit`; frontend także `mix assets.build`, a 11B rzeczywistymi modelami i testami bezpieczeństwa z sekcji 5.
 
-Po MVP grupy nie znoszą wspólnych kontraktów: 14 korzysta z kontekstu workflowów z 15 i RAG z 18, a przed równoległą implementacją 14 i 19 trzeba uzgodnić obsługę `REVIEW` w kontrakcie decyzji. Krok 20 ma końcowy odbiór po wszystkich rozszerzeniach; jego dokumentację można uzupełniać wraz z funkcjami.
+#### Równoległe kroki 13, 15, 16, 17 i 18 przy otwartym odbiorze 11B
+
+**Ustalenie 2026-10-04:** brak wag i pomiarów Prompt Guard nie jest twardą
+zależnością implementacji tych pięciu kroków. Można rozpocząć je równolegle po
+scalonych 8–10, 11A i 12B. Odbiór MVP pozostaje otwarty do wykonania
+**11B.1–11B.3**; dalsza implementacja nie zastępuje tych bramek.
+
+| Krok | Co może powstawać teraz | Zależność i ryzyko integracji |
+| --- | --- | --- |
+| 13 — MCP | Adapter protokołu, tożsamość, katalog, Origin, izolacja klienta | Korzysta z wykonawcy narzędzi 12B i jego kontroli; nie tworzy drugiej ścieżki wykonania. Kontekst workflow z 15 wymaga uzgodnienia przy jego podłączeniu |
+| 15 — workflowy | Rejestr, lifecycle, limity, delegacja, wspólny budżet | Zmienia punkty admission/dispatch/rozliczenia gatewaya i narzędzi, używane też przez 13 i 17. Uzgodnić kontrakt kontekstu workflow i scalanie tych punktów |
+| 16 — Oban/panel Tests | Kolejki, tenant-scoped joby, raporty, strona testów | Uruchamianie porównania providerów zależy od kodu benchmarku 11B; wyniki Prompt Guard wymagają 11B.1 i 11B.2. Brak usługi ma być jawnym błędem lub statusem niedostępności, bez pozornego wyniku jakości. Audyt enforcement pozostaje synchroniczny |
+| 17 — streaming | Transport SSE, anulowanie, bufor, częściowe rozliczenia | Bazuje na output filtering z 8. Obecny Prompt Guard i Qwen Gen oceniają kompletne przekazane pola: nie udostępniać niezatwierdzonych chunków. Wariant Qwen Stream ma własny odbiór; kwalifikacja z 11B go nie obejmuje |
+| 18 — RAG/pamięć | Pochodzenie, izolacja zasobów, kontrola kontekstu i zapisów, rozszerzenia NER | Zachowuje aktualny kontrakt guardów, redakcję i offsety UTF-8. Dokumenty/pamięć przechodzą kontrolę przed użyciem; brak Prompt Guard nie pozwala pominąć wymaganego guardu. Nowe przypadki RAG/PII mają własną ewaluację |
+
+Zasady dla równoległych branchy:
+
+- Każdy krok ma osobny worktree i bazę testową. Wspólną bazę kodu zapisać jako
+  commit. Dopóki [PR #18](https://github.com/jlitewka99/hackyeah2026/pull/18) nie
+  jest scalony, `main` zawiera 11A/12B, ale nie implementację 11B. Funkcje zależne
+  od v4/porównania providerów muszą jawnie bazować na commicie 11B albo poczekać
+  na jego integrację; pozostałe mogą startować z `main` i później podłączyć 11B.
+- Przed zmianami uzgodnić właściciela wspólnych plików: gateway/etapy,
+  wykonawca narzędzi, budżety, schemat i formularz polityki, router, supervisor,
+  konfiguracja, zależności i Dockerfile. Zmiany tych plików scalać pojedynczo;
+  adaptery 13/16/18 powinny korzystać z istniejących kontekstów. Nie wprowadzać
+  na kilku branchach różnych znaczeń tego samego numeru schematu polityki.
+- Każde nowe wywołanie zachowuje tożsamość, jeden snapshot, kontrolę zasobu,
+  wymagane guardy, budżet i audyt przed efektem; nie dodawać automatycznej zmiany
+  providera ani wyłączać kontroli z powodu brakujących wag. Anulowanie streamu,
+  retry joba i delegacja nie mogą obchodzić naliczeń ani idempotencji.
+- Pomiary 11B wykonywać na osobnym, bezczynnym sprzęcie lub przy wstrzymanych
+  testach modeli innych branchy. Oban/benchmarki, RAG i LLM mogą zafałszować
+  p95/RSS przez wspólny CPU/RAM. Zamrożonego datasetu 11B nie rozszerzać nowymi
+  przypadkami; dodatkowe scenariusze zapisać oddzielnie.
+- Po integracji powtórzyć właściwą matrycę bezpieczeństwa na zintegrowanym
+  commicie, szczególnie budżety workflow, MCP, anulowanie streamu, kontrolę RAG
+  i awarie audytu. Powtórny benchmark modeli jest wymagany, jeśli zmieniono
+  model/tokenizer, adapter, sposób oceny lub ścieżkę pomiaru. Zamknięcie 11B nie
+  oznacza automatycznego odbioru późniejszych rozszerzeń.
+
+Grupy nie znoszą wspólnych kontraktów: 14 korzysta z kontekstu workflowów z 15 i RAG z 18, a przed równoległą implementacją 14 i 19 trzeba uzgodnić obsługę `REVIEW` w kontrakcie decyzji. Krok 20 ma końcowy odbiór po wszystkich rozszerzeniach; jego dokumentację można uzupełniać wraz z funkcjami.
 
 ## 3. Kolejność implementacji
 
@@ -813,6 +854,47 @@ ani gwarancji exactly-once zewnętrznych efektów; blokada wyjścia nie cofa efe
 Pełne mapowanie FR-01–FR-22, odtwarzalne komendy, demo zmiany bez restartu i bramki
 opisano w `docs/acceptance/step11b.md` oraz `docs/prompt-guard.md`.
 **Checkbox 11 pozostaje niezaznaczony. PR jest draft do pełnego odbioru.**
+
+#### 11B.1 — Rzeczywiste wagi i dostęp Prompt Guard
+
+- [ ] Zapewnić zatwierdzony dostęp Hugging Face, pobrać przypięte wagi/tokenizer,
+  sprawdzić rozmiary i checksumy, zachować licencję oraz wymagane oznaczenia.
+  Token przekazać przez sekret środowiska/BuildKit, nie przez repozytorium.
+- [ ] Uruchomić usługę offline na loopback i potwierdzić `/ready` oraz rzeczywistą
+  analizę z oczekiwanym modelem/revision. Sam kontrakt z fixture nie zamyka punktu.
+
+**Status:** otwarte; brak zatwierdzonych wag. Komendy: [setup Prompt Guard](docs/prompt-guard.md).
+
+#### 11B.2 — Pomiary obu modeli i zwycięska polityka MVP
+
+- [ ] Po 11B.1 uruchomić kalibrację i test Qwen oraz Prompt Guard kolejno na tym
+  samym bezczynnym sprzęcie, CPU FP32/dwa wątki. Zachować dataset, checksum i
+  split; zamrozić ustawienia przed pomiarem testowym.
+- [ ] Zachować kompletne raporty bez błędów: TP/FP/TN/FN, FPR, precision/recall,
+  p50/p95, cold start i peak RSS. Kwalifikacja: FPR≤5%, najwyższy średni recall
+  direct/indirect, następnie niższy p95; bez minimalnego recall.
+- [ ] Zapisać zwycięzcę i ustawienia w przykładowej polityce MVP. Brak
+  kwalifikującego wariantu pozostawia punkt otwarty; istniejące polityki wymagają
+  osobnej jawnej aktywacji.
+
+**Status:** otwarte; nie ma rzeczywistego porównania ani zakwalifikowanego zwycięzcy.
+Komendy i kryteria: [raport 11B](docs/acceptance/step11b.md).
+
+#### 11B.3 — Pełny odbiór rzeczywistych usług i kontenera
+
+- [ ] Uruchomić `run_security_tests.sh --live-models` z rzeczywistymi Prompt Guard,
+  Qwen, NER, tokenizerem i lokalnym LLM; żadnych pominięć brakujących usług.
+- [ ] Potwierdzić standardowy kontener oraz gated build z Prompt Guard, offline
+  runtime, loopback, awarie pięciu procesów i shutdown. Odbiór standardowego
+  czteroprocesowego obrazu nie zastępuje gated sprawdzenia.
+- [ ] Potwierdzić wspólną matrycę chat → narzędzia → dashboard → JSONL i demo
+  zmiany polityki bez restartu. Zapisać commit, środowisko i wyniki; zaznaczyć
+  checkbox 11 dopiero po spełnieniu 11B.1–11B.3 oraz pozostałych kryteriów MVP.
+
+**Status:** otwarte; lokalny live odbiór nie przeszedł, Docker był niedostępny,
+gated odbiór nie został wykonany. Standardowe CI dla pierwotnego commita 11B
+potwierdziło Tests, Quality, Dialyzer i Security; odbiór kontenera był jeszcze
+w toku przy tej aktualizacji. To niezależna bramka od implementacji 13/15/16/17/18.
 
 ### Krok 12. Tool firewall i ograniczenia zasobów
 
