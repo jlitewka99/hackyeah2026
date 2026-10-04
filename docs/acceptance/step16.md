@@ -1,8 +1,8 @@
 # Step 16: durable jobs, reports and isolated gateway tests
 
-Acceptance date: 2026-10-04. Implementation is reviewable; the plan checkbox stays
-open until successful Live model acceptance and the extended Linux container
-smoke have been observed. These gaps require a draft PR.
+Acceptance date: 2026-10-04. Implementation and extended Linux container smoke
+are verified; the plan checkbox stays open until successful full Live model
+acceptance. That remaining gap requires a draft PR.
 
 ## Deployment and configuration
 
@@ -186,6 +186,7 @@ application's normal database service.
 | `mix dialyzer` | Passed, zero type errors |
 | `mix security` | Passed configured medium threshold; dependency audit reports no vulnerabilities |
 | Production release build and child executor | Passed; 15/15 Controlled HTTP cases, real audit/accounting/sandbox, parent fixtures isolated |
+| Linux CI on `83d2cb7` | Passed Quality, Tests (648 passed, 13 excluded), Dialyzer, Security and container; isolated release runner 15/15, real NER v1/v2 and Qwen, four process failures and SIGTERM |
 | Release child after parent input closes | Exit 5 after the first case; parent-loss termination observed |
 | Runner cancellation integration | Passed; stops after first validated case and does not publish an artifact |
 | Closed child stdin | Regression passed; a broken pipe returns `runner_failed` without killing the worker |
@@ -218,7 +219,15 @@ on earlier commit `518a14b` passed Quality, Tests, Dialyzer and Security, but it
 container release runner failed with `epipe`. The child port is now unlinked and
 monitored, pending results are consumed before idle heartbeats, and closure
 handles a concurrent child exit. The regression and final macOS production
-release pass; the Linux rerun is pending.
+release pass.
+
+[Linux CI 37176464160](https://github.com/jlitewka99/hackyeah2026/actions/runs/37176464160)
+on implementation commit `83d2cb7` then passed all five required jobs, including
+the isolated release runner's 15 HTTP gateway/budget/sandbox cases, actual pinned
+NER v1/v2 and Qwen enforcement, four child failures and SIGTERM. Its ExUnit result
+is 648 passed, 13 excluded. The optional gated Prompt Guard job was skipped by
+workflow configuration; this success does not substitute for full Live gateway
+and Polish benchmark acceptance.
 
 The UI uses the existing English workspace components, paired HEEx templates,
 streams and stable DOM IDs. Bounded visual verification and the independent
@@ -231,10 +240,9 @@ Impeccable review/documentation handoffs are recorded in
 - Successful Live gateway + Polish benchmark requires all pinned local models
   and sidecars. It was not observed here. Controlled success exercises synthetic
   policies and providers; it does not qualify model accuracy or complete Step 11B.
-- The extended `docker/smoke` runs the isolated release suite against a second
-  PostgreSQL database. Its first Linux run exposed the repaired `epipe` failure;
-  successful Linux acceptance awaits the rerun. The final macOS production
-  release passed. The local Docker daemon is unavailable.
+- The local Docker daemon is unavailable. Linux acceptance was completed in CI
+  with a dedicated runner database after repairing `epipe`; the full Live suite
+  remains unverified because it additionally requires gated Prompt Guard.
 - Target-hardware latency/resource coexistence remains to be measured. Process
   isolation shares resources and is not a guarantee against resource contention.
 - `.impeccable/design.json` was already stale. The one detector pass produced
