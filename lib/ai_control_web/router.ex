@@ -50,12 +50,22 @@ defmodule AiControlWeb.Router do
     plug :require_permission, "signatures.read"
   end
 
+  pipeline :knowledge_read do
+    plug :require_permission, "knowledge.read"
+  end
+
   scope "/v1", AiControlWeb do
     pipe_through [:api, :agent_api]
     get "/auth", ApiAuthController, :show, log: false
     get "/models", GatewayController, :models, log: false
     post "/chat/completions", GatewayController, :chat, log: false
     post "/tool_calls", ToolController, :create, log: false
+    post "/knowledge/search", KnowledgeController, :search, log: false
+    get "/memory", KnowledgeController, :index, log: false
+    get "/memory/:id", KnowledgeController, :show, log: false
+    post "/memory", KnowledgeController, :create, log: false
+    patch "/memory/:id", KnowledgeController, :update, log: false
+    delete "/memory/:id", KnowledgeController, :delete, log: false
   end
 
   scope "/", AiControlWeb do
@@ -99,6 +109,26 @@ defmodule AiControlWeb.Router do
     end
 
     post "/users/update-password", UserSessionController, :update_password
+  end
+
+  scope "/organizations/:organization_id", AiControlWeb do
+    pipe_through [:browser, :require_authenticated_user, :require_organization, :knowledge_read]
+    get "/knowledge/resources", KnowledgeController, :index, log: false
+    get "/knowledge/resources/:id", KnowledgeController, :show, log: false
+    post "/knowledge/resources", KnowledgeController, :create, log: false
+    patch "/knowledge/resources/:id", KnowledgeController, :update, log: false
+    delete "/knowledge/resources/:id", KnowledgeController, :delete, log: false
+
+    live_session :knowledge,
+      on_mount: [
+        {AiControlWeb.OrganizationAuth, :require_organization},
+        {AiControlWeb.WorkspaceNavigation, :default}
+      ] do
+      live "/knowledge", OrganizationKnowledgeLive, :index
+      live "/knowledge/new", OrganizationKnowledgeLive, :new
+      live "/knowledge/:resource_id", OrganizationKnowledgeLive, :show
+      live "/knowledge/:resource_id/edit", OrganizationKnowledgeLive, :edit
+    end
   end
 
   scope "/organizations/:organization_id", AiControlWeb do

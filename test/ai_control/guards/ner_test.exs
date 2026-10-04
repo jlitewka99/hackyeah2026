@@ -67,6 +67,33 @@ defmodule AiControl.Guards.NerTest do
              Ner.assess(["safe"], nil, snapshot(), Keyword.put(config(), :response_bytes, 1))
   end
 
+  test "v5 selects v2 and validates its independent UTF-8 offsets" do
+    {:ok, policy} = Configuration.validate(Configuration.default(5))
+
+    Req.Test.stub(__MODULE__, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      assert Jason.decode!(body)["model_set"] == "pl-nkjp.v2"
+
+      Req.Test.json(conn, %{
+        model_set: "pl-nkjp.v2",
+        detections: [Map.put(finding("person", 5, 8), "detector_id", "ner.person.v2")]
+      })
+    end)
+
+    assert {:ok, %{detections: [%{rule_id: "ner.person.v2"}]}} =
+             Ner.assess(["😀 Jan"], nil, policy, config())
+
+    Req.Test.stub(
+      __MODULE__,
+      &Req.Test.json(&1, %{
+        model_set: "pl-nkjp.v2",
+        detections: [Map.put(finding("person", 1, 3), "detector_id", "ner.person.v2")]
+      })
+    )
+
+    assert {:error, :guard_unavailable} = Ner.assess(["😀 Jan"], nil, policy, config())
+  end
+
   test "readiness requires the pinned, loaded model" do
     Req.Test.stub(__MODULE__, &Req.Test.json(&1, %{status: "ready", model_set: "pl-nkjp.v1"}))
     assert Ner.ready?(config())

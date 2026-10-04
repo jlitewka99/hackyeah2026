@@ -1,0 +1,264 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} active_page="knowledge">
+  <div class="page-content" id="organization-knowledge">
+    <h1>Knowledge</h1>
+    <p class="page-description">
+      Control the sources your agents can retrieve. Documents and memory are checked before storage and checked again when read.
+    </p>
+    <nav class="row-actions mt-6" aria-label="Knowledge sources" id="knowledge-tabs">
+      <.link
+        patch={~p"/organizations/#{@current_scope.organization.id}/knowledge"}
+        class="button-secondary"
+        aria-current={@kind == "document" && "page"}
+        id="knowledge-documents-tab"
+      >Documents</.link>
+      <.link
+        patch={~p"/organizations/#{@current_scope.organization.id}/knowledge?kind=memory"}
+        class="button-secondary"
+        aria-current={@kind == "memory" && "page"}
+        id="knowledge-memory-tab"
+      >Memory</.link>
+    </nav>
+    <p :if={@error} id="knowledge-error" role="alert" class="report-error mt-6">
+      {error_message(@error)}
+    </p>
+    <%= if @live_action == :index do %>
+      <section class="list-section" aria-labelledby="knowledge-list-heading">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <h2 id="knowledge-list-heading">
+            {if @kind == "memory", do: "Agent memory", else: "Documents"}
+          </h2>
+          <.link
+            :if={"knowledge.manage" in @current_scope.grants.permissions}
+            navigate={
+              ~p"/organizations/#{@current_scope.organization.id}/knowledge/new?kind=#{@kind}"
+            }
+            class="button-primary"
+            id="knowledge-new"
+          ><.icon name="hero-plus" class="size-4" />{if @kind == "memory",
+            do: "Add memory",
+            else: "Add document"}</.link>
+        </div>
+        <.form
+          for={@filters_form}
+          id="knowledge-filter-form"
+          phx-submit="filter"
+          class="knowledge-filters mt-6"
+        >
+          <.input field={@filters_form[:query]} label="Search checked text" maxlength="2048" />
+          <.input
+            field={@filters_form[:agent_id]}
+            type="select"
+            label="Owner agent"
+            options={@agents}
+            prompt="All available agents"
+          />
+          <.button id="knowledge-search" class="button-secondary" phx-disable-with="Checking…">Search</.button>
+        </.form>
+        <div id="knowledge-resource-list" phx-update="stream">
+          <p class="hidden only:block muted py-8" id="knowledge-empty">
+            No resources are available with these filters and your current access.
+          </p>
+          <div
+            :for={{id, resource} <- @streams.resources}
+            id={id}
+            class="resource-row knowledge-row"
+          >
+            <div class="min-w-0 flex-1">
+              <.link
+                navigate={
+                  ~p"/organizations/#{@current_scope.organization.id}/knowledge/#{resource["id"]}"
+                }
+                class="text-link font-medium break-words"
+              >{resource["title"]}</.link>
+              <p class="muted text-sm mt-2">
+                {resource["trust_level"]} · {resource["origin"]} · Revision {resource["revision"]} · {resource[
+                  "last_action"
+                ]}
+              </p>
+              <p class="resource-identifier muted mt-1">
+                Owner {agent_name(@agents, resource["owner_agent_id"])}
+              </p>
+            </div>
+            <.link
+              navigate={
+                ~p"/organizations/#{@current_scope.organization.id}/knowledge/#{resource["id"]}"
+              }
+              class="button-secondary"
+              id={"knowledge-open-#{resource["id"]}"}
+            >Inspect source</.link>
+          </div>
+        </div>
+        <nav
+          :if={String.trim(@filter["query"] || "") == "" && (@page > 1 || @resource_count == 50)}
+          aria-label="Resource pages"
+          class="row-actions mt-4"
+          id="knowledge-pagination"
+        >
+          <button
+            id="knowledge-previous"
+            type="button"
+            phx-click="page"
+            phx-value-direction="previous"
+            disabled={@page == 1}
+            class="button-secondary"
+          >Previous</button>
+          <span class="muted text-sm">Page {@page}</span>
+          <button
+            id="knowledge-next"
+            type="button"
+            phx-click="page"
+            phx-value-direction="next"
+            disabled={@resource_count < 50}
+            class="button-secondary"
+          >Next</button>
+        </nav>
+        <p class="muted text-sm mt-4">
+          Search uses exact words. Only sources available to your assigned agents are returned.
+        </p>
+      </section>
+    <% end %>
+    <%= if @live_action in [:new, :edit] && (@live_action == :new || @resource) do %>
+      <section class="list-section" aria-labelledby="knowledge-editor-heading">
+        <h2 id="knowledge-editor-heading">
+          {if @live_action == :new, do: "Add a checked source", else: "Edit source"}
+        </h2>
+        <.form
+          for={@form}
+          id="knowledge-resource-form"
+          phx-change="validate"
+          phx-submit="save"
+          class="knowledge-editor mt-6"
+          aria-busy={@saving}
+        >
+          <.input field={@form[:title]} label="Title" required maxlength="200" />
+          <.input
+            field={@form[:owner_agent_id]}
+            type="select"
+            label="Owner agent"
+            options={@agents}
+            prompt="Choose an agent"
+            required
+            disabled={@live_action == :edit}
+          />
+          <.input field={@form[:content]} type="textarea" label="Text" rows="12" />
+          <fieldset :if={@kind == "document" && @live_action == :new} class="access-fieldset">
+            <legend>Or upload a text file</legend>
+            <p class="muted text-sm mb-3">
+              TXT or Markdown in UTF-8, up to 64 KiB. Uploaded text replaces the text field.
+            </p>
+            <.live_file_input upload={@uploads.document} id="knowledge-document-upload" />
+            <p :for={entry <- @uploads.document.entries} class="text-sm mt-2">
+              {entry.client_name} · {entry.progress}%
+            </p>
+            <p :for={error <- upload_errors(@uploads.document)} role="alert" class="report-error">
+              Upload could not be accepted: {error}.
+            </p>
+          </fieldset>
+          <.input field={@form[:source_reference]} label="Source reference" maxlength="1000" />
+          <p class="muted text-sm -mt-2">
+            Optional provenance. URLs are recorded as text and are never fetched.
+          </p>
+          <.input
+            field={@form[:trust_level]}
+            type="select"
+            label="Source trust"
+            options={[{"Untrusted", "untrusted"}, {"Internal", "internal"}]}
+          />
+          <p class="muted text-sm -mt-2">Both levels pass the same content checks.</p>
+          <.input
+            field={@form[:shared_agent_ids]}
+            type="select"
+            label="Share with agents (read only)"
+            multiple
+            options={@agents}
+          />
+          <p class="muted text-sm -mt-2">
+            Select agents to give them read access. Use Command or Control to select several. Leave empty to keep this source private.
+          </p>
+          <div class="row-actions">
+            <.button
+              id="knowledge-save"
+              class="button-primary"
+              disabled={@saving}
+              phx-disable-with="Checking and saving…"
+            >{if @saving, do: "Checking and saving…", else: "Check and save"}</.button>
+            <.link
+              navigate={~p"/organizations/#{@current_scope.organization.id}/knowledge"}
+              class="button-secondary"
+              id="knowledge-cancel"
+            >Cancel</.link>
+          </div>
+        </.form>
+      </section>
+    <% end %>
+    <%= if @live_action == :show && @resource do %>
+      <section
+        class="list-section"
+        aria-labelledby="knowledge-detail-heading"
+        id="knowledge-resource-detail"
+      >
+        <h2 id="knowledge-detail-heading">{@resource["title"]}</h2>
+        <dl class="report-facts mt-6">
+          <div>
+            <dt>Owner agent</dt><dd class="resource-identifier">
+              {agent_name(@agents, @resource["owner_agent_id"])}
+            </dd>
+          </div>
+          <div>
+            <dt>Provenance</dt><dd>{@resource["origin"]} · {@resource["source_reference"]}</dd>
+          </div>
+          <div>
+            <dt>Trust and revision</dt><dd>
+              {@resource["trust_level"]} · Revision {@resource["revision"]}
+            </dd>
+          </div>
+          <div>
+            <dt>Storage check</dt><dd>
+              {@resource["last_action"]} · {ReportingHTML.time(@resource["checked_at"])}
+            </dd>
+          </div>
+          <div>
+            <dt>Stored policy</dt><dd class="resource-identifier">
+              {@resource["policy_version"]}
+            </dd>
+          </div>
+          <div>
+            <dt>Read-only recipients</dt><dd class="resource-identifier">
+              {if @resource["shared_agent_ids"] == [],
+                do: "Private to owner",
+                else: Enum.map_join(@resource["shared_agent_ids"], ", ", &agent_name(@agents, &1))}
+            </dd>
+          </div>
+        </dl>
+        <p class="muted text-sm mt-6">
+          The text below passed the current policy. Its storage check records the earlier write.
+        </p>
+        <pre id="knowledge-checked-content" class="knowledge-text mt-4">{@resource["content"]}</pre>
+        <div :if={manageable?(@current_scope, @resource)} class="row-actions mt-6">
+          <.link
+            navigate={
+              ~p"/organizations/#{@current_scope.organization.id}/knowledge/#{@resource["id"]}/edit"
+            }
+            class="button-secondary"
+            id="knowledge-edit"
+          >Edit source</.link>
+          <button
+            type="button"
+            phx-click="delete"
+            id="knowledge-delete"
+            class="button-secondary"
+            data-confirm="Delete this resource and its search index?"
+          >Delete source</button>
+        </div>
+      </section>
+    <% end %>
+    <button
+      :if={@metadata && manageable?(@current_scope, @metadata)}
+      type="button"
+      phx-click="delete"
+      id="knowledge-delete-blocked"
+      class="button-secondary mt-6"
+      data-confirm="Delete this resource and its search index?"
+    >Delete unavailable source</button>
+  </div>
+</Layouts.app>

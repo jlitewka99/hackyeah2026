@@ -1,4 +1,5 @@
 """Local Presidio/Stanza gateway. Never return text, snippets or exception messages."""
+import hashlib
 import json
 import logging
 import math
@@ -53,7 +54,28 @@ def load_analyzer():
     return AnalyzerEngine(registry=registry, nlp_engine=engine, supported_languages=["pl"], log_decision_process=False)
 
 
-def analyze(analyzer, fields):
+def address_recognizer_v2():
+    from presidio_analyzer import Pattern, PatternRecognizer
+    # Require a street cue and house number. A place or a first name alone is not an address.
+    street = r"(?<!\w)(?:ul\.|ulica|al\.|aleja|aleje|pl\.|plac|os\.|osiedle)[ \t]+[\p{L}][\p{L} .'-]{1,100}?[ \t]+[0-9]{1,5}[A-Za-z]?(?:/[0-9]{1,5}|[ \t]+(?:m\.|lok\.)[ \t]*[0-9]{1,5})?(?:(?:,[ \t]*|[ \t]*\n[ \t]*|[ \t]+)[0-9]{2}-[0-9]{3}[ \t]+[\p{L}][\p{L} '-]{1,60})?"
+    return PatternRecognizer(supported_entity="address", supported_language="pl",
+        patterns=[Pattern("polish_contextual_address_v2", street, 0.85)])
+
+
+def load_analyzers():
+    from presidio_analyzer import AnalyzerEngine, RecognizerRegistry
+    rules = json.loads(Path(__file__).with_name("rules.v2.json").read_text())
+    manifest = Path(__file__).with_name(rules["weights_manifest"])
+    if hashlib.sha256(manifest.read_bytes()).hexdigest() != rules["weights_manifest_sha256"]:
+        raise RuntimeError("rules_weights_manifest_mismatch")
+    legacy = load_analyzer()
+    recognizers = [r for r in legacy.registry.recognizers if "address" not in r.supported_entities]
+    registry = RecognizerRegistry(recognizers=recognizers + [address_recognizer_v2()], supported_languages=["pl"])
+    return {MODEL_SET: legacy, "pl-nkjp.v2": AnalyzerEngine(registry=registry,
+        nlp_engine=legacy.nlp_engine, supported_languages=["pl"], log_decision_process=False)}
+
+
+def analyze(analyzer, fields, model_set=MODEL_SET):
     findings = []
     for field in fields:
         text = field["text"]
@@ -64,16 +86,16 @@ def analyze(analyzer, fields):
             if result.entity_type not in ENTITIES or not 0 <= result.start < result.end <= len(text) or not math.isfinite(result.score) or not 0 <= result.score <= 1:
                 raise ValueError("invalid_model_result")
             findings.append({"field_index": field["field_index"], "type": result.entity_type,
-                "score": float(result.score), "detector_id": f"ner.{result.entity_type}.v1",
+                "score": float(result.score), "detector_id": f"ner.{result.entity_type}.{model_set.rsplit('.', 1)[-1]}",
                 "start_byte": len(text[:result.start].encode("utf-8")),
                 "end_byte": len(text[:result.end].encode("utf-8"))})
             if len(findings) > 20_000:
                 raise ValueError("too_many_results")
-    return {"model_set": MODEL_SET, "detections": findings}
+    return {"model_set": model_set, "detections": findings}
 
 
 def valid_fields(value):
-    if not isinstance(value, dict) or set(value) != {"fields"} or not isinstance(value["fields"], list):
+    if not isinstance(value, dict) or set(value) not in ({"fields"}, {"fields", "model_set"}) or value.get("model_set", MODEL_SET) not in {MODEL_SET, "pl-nkjp.v2"} or not isinstance(value["fields"], list):
         return False
     if len(value["fields"]) > 20_000:
         return False
@@ -83,7 +105,7 @@ def valid_fields(value):
         for index, field in enumerate(value["fields"]))
 
 
-def make_app(loader=load_analyzer):
+def make_app(loader=load_analyzers):
     state = {"analyzer": None}
     gate = threading.BoundedSemaphore(1)
 
@@ -99,10 +121,13 @@ def make_app(loader=load_analyzer):
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
     @app.get("/ready")
-    async def ready():
+    async def ready(request: Request):
         if state["analyzer"] is None:
             return JSONResponse({"status": "not_ready"}, status_code=503)
-        return {"status": "ready", "model_set": MODEL_SET}
+        model_set = request.query_params.get("model_set", MODEL_SET)
+        if model_set not in {MODEL_SET, "pl-nkjp.v2"}:
+            return JSONResponse({"status": "not_ready"}, status_code=503)
+        return {"status": "ready", "model_set": model_set}
 
     @app.post("/analyze")
     async def endpoint(request: Request):
@@ -123,7 +148,9 @@ def make_app(loader=load_analyzer):
         if not gate.acquire(blocking=False):
             return JSONResponse({"error": "capacity_exceeded"}, status_code=429)
         try:
-            return await run_in_threadpool(analyze, state["analyzer"], value["fields"])
+            model_set = value.get("model_set", MODEL_SET)
+            analyzer = state["analyzer"][model_set] if isinstance(state["analyzer"], dict) else state["analyzer"]
+            return await run_in_threadpool(analyze, analyzer, value["fields"], model_set)
         except Exception:
             return JSONResponse({"error": "analysis_unavailable"}, status_code=503)
         finally:

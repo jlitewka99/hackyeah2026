@@ -46,6 +46,10 @@ defmodule AiControlWeb.GatewayError do
   end
 
   defp classify(:invalid_request), do: {400, "Unsupported or invalid request."}
+  defp classify(:knowledge_conflict), do: {409, "The resource changed. Refresh and try again."}
+
+  defp classify(code) when code in [:knowledge_disabled, :knowledge_write_disabled],
+    do: {403, "Knowledge operation is not allowed."}
 
   defp classify(code) when code in [:invalid_tool_request, :invalid_tool_arguments],
     do: {400, "Unsupported or invalid tool request."}

@@ -1,4 +1,14 @@
 @import "tailwindcss" source(none);
+
+.knowledge-filters { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; gap: 1rem; align-items: end; }
+.knowledge-editor { max-width: 48rem; display: grid; gap: 1.25rem; }
+.knowledge-text { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.65; max-width: 75ch; padding: 1.5rem; background: var(--surface-subtle); border: 1px solid var(--line); }
+#knowledge-tabs [aria-current="page"] { color: var(--ink); border-color: var(--ink); }
+@media (max-width: 640px) {
+  .knowledge-filters { grid-template-columns: minmax(0, 1fr); }
+  .knowledge-row { align-items: start; flex-direction: column; }
+  .knowledge-text { padding: 1rem; }
+}
 @import "phoenix-colocated/ai_control/colocated.css";
 @source "../css";
 @source "../js";

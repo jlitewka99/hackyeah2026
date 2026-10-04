@@ -358,6 +358,21 @@ defmodule AiControl.Policies do
     end
   end
 
+  def snapshot_for_knowledge(%Scope{} = scope, permission) do
+    with {:ok, current} <- Access.authorize(scope, permission),
+         true <- current.organization.status == :active,
+         %Set{} = set <- Repo.get_by(Set, [organization_id: current.organization.id], log: false),
+         {:ok, version, _} <- effective_version(set),
+         {:ok, policy} <- snapshot(version) do
+      {:ok, policy, current}
+    else
+      _ -> {:error, :forbidden}
+    end
+  end
+
+  def snapshot_for_knowledge(%Principal{} = principal, _permission),
+    do: snapshot_for_models(principal, nil)
+
   def model_access(identity, policy, agent_id, model) do
     {organization_id, agent} = identity_resources(identity, agent_id)
 

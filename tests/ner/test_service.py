@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sidecar/ner"))
 from fastapi.testclient import TestClient
-from service import analyze, load_analyzer, make_app
+from service import analyze, address_recognizer_v2, load_analyzer, load_analyzers, make_app
 
 
 class SyntheticAnalyzer:
@@ -35,6 +35,19 @@ class ServiceTests(unittest.TestCase):
             response = client.post("/analyze", json={"fields": [{"field_index": 0, "text": "raise"}]})
             self.assertEqual(response.status_code, 503)
             self.assertNotIn("DO-NOT-LOG", response.text)
+
+    def test_version_selection_and_contextual_address_patterns(self):
+        with TestClient(make_app(lambda: SyntheticAnalyzer())) as client:
+            self.assertEqual(client.get("/ready?model_set=pl-nkjp.v2").json()["model_set"], "pl-nkjp.v2")
+            response = client.post("/analyze", json={"model_set": "pl-nkjp.v2", "fields": [{"field_index": 0, "text": "😀 Jan"}]}).json()
+            self.assertEqual(response["detections"][0]["detector_id"], "ner.person.v2")
+            self.assertEqual(client.post("/analyze", json={"model_set": "unknown", "fields": []}).status_code, 400)
+        recognizer = address_recognizer_v2()
+        for address in ["ul. Długa 12/3\n00-001 Warszawa", "ulica Żółta 7 m. 4, 01-234 Łódź", "aleja Jana Pawła 9 lok. 2", "osiedle Zielone 15A"]:
+            results = recognizer.analyze(address, ["address"], None)
+            self.assertTrue(any(address[r.start:r.end] == address for r in results), address)
+        for ordinary in ["Jan lub maj", "Warszawa", "Microsoft", "Długa historia", "12/3", "00-001"]:
+            self.assertEqual(recognizer.analyze(ordinary, ["address"], None), [])
 
     def test_no_model_is_not_ready(self):
         client = TestClient(make_app(lambda: SyntheticAnalyzer()))

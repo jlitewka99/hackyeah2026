@@ -134,7 +134,16 @@
         <div :for={
           {guard, version} <- Enum.sort(Map.get(@current.version.settings, "detector_sets", %{}))
         }>
-          <dt class="font-medium">{label(guard)} detector set</dt><dd class="muted">{version}</dd>
+          <dt class="font-medium">
+            {if guard == "ner" && @current.version.settings["schema_version"] == 5,
+              do: "Named entity weights",
+              else: "#{label(guard)} detector set"}
+          </dt><dd class="muted">{version}</dd>
+        </div>
+        <div :if={@current.version.settings["schema_version"] == 5}>
+          <dt class="font-medium">NER rule set</dt><dd class="muted">
+            {@current.version.settings["ner_model_set"]}
+          </dd>
         </div>
         <div>
           <dt class="font-medium">Allowed agents</dt><dd class="muted break-all">
@@ -290,24 +299,76 @@
       <div class="policy-heading mb-6">
         <p id="policy-draft-schema" class="font-medium">Schema v{schema_version(@form)}</p>
         <button
-          :if={schema_version(@form) < 4}
+          :if={schema_version(@form) < 5}
           id="policy-upgrade"
           type="button"
           class="button-secondary"
           phx-click="upgrade"
           phx-disable-with="Upgrading…"
-        >Upgrade to v4</button>
+        >Upgrade to v5</button>
       </div>
-      <p :if={schema_version(@form) < 4} class="muted mb-6">
-        Upgrade this draft to choose an injection provider and configure response moderation. Saving and activation remain separate steps.
+      <p :if={schema_version(@form) < 5} class="muted mb-6">
+        Upgrade this draft to configure Knowledge, NER rule versions, injection providers and response moderation. Saving and activation remain separate steps.
       </p>
-      <section :if={schema_version(@form) in [2, 3, 4]} id="policy-detector-sets" class="mb-6">
+      <section :if={schema_version(@form) == 5} id="policy-knowledge" class="list-section mb-6">
+        <h3>Knowledge and memory</h3>
+        <p class="muted mt-2 mb-4">
+          Source access and content checks apply to every read and write. Enabling retrieval does not enable memory writes.
+        </p>
+        <.input
+          type="checkbox"
+          name="policy[knowledge][enabled]"
+          id="policy-knowledge-enabled"
+          label="Enable Knowledge and retrieval"
+          checked={(@form[:knowledge].value || %{})["enabled"] in [true, "true"]}
+        />
+        <.input
+          type="checkbox"
+          name="policy[knowledge][memory_write_enabled]"
+          id="policy-memory-write-enabled"
+          label="Allow explicit memory writes"
+          checked={(@form[:knowledge].value || %{})["memory_write_enabled"] in [true, "true"]}
+        />
+        <.input
+          type="select"
+          multiple
+          name="policy[knowledge][sources][]"
+          id="policy-knowledge-sources"
+          label="Allowed source kinds"
+          options={~w(document memory)}
+          value={(@form[:knowledge].value || %{})["sources"] || ~w(document memory)}
+        />
+        <.input
+          type="select"
+          multiple
+          name="policy[knowledge][trust_levels][]"
+          id="policy-knowledge-trust"
+          label="Allowed source trust levels"
+          options={~w(untrusted internal)}
+          value={(@form[:knowledge].value || %{})["trust_levels"] || ~w(untrusted internal)}
+        />
+        <.input
+          field={@form[:ner_model_set]}
+          type="select"
+          id="policy-ner-model-set"
+          label="Pinned NER rule set"
+          options={~w(pl-nkjp.v1 pl-nkjp.v2)}
+        />
+        <p :for={message <- field_errors(@errors, "knowledge")} role="alert" class="report-error">
+          {message}
+        </p>
+      </section>
+      <section :if={schema_version(@form) in [2, 3, 4, 5]} id="policy-detector-sets" class="mb-6">
         <h3 class="font-medium">Detector sets</h3>
         <p class="muted mt-2">
           Immutable sets keep detection reproducible.
         </p>
         <div :for={{guard, version} <- Enum.sort(@form[:detector_sets].value)} class="mt-2">
-          <span>{label(guard)} · {version}</span>
+          <span id={"policy-set-label-#{guard}"}>
+            {if guard == "ner" && schema_version(@form) == 5,
+              do: "Named entity weights",
+              else: label(guard)} · {version}
+          </span>
           <.input
             name={"policy[detector_sets][#{guard}]"}
             id={"policy-set-#{guard}"}
@@ -380,7 +441,7 @@
           An unavailable required guard blocks the request. Select Profile default to remove an override.
         </p>
         <p
-          :if={schema_version(@form) in [2, 3, 4]}
+          :if={schema_version(@form) in [2, 3, 4, 5]}
           id="policy-phase-order"
           class="muted text-sm mt-2"
         >
@@ -420,7 +481,7 @@
             Output only. Disabled by default.
           </p>
           <div
-            :if={schema_version(@form) == 4 && guard == "semantic"}
+            :if={schema_version(@form) in [4, 5] && guard == "semantic"}
             class="md:col-start-2 md:col-span-2"
           >
             <.input
@@ -449,7 +510,7 @@
           </div>
           <div
             :if={
-              schema_version(@form) in [3, 4] &&
+              schema_version(@form) in [3, 4, 5] &&
                 (guard == "moderation" ||
                    (guard == "semantic" && injection_provider(@form) == "qwen"))
             }
@@ -584,7 +645,7 @@
         </div>
       </details>
       <details
-        :if={schema_version(@form) in [2, 3, 4]}
+        :if={schema_version(@form) in [2, 3, 4, 5]}
         class="policy-details"
         id="policy-tools"
         open={MapSet.member?(@open_sections, "tools")}

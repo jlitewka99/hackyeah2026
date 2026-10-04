@@ -45,10 +45,15 @@ defmodule AiControl.Gateway do
   end
 
   defp run_chat(current, params, policy, request_id, opts, receipt) do
-    with {:ok, safe} <- Stages.evaluate(params, current, policy, request_id, :input, opts),
+    with {:ok, augmented, sources} <-
+           AiControl.Knowledge.augment(current, params, policy, request_id, opts),
+         :ok <- input_size(augmented),
+         {:ok, safe} <- Stages.evaluate(augmented, current, policy, request_id, :input, opts),
          {:ok, safe} <- Request.validate(safe),
          {:ok, contract} <- ToolSchemas.prepare(safe),
          :ok <- authorize_again(current, policy, opts[:agent_id], params["model"]) do
+      opts = Keyword.put(opts, :knowledge_sources, sources)
+
       case generate(safe, receipt, current, policy, opts) do
         {:ok, response} ->
           {filter_output(response, current, policy, request_id, safe, contract, opts), :output}
@@ -63,18 +68,22 @@ defmodule AiControl.Gateway do
 
   defp filter_output(response, current, policy, request_id, safe, contract, opts) do
     with {:ok, response} <- Response.normalize(response, safe["model"], request_id),
-         :ok <- Response.validate(response, contract) do
-      Stages.evaluate(
-        response,
-        current,
-        policy,
-        request_id,
-        :output,
-        Keyword.merge(opts,
-          tool_contract: contract,
-          semantic_prompt: Jason.encode!(safe["messages"])
-        )
-      )
+         :ok <- Response.validate(response, contract),
+         {:ok, checked} <-
+           Stages.evaluate(
+             response,
+             current,
+             policy,
+             request_id,
+             :output,
+             Keyword.merge(opts,
+               tool_contract: contract,
+               semantic_prompt: Jason.encode!(safe["messages"])
+             )
+           ),
+         :ok <- authorize_again(current, policy, opts[:agent_id], safe["model"]),
+         :ok <- recheck_knowledge(current, policy, opts) do
+      {:ok, checked}
     end
   end
 
@@ -216,6 +225,7 @@ defmodule AiControl.Gateway do
          :ok <- pinned(models, params["model"], digest),
          {:ok, params, receipt} <- prepare_budget(params, receipt, policy, provider, config),
          :ok <- authorize_again(identity, policy, opts[:agent_id], params["model"]),
+         :ok <- recheck_knowledge(identity, policy, opts),
          {:ok, receipt} <- Budgets.dispatch(receipt),
          {:ok, response} <-
            measure(
@@ -245,6 +255,13 @@ defmodule AiControl.Gateway do
       )
     else
       {:ok, params, receipt}
+    end
+  end
+
+  defp recheck_knowledge(identity, policy, opts) do
+    case opts[:knowledge_sources] do
+      sources when sources in [nil, []] -> :ok
+      sources -> AiControl.Knowledge.recheck(identity, policy, sources)
     end
   end
 

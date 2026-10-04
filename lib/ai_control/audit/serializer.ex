@@ -2,6 +2,7 @@ defmodule AiControl.Audit.Serializer do
   @moduledoc "Explicit projection shared by rendered audit details and JSONL. Never serialize arbitrary data."
   alias AiControl.Audit.Event
   alias AiControl.Gateway.Measurements
+  alias AiControl.Knowledge.Evidence
   alias AiControl.Security.{SemanticEvidence, Validation}
   alias AiControl.Tools.Catalog
 
@@ -12,6 +13,7 @@ defmodule AiControl.Audit.Serializer do
 
   def data(data) when is_map(data) do
     %{}
+    |> put("knowledge", knowledge(data["knowledge"]))
     |> put("operation", if(data["operation"] in ~w(chat models), do: data["operation"]))
     |> put("timings", if(Measurements.valid?(data["timings"]), do: data["timings"]))
     |> put(
@@ -47,6 +49,14 @@ defmodule AiControl.Audit.Serializer do
   end
 
   def data(_), do: %{}
+
+  defp knowledge(%{"operation" => operation, "resources" => resources}) do
+    if operation in ~w(knowledge.list knowledge.read knowledge.search knowledge.created knowledge.updated knowledge.deleted knowledge.context) and
+         Evidence.valid?(resources),
+       do: %{"operation" => operation, "resources" => resources}
+  end
+
+  defp knowledge(_), do: nil
 
   defp guard(value) do
     value
