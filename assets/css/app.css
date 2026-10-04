@@ -255,6 +255,27 @@ h2 { font-size: 1.0625rem; line-height: 1.4; font-weight: 600; letter-spacing: -
 
 @media (min-width: 1024px) { .overview-primary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 2rem; } }
 
+.workflow-filters {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1fr) minmax(14rem, 2fr) auto;
+  align-items: end;
+  gap: 1rem;
+  margin: 2rem 0 1.5rem;
+}
+.workflow-goal { overflow-wrap: anywhere; }
+.workflow-row-state { display: flex; flex-direction: column; gap: 0.375rem; align-items: flex-end; flex-shrink: 0; }
+.workflow-state { font-size: 0.875rem; font-weight: 600; }
+.workflow-state-danger { color: var(--danger); }
+.workflow-status-region { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.75rem 1.5rem; margin-top: 1.5rem; }
+.workflow-status-region p { flex-basis: 100%; }
+.workflow-stop-confirmation { border: 1px solid var(--line); padding: 1.5rem; margin-top: 1.5rem; border-radius: 0.5rem; }
+@media (max-width: 640px) {
+  .workflow-filters { grid-template-columns: 1fr; }
+  .workflow-row { align-items: flex-start; flex-direction: column; gap: 0.75rem; }
+  .workflow-row-state { align-items: flex-start; }
+  .workflow-stop-confirmation { padding: 1rem; }
+}
+
 .background-row {
   display: flex;
   justify-content: space-between;

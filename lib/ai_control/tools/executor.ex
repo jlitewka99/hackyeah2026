@@ -1,6 +1,6 @@
 defmodule AiControl.Tools.Executor do
   @moduledoc "Public firewall orchestration; only filtered results leave this module."
-  alias AiControl.{Audit, Gateway, Repo, Tools}
+  alias AiControl.{Audit, Gateway, Repo, Tools, Workflows}
   alias AiControl.Gateway.{Limiter, Slots, Stages}
   alias AiControl.Tools.{Config, Content, Execution, Executions, Sandbox, ToolRequest}
 
@@ -15,13 +15,19 @@ defmodule AiControl.Tools.Executor do
   defp perform(identity, params, opts, request_id, started) do
     with :ok <- ingress(identity, opts),
          {:ok, key} <- Ecto.UUID.cast(opts[:idempotency_key]),
-         {:ok, prepared} <- Tools.prepare(identity, params),
+         {:ok, prepared} <- Tools.prepare(identity, params, opts),
          request = %{prepared | request_id: request_id},
          {:ok, server} <- server(request.organization_id),
          {:ok, resources} <- Sandbox.preflight(server, request),
-         {:ok, receipt} <- Executions.claim(request, resources.workflow_id, key) do
-      {result, stage} = process(request, server, resources, receipt)
-      finish(receipt, request, result, stage, started)
+         {:ok, receipt} <- Executions.claim(request, resources.workflow_id, key),
+         {:ok, context} <-
+           Workflows.admit(request.run_context, request.policy, "tool", params, request_id) do
+      request = %{request | run_context: context}
+
+      Workflows.run(context, fn ->
+        {result, stage} = process(request, server, resources, receipt)
+        finish(receipt, request, result, stage, started)
+      end)
     else
       :error -> reject(identity, request_id, {:error, :invalid_request}, started)
       error -> reject(identity, request_id, error, started)
@@ -127,6 +133,8 @@ defmodule AiControl.Tools.Executor do
   defp status(_, _, _, _), do: "failed"
 
   defp reject(identity, id, error, started) do
+    Executions.recover_request(identity.organization_id, id)
+
     case Audit.record_tool(
            identity,
            id,

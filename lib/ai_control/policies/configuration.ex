@@ -13,7 +13,12 @@ defmodule AiControl.Policies.Configuration do
         if(version in [3, 4, 5], do: ["moderation"], else: [])
 
   def ner_entities, do: ConfigurationV2.ner_entities()
-  def budget_fields, do: ConfigurationV2.budget_fields()
+
+  def budget_fields(version \\ 1) do
+    fields = ConfigurationV2.budget_fields()
+    if version == 5, do: Map.put(fields, "workflow", ConfigurationV5.fields()), else: fields
+  end
+
   def severities, do: ~w(Unsafe Controversial)
 
   def safety_categories,
@@ -34,16 +39,27 @@ defmodule AiControl.Policies.Configuration do
   def default(3), do: ConfigurationV2.default(2) |> Map.put("schema_version", 3)
   def default(version), do: ConfigurationV2.default(version)
   def upgrade(source, version \\ 3)
-  def upgrade(%{"schema_version" => 5} = source, 5), do: source
 
-  def upgrade(source, 5),
-    do:
-      if(source["schema_version"] == 4, do: source, else: upgrade(source, 4))
-      |> Map.merge(%{
-        "schema_version" => 5,
-        "knowledge" => ConfigurationV5.defaults(),
-        "ner_model_set" => "pl-nkjp.v2"
-      })
+  def upgrade(source, 5) do
+    source =
+      if(source["schema_version"] in [4, 5], do: source, else: upgrade(source, 4))
+      |> Map.put("schema_version", 5)
+
+    prior = get_in(source, ["budgets", "workflow"]) || %{}
+
+    limits =
+      Map.merge(
+        ConfigurationV5.workflow_defaults(),
+        Map.reject(prior, fn {_, v} -> is_nil(v) end)
+      )
+
+    budgets = Map.get(source, "budgets", %{})
+
+    source
+    |> Map.put("budgets", Map.put(budgets, "workflow", limits))
+    |> Map.put_new("knowledge", ConfigurationV5.defaults())
+    |> Map.put_new("ner_model_set", "pl-nkjp.v2")
+  end
 
   def upgrade(source, 4), do: upgrade(source, 3) |> Map.put("schema_version", 4)
   def upgrade(source, 2), do: ConfigurationV2.upgrade(source)

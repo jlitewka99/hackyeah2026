@@ -7,7 +7,7 @@ defmodule AiControl.Audit.Serializer do
   alias AiControl.Security.{SemanticEvidence, Validation}
   alias AiControl.Tools.Catalog
 
-  @fields ~w(id organization_id actor_type user_id agent_id api_key_id request_id kind event_type target_id stage action policy_version policy_checksum rule_ids reason_codes fingerprint_digest fingerprint_key_id occurred_at duration_us)a
+  @fields ~w(id organization_id actor_type user_id agent_id api_key_id request_id run_id participant_id kind event_type target_id stage action policy_version policy_checksum rule_ids reason_codes fingerprint_digest fingerprint_key_id occurred_at duration_us)a
   @snapshot ~w(status role permissions agent_count model_count grants_fingerprint grants_fingerprint_key_id user_id previous_superadmin_id next_superadmin_id membership_id invitation_id policy_version_id policy_checksum policy_profile policy_source)
 
   def event(%Event{} = event), do: Map.take(event, @fields) |> Map.put(:data, data(event.data))
@@ -15,7 +15,7 @@ defmodule AiControl.Audit.Serializer do
   def data(data) when is_map(data) do
     %{}
     |> put("knowledge", knowledge(data["knowledge"]))
-    |> put("operation", if(data["operation"] in ~w(chat models), do: data["operation"]))
+    |> put("operation", if(data["operation"] in ~w(chat models runs), do: data["operation"]))
     |> put("timings", if(Measurements.valid?(data["timings"]), do: data["timings"]))
     |> put("stream", if(StreamEvidence.valid?(data["stream"]), do: data["stream"]))
     |> put(

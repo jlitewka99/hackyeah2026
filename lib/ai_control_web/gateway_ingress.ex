@@ -12,9 +12,10 @@ defmodule AiControlWeb.GatewayIngress do
              "/v1/models",
              "/v1/chat/completions",
              "/v1/tool_calls",
+             "/v1/runs",
              "/v1/knowledge/search",
              "/v1/memory"
-           ] do
+           ] or (is_binary(path) and binary_part(path, 0, min(byte_size(path), 9)) == "/v1/runs/") do
     case Limiter.check_ip(conn.remote_ip) do
       :ok -> conn
       error -> conn |> GatewayError.respond(error) |> halt()

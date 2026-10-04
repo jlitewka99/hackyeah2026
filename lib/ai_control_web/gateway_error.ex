@@ -50,6 +50,17 @@ defmodule AiControlWeb.GatewayError do
     %{error: %{code: Atom.to_string(code), message: message, request_id: request_id}}
   end
 
+  defp classify(:workflow_context_required),
+    do: {400, "A workflow run and participant are required."}
+
+  defp classify(code) when code in [:workflow_terminal, :workflow_conflict],
+    do: {409, "The workflow cannot accept this operation."}
+
+  defp classify(:workflow_limit_exceeded),
+    do: {429, "Workflow limit exceeded; the run has ended."}
+
+  defp classify(:workflow_unavailable), do: {503, "Workflow state is temporarily unavailable."}
+
   defp classify(:invalid_request), do: {400, "Unsupported or invalid request."}
   defp classify(:knowledge_conflict), do: {409, "The resource changed. Refresh and try again."}
 

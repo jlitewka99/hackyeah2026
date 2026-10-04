@@ -20,6 +20,7 @@ defmodule AiControl.Audit.Filters do
     field :agent_id, :binary_id
     field :reason_code, :string
     field :request_id, :binary_id
+    field :run_id, :binary_id
     field :cursor, :string
   end
 
@@ -28,13 +29,14 @@ defmodule AiControl.Audit.Filters do
       %__MODULE__{}
       |> cast(
         normalize_dates(params),
-        ~w(range from to kind action stage guard agent_id reason_code request_id cursor)a
+        ~w(range from to kind action stage guard agent_id reason_code request_id run_id cursor)a
       )
       |> validate_inclusion(:range, ~w(1h 24h 7d custom))
       |> validate_inclusion(:guard, Configuration.guards(3))
       |> validate_format(:reason_code, ~r/\A[a-z][a-z0-9_.-]{0,95}\z/)
       |> validate_change(:agent_id, &uuid/2)
       |> validate_change(:request_id, &uuid/2)
+      |> validate_change(:run_id, &uuid/2)
       |> validate_change(:cursor, fn :cursor, value ->
         if match?({:ok, _}, decode_cursor(value)), do: [], else: [cursor: "is invalid"]
       end)
@@ -51,7 +53,7 @@ defmodule AiControl.Audit.Filters do
             e.occurred_at < ^filters.to
       )
 
-    Enum.reduce([:kind, :action, :stage, :agent_id, :request_id], base, fn key, query ->
+    Enum.reduce([:kind, :action, :stage, :agent_id, :request_id, :run_id], base, fn key, query ->
       case Map.get(filters, key) do
         nil -> query
         value -> from(e in query, where: field(e, ^key) == ^value)
@@ -79,7 +81,7 @@ defmodule AiControl.Audit.Filters do
   def params(filters) do
     filters
     |> Map.from_struct()
-    |> Map.take(~w(range from to kind action stage guard agent_id reason_code request_id)a)
+    |> Map.take(~w(range from to kind action stage guard agent_id reason_code request_id run_id)a)
     |> Enum.reject(fn {_, value} -> is_nil(value) end)
     |> Map.new(fn {key, value} ->
       value =

@@ -5,6 +5,7 @@ defmodule AiControl.Gateway.LiveKnowledgeTest do
   import AiControl.GatewayFixtures
   import AiControl.KnowledgeFixtures
   import AiControl.OrganizationsFixtures
+  import AiControl.WorkflowsFixtures
 
   alias AiControl.{Gateway, Knowledge, Repo}
   alias AiControl.Gateway.Config
@@ -79,7 +80,7 @@ defmodule AiControl.Gateway.LiveKnowledgeTest do
       ])
       |> Map.put("context", %{"query" => "support"})
 
-    assert {:ok, response} = Gateway.chat(principal, params)
+    assert {:ok, response} = chat(principal, params)
     assert response["usage"]["prompt_tokens"] > 0
     assert String.valid?(hd(response["choices"])["message"]["content"])
 
@@ -128,12 +129,23 @@ defmodule AiControl.Gateway.LiveKnowledgeTest do
       })
 
       assert {:error, :policy_blocked} =
-               Gateway.chat(
+               chat(
                  principal,
                  request() |> Map.put("context", %{"query" => "support", "sources" => [kind]})
                )
 
       refute_received :unexpected_llm_call
     end
+  end
+
+  defp chat(identity, params) do
+    {:ok, policy, _} = AiControl.Policies.snapshot_for_models(identity, nil)
+
+    opts =
+      if policy.settings["schema_version"] == 5,
+        do: [run_context: run_reference_fixture(identity)],
+        else: []
+
+    Gateway.chat(identity, params, opts)
   end
 end

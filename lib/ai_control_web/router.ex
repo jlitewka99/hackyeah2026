@@ -46,12 +46,12 @@ defmodule AiControlWeb.Router do
     plug :require_permission, "events.read"
   end
 
-  pipeline :budgets_read do
-    plug :require_permission, "budgets.read"
+  pipeline :workflows_read do
+    plug :require_permission, "workflows.read"
   end
 
-  pipeline :signatures_read do
-    plug :require_permission, "signatures.read"
+  pipeline :budgets_read do
+    plug :require_permission, "budgets.read"
   end
 
   pipeline :tests_read do
@@ -60,6 +60,10 @@ defmodule AiControlWeb.Router do
 
   pipeline :knowledge_read do
     plug :require_permission, "knowledge.read"
+  end
+
+  pipeline :signatures_read do
+    plug :require_permission, "signatures.read"
   end
 
   scope "/v1", AiControlWeb do
@@ -73,6 +77,12 @@ defmodule AiControlWeb.Router do
     post "/memory", KnowledgeController, :create, log: false
     patch "/memory/:id", KnowledgeController, :update, log: false
     delete "/memory/:id", KnowledgeController, :delete, log: false
+    post "/runs", RunController, :create, log: false
+    get "/runs", RunController, :index, log: false
+    get "/runs/:id", RunController, :show, log: false
+    post "/runs/:id/delegations", RunController, :delegate, log: false
+    post "/runs/:id/complete", RunController, :complete, log: false
+    post "/runs/:id/stop", RunController, :stop, log: false
   end
 
   scope "/v1", AiControlWeb do
@@ -144,6 +154,19 @@ defmodule AiControlWeb.Router do
       live "/knowledge/new", OrganizationKnowledgeLive, :new
       live "/knowledge/:resource_id", OrganizationKnowledgeLive, :show
       live "/knowledge/:resource_id/edit", OrganizationKnowledgeLive, :edit
+    end
+  end
+
+  scope "/organizations/:organization_id", AiControlWeb do
+    pipe_through [:browser, :require_authenticated_user, :require_organization, :workflows_read]
+
+    live_session :workflows,
+      on_mount: [
+        {AiControlWeb.OrganizationAuth, :require_organization},
+        {AiControlWeb.WorkspaceNavigation, :default}
+      ] do
+      live "/runs", OrganizationRunsLive, :index
+      live "/runs/:run_id", OrganizationRunLive, :show
     end
   end
 

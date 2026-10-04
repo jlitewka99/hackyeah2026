@@ -76,6 +76,12 @@ window.addEventListener("phx:workspace-focus-trigger", event => {
   document.getElementById(event.detail.id)?.focus()
 })
 
+const workflowFocusTargets = {confirm: "run-stop-confirm", stop: "run-stop", status: "run-status"}
+window.addEventListener("phx:workflow-focus", event => {
+  const id = workflowFocusTargets[event.detail.target]
+  if (id) document.getElementById(id)?.focus()
+})
+
 // Show progress bar on live navigation and form submits
 topbar.config({barColors: {0: "#62646e"}, shadowColor: "rgba(0, 0, 0, .3)"})
 window.addEventListener("phx:page-loading-start", _info => topbar.show(300))

@@ -4,7 +4,7 @@ defmodule AiControl.Budgets do
 
   alias AiControl.Accounts.Scope
   alias AiControl.ApiKeys.Principal
-  alias AiControl.{Audit, Policies, Repo}
+  alias AiControl.{Audit, Policies, Repo, Workflows}
   alias AiControl.Budgets.{Bucket, Cache, Pricing, Reservation, ToolExecution, Usage, Workflow}
   alias AiControl.Organizations.{Access, Grants, Organization, ResourceResolver}
   alias AiControl.Policy.Snapshot
@@ -16,17 +16,28 @@ defmodule AiControl.Budgets do
 
   def hard_limit?(policy), do: configured_tokens?(policy.settings["budgets"])
 
-  def admit(identity, agent_id, model, policy, request_id, now \\ DateTime.utc_now()) do
+  def admit(
+        identity,
+        agent_id,
+        model,
+        policy,
+        request_id,
+        now \\ DateTime.utc_now(),
+        context \\ nil
+      ) do
     with {:ok, current} <- Policies.refresh_identity(identity),
          :ok <- Policies.model_access(current, policy, agent_id, model),
          :ok <- resource_access(current, agent_id, model) do
       {org, agent} = resources(current, agent_id)
 
-      transaction(fn -> admit!(org, agent, model, policy, request_id, now, current) end, org)
+      transaction(
+        fn -> admit!(org, agent, model, policy, request_id, now, current, context) end,
+        org
+      )
     end
   end
 
-  defp admit!(org, agent, model, policy, request_id, now, identity) do
+  defp admit!(org, agent, model, policy, request_id, now, identity, context) do
     lock_org(org)
     buckets = buckets(org, agent, window(now))
 
@@ -40,6 +51,8 @@ defmodule AiControl.Budgets do
             organization_id: org,
             agent_id: agent,
             request_id: request_id,
+            run_id: workflow_id(context),
+            participant_id: participant_id(context),
             actor_type: if(match?(%Principal{}, identity), do: "agent", else: "user"),
             user_id: if(match?(%Scope{}, identity), do: identity.user.id),
             api_key_id: if(match?(%Principal{}, identity), do: identity.api_key_id),
@@ -67,14 +80,21 @@ defmodule AiControl.Budgets do
     mutate(receipt, fn current, buckets ->
       if current.status != "admitted", do: Repo.rollback(:budget_conflict)
       check!(buckets, current.limits, "tokens_per_hour", input + output, DateTime.utc_now())
-      increment(buckets, reserved: input + output)
 
-      update_record(current,
-        status: "reserved",
-        input_tokens: input,
-        output_limit: output,
-        reserved_tokens: input + output
-      )
+      case Workflows.reserve!(workflow_context(current), input + output) do
+        :ok ->
+          increment(buckets, reserved: input + output)
+
+          update_record(current,
+            status: "reserved",
+            input_tokens: input,
+            output_limit: output,
+            reserved_tokens: input + output
+          )
+
+        error ->
+          error
+      end
     end)
   end
 
@@ -88,11 +108,17 @@ defmodule AiControl.Budgets do
       unbounded = current.status == "admitted"
       if unbounded, do: increment(buckets, unbounded: 1)
 
-      update_record(current,
-        status: "dispatching",
-        unbounded: unbounded,
-        dispatched_at: DateTime.utc_now()
-      )
+      case Workflows.dispatch!(workflow_context(current)) do
+        :ok ->
+          update_record(current,
+            status: "dispatching",
+            unbounded: unbounded,
+            dispatched_at: DateTime.utc_now()
+          )
+
+        error ->
+          error
+      end
     end)
   end
 
@@ -115,6 +141,12 @@ defmodule AiControl.Budgets do
           tokens: usage["total_tokens"],
           reserved: -current.reserved_tokens,
           unbounded: if(current.unbounded, do: -1, else: 0)
+        )
+
+        Workflows.settle!(
+          workflow_context(current),
+          current.reserved_tokens,
+          usage["total_tokens"]
         )
 
         update_record(current,
@@ -143,6 +175,8 @@ defmodule AiControl.Budgets do
       reserved: -current.reserved_tokens,
       unbounded: if(current.unbounded, do: -1, else: 0)
     )
+
+    Workflows.release!(workflow_context(current), current.reserved_tokens)
 
     update_record(current,
       status: "released",
@@ -239,7 +273,7 @@ defmodule AiControl.Budgets do
     :ok
   end
 
-  def consume_tool_call(identity, agent_id, policy, workflow_id, execution_id) do
+  def consume_tool_call(identity, agent_id, policy, workflow_id, execution_id, context \\ nil) do
     with {:ok, current} <- Policies.refresh_identity(identity),
          true <- Snapshot.valid?(policy),
          true <- tool_agent_allowed?(current, agent_id, policy),
@@ -247,7 +281,10 @@ defmodule AiControl.Budgets do
          {:ok, execution_id} <- Ecto.UUID.cast(execution_id) do
       {org, agent} = resources(current, agent_id)
 
-      transaction(fn -> tool_call!(org, agent, policy, workflow_id, execution_id) end, org)
+      transaction(
+        fn -> tool_call!(org, agent, policy, workflow_id, execution_id, context) end,
+        org
+      )
     else
       _ -> {:error, :forbidden}
     end
@@ -268,10 +305,12 @@ defmodule AiControl.Budgets do
     end
   end
 
-  defp tool_call!(org, agent, policy, workflow_id, execution_id) do
+  defp tool_call!(org, agent, policy, workflow_id, execution_id, context) do
     lock_org(org)
 
-    Repo.insert!(%Workflow{organization_id: org, agent_id: agent, workflow_id: workflow_id},
+    owner = workflow_owner(context, org, agent, workflow_id)
+
+    Repo.insert!(%Workflow{organization_id: org, agent_id: owner, workflow_id: workflow_id},
       on_conflict: :nothing,
       conflict_target: [:organization_id, :workflow_id],
       log: false
@@ -286,19 +325,92 @@ defmodule AiControl.Budgets do
         log: false
       )
 
-    if workflow.agent_id != agent, do: Repo.rollback(:forbidden)
+    if workflow.agent_id != owner, do: Repo.rollback(:forbidden)
 
     case Repo.get_by(ToolExecution, workflow_id: workflow.id, execution_id: execution_id) do
-      nil -> record_tool!(workflow, policy, execution_id)
+      nil -> record_tool!(workflow, policy, execution_id, context)
       existing -> existing
     end
   end
 
-  defp record_tool!(workflow, policy, execution_id) do
+  defp workflow_id(nil), do: nil
+  defp workflow_id(context), do: context.run_id
+  defp participant_id(nil), do: nil
+  defp participant_id(context), do: context.participant_id
+  defp workflow_owner(nil, _, agent, _), do: agent
+
+  defp workflow_owner(context, org, agent, workflow_id) do
+    if context.organization_id != org || context.agent_id != agent ||
+         context.run_id != workflow_id,
+       do: Repo.rollback(:forbidden)
+
+    Repo.get_by!(AiControl.Workflows.Run, [organization_id: org, id: context.run_id], log: false).owner_agent_id
+  end
+
+  defp record_tool!(workflow, policy, execution_id, context) do
     limit = policy.settings["budgets"]["workflow"]["tool_calls"]
-    if limit != nil && workflow.calls + 1 > limit, do: Repo.rollback(:tool_budget_exceeded)
-    update_record(workflow, calls: workflow.calls + 1)
-    Repo.insert!(%ToolExecution{workflow_id: workflow.id, execution_id: execution_id}, log: false)
+
+    root_limit =
+      if context,
+        do:
+          Repo.get_by!(
+            AiControl.Workflows.Run,
+            [id: context.run_id, organization_id: context.organization_id],
+            log: false
+          ).limits[
+            "tool_calls"
+          ],
+        else: limit
+
+    limit =
+      if is_nil(limit),
+        do: root_limit,
+        else: if(is_nil(root_limit), do: limit, else: min(limit, root_limit))
+
+    if limit != nil && workflow.calls + 1 > limit do
+      if context do
+        Workflows.exceed(context, "tool_calls")
+        {:error, :workflow_limit_exceeded}
+      else
+        Repo.rollback(:tool_budget_exceeded)
+      end
+    else
+      case Workflows.dispatch!(context) do
+        :ok ->
+          update_record(workflow, calls: workflow.calls + 1)
+
+          Repo.insert!(%ToolExecution{workflow_id: workflow.id, execution_id: execution_id},
+            log: false
+          )
+
+        error ->
+          error
+      end
+    end
+  end
+
+  def workflow_context(%{run_id: nil}), do: nil
+
+  def workflow_context(receipt) do
+    operation =
+      Repo.get_by(
+        AiControl.Workflows.Operation,
+        [
+          organization_id: receipt.organization_id,
+          run_id: receipt.run_id,
+          request_id: receipt.request_id
+        ],
+        log: false
+      )
+
+    %AiControl.Workflows.Context{
+      organization_id: receipt.organization_id,
+      run_id: receipt.run_id,
+      participant_id: receipt.participant_id,
+      agent_id: receipt.agent_id,
+      api_key_id: receipt.api_key_id,
+      operation_id: if(operation, do: operation.id)
+    }
   end
 
   defp mutate(receipt, callback) do
@@ -325,8 +437,12 @@ defmodule AiControl.Budgets do
   defp transaction(callback, organization_id) do
     result = Repo.transaction(callback, log: false)
     Cache.clear()
-    if match?({:ok, _}, result), do: Audit.notify(organization_id)
-    result
+    if match?({:ok, _}, result) && !Repo.in_transaction?(), do: Audit.notify(organization_id)
+
+    case result do
+      {:ok, {:error, _} = error} -> error
+      _ -> result
+    end
   rescue
     _ -> {:error, :budget_unavailable}
   catch

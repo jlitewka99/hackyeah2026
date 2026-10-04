@@ -91,6 +91,7 @@ defmodule AiControlWeb.ReportingHTML do
           maxlength="96"
         />
         <.input field={@form[:request_id]} type="text" label="Request ID" placeholder="Request UUID" />
+        <.input field={@form[:run_id]} type="text" label="Workflow ID" placeholder="Run UUID" />
       <% end %>
       <button
         id={"#{@id}-apply"}

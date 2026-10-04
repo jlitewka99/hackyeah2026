@@ -3,7 +3,7 @@ defmodule AiControl.Background do
   import Ecto.Query, except: [update: 2]
 
   alias AiControl.Accounts.{Scope, User}
-  alias AiControl.Audit.Filters
+  alias AiControl.Audit.{Filters, WorkflowVisibility}
   alias AiControl.Background.{CaseResult, Chunk, Run}
   alias AiControl.Guards.Feeds
   alias AiControl.{Organizations, Repo}
@@ -179,7 +179,9 @@ defmodule AiControl.Background do
          true <- active?(stored),
          %User{} = user <- Repo.get(User, stored.user_id),
          {:ok, scope} <- Organizations.fetch_scope(Scope.for_user(user), stored.organization_id),
-         {:ok, _} <- authorize(scope, stored.permissions) do
+         {:ok, _} <- authorize(scope, stored.permissions),
+         true <-
+           stored.kind != "audit_export" || WorkflowVisibility.export_scope?(scope, stored.spec) do
       {:ok, stored, scope}
     else
       _ -> {:error, :access_revoked}
@@ -254,7 +256,8 @@ defmodule AiControl.Background do
 
   def artifact(scope, id) do
     with {:ok, run} <- fetch(scope, id),
-         {:ok, _} <- authorize(scope, download_permissions(run)),
+         {:ok, current} <- authorize(scope, download_permissions(run)),
+         true <- run.kind != "audit_export" || WorkflowVisibility.export_scope?(current, run.spec),
          true <- run.status == "completed" && not is_nil(run.expires_at),
          true <- DateTime.before?(DateTime.utc_now(), run.expires_at) do
       {:ok, run}

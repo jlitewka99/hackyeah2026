@@ -5,6 +5,7 @@ defmodule AiControlWeb.GatewayStreamControllerTest do
   import AiControl.GatewayFixtures
   import AiControl.KnowledgeFixtures
   import AiControl.OrganizationsFixtures
+  import AiControl.WorkflowsFixtures
   import Ecto.Query
 
   alias AiControl.Audit.{Event, Filters, Serializer}
@@ -72,6 +73,16 @@ defmodule AiControlWeb.GatewayStreamControllerTest do
       "budgets" => %{"organization" => %{"tokens_per_hour" => 5000}}
     })
 
+    reference = run_reference_fixture(principal_fixture(context.scope, context.agent))
+
+    context = %{
+      context
+      | conn:
+          context.conn
+          |> put_req_header("x-run-id", reference.run_id)
+          |> put_req_header("x-run-participant-id", reference.participant_id)
+    }
+
     document = document_fixture(context.scope, context.agent)
     owner = self()
 
@@ -102,6 +113,16 @@ defmodule AiControlWeb.GatewayStreamControllerTest do
     activate_knowledge_policy(context.scope, %{
       "budgets" => %{"organization" => %{"tokens_per_hour" => 5000}}
     })
+
+    reference = run_reference_fixture(principal_fixture(context.scope, context.agent))
+
+    context = %{
+      context
+      | conn:
+          context.conn
+          |> put_req_header("x-run-id", reference.run_id)
+          |> put_req_header("x-run-participant-id", reference.participant_id)
+    }
 
     document = document_fixture(context.scope, context.agent)
     owner = self()

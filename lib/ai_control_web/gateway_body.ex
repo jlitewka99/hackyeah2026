@@ -10,8 +10,14 @@ defmodule AiControlWeb.GatewayBody do
 
   def call(%{method: method, request_path: path} = conn, _)
       when method in ["POST", "PATCH", "DELETE"] do
-    if path in ["/v1/chat/completions", "/v1/tool_calls", "/v1/knowledge/search", "/v1/memory"] or
-         String.starts_with?(path, "/v1/memory/") do
+    if path in [
+         "/v1/chat/completions",
+         "/v1/tool_calls",
+         "/v1/knowledge/search",
+         "/v1/memory",
+         "/v1/runs"
+       ] or
+         String.starts_with?(path, "/v1/memory/") or String.starts_with?(path, "/v1/runs/") do
       authenticate(conn)
     else
       conn
@@ -67,6 +73,7 @@ defmodule AiControlWeb.GatewayBody do
     end
   end
 
+  defp input_limit(%{request_path: "/v1/runs" <> _}), do: 4096
   defp input_limit(%{request_path: "/v1/tool_calls"}), do: 65_536
   defp input_limit(%{request_path: "/v1/knowledge/search"}), do: 4096
   defp input_limit(%{request_path: "/v1/memory" <> _}), do: 65_536
@@ -111,7 +118,11 @@ defmodule AiControlWeb.GatewayBody do
             nil,
             :input,
             nil,
-            %{operation: "chat", timings: %{}}
+            %{
+              operation:
+                if(String.starts_with?(conn.request_path, "/v1/runs"), do: "runs", else: "chat"),
+              timings: %{}
+            }
           )
       end
 

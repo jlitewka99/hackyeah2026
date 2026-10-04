@@ -92,6 +92,48 @@ defmodule AiControlWeb.OrganizationPoliciesLiveTest do
            ]
   end
 
+  test "filling a v5 draft preserves Knowledge, NER and explicit tool limits until activation", %{
+    conn: conn,
+    scope: scope
+  } do
+    {:ok, view, _} = live(conn, ~p"/organizations/#{scope.organization.id}/policies")
+    view |> element("#policy-new") |> render_click()
+    view |> element("#policy-upgrade") |> render_click()
+
+    view
+    |> form("#policy-form",
+      policy: %{
+        ner_model_set: "pl-nkjp.v1",
+        knowledge: %{enabled: "true", sources: ["memory"], trust_levels: ["internal"]},
+        budgets: %{
+          workflow: %{
+            tool_calls: "7",
+            max_duration_seconds: "",
+            max_calls: "",
+            max_tokens: "",
+            max_delegation_depth: "",
+            max_repeated_actions: ""
+          }
+        }
+      }
+    )
+    |> render_change()
+
+    assert has_element?(view, "#policy-upgrade", "Apply workflow defaults")
+    view |> element("#policy-upgrade") |> render_click()
+    refute has_element?(view, "#policy-upgrade")
+    view |> form("#policy-form") |> render_submit()
+    assert {:ok, [version]} = Policies.list_versions(scope)
+    assert version.settings["budgets"]["workflow"]["tool_calls"] == 7
+    assert version.settings["budgets"]["workflow"]["max_calls"] == 50
+    assert version.settings["ner_model_set"] == "pl-nkjp.v1"
+    assert version.settings["knowledge"]["enabled"]
+    assert version.settings["knowledge"]["sources"] == ["memory"]
+    assert version.settings["knowledge"]["trust_levels"] == ["internal"]
+    assert {:ok, active} = Policies.current(scope)
+    assert active.version.settings["schema_version"] == 1
+  end
+
   test "v2 YAML preserves optional entities and the tool allowlist through forms and export", %{
     conn: conn,
     scope: scope

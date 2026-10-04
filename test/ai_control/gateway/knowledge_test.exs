@@ -5,6 +5,7 @@ defmodule AiControl.Gateway.KnowledgeTest do
   import AiControl.GatewayFixtures
   import AiControl.KnowledgeFixtures
   import AiControl.OrganizationsFixtures
+  import AiControl.WorkflowsFixtures
 
   alias AiControl.{Gateway, Knowledge, Repo}
   alias AiControl.Gateway.Config
@@ -80,7 +81,7 @@ defmodule AiControl.Gateway.KnowledgeTest do
       end)
     )
 
-    assert {:ok, _} = Gateway.chat(c.principal, rag())
+    assert {:ok, _} = chat(c.principal, rag())
     assert_received {:generated, params}
     refute Map.has_key?(params, "context")
 
@@ -102,20 +103,20 @@ defmodule AiControl.Gateway.KnowledgeTest do
 
   test "legacy chats work but RAG requires an enabled policy and final user message", c do
     activate_gateway_policy(c.scope)
-    assert {:ok, _} = Gateway.chat(c.principal, request())
+    assert {:ok, _} = chat(c.principal, request())
     assert_received {:generated, _}
-    assert {:error, :knowledge_disabled} = Gateway.chat(c.principal, rag())
+    assert {:error, :knowledge_disabled} = chat(c.principal, rag())
     refute_received {:generated, _}
     activate_knowledge_policy(c.scope)
 
     assert {:error, :input_too_large} =
-             Gateway.chat(
+             chat(
                c.principal,
                Map.put(rag(), "context", %{"query" => String.duplicate("x", 2049)})
              )
 
     assert {:error, :invalid_request} =
-             Gateway.chat(
+             chat(
                c.principal,
                Map.put(rag(), "messages", [
                  %{"role" => "assistant", "content" => "Previous output"}
@@ -138,7 +139,7 @@ defmodule AiControl.Gateway.KnowledgeTest do
       "prompt_injection"
     )
 
-    assert {:error, :policy_blocked} = Gateway.chat(c.principal, rag())
+    assert {:error, :policy_blocked} = chat(c.principal, rag())
     refute_received {:generated, _}
     refute_received {:rendered, _}
   end
@@ -156,7 +157,7 @@ defmodule AiControl.Gateway.KnowledgeTest do
       "secret"
     )
 
-    assert {:error, :policy_blocked} = Gateway.chat(c.principal, rag())
+    assert {:error, :policy_blocked} = chat(c.principal, rag())
     refute_received {:generated, _}
   end
 
@@ -177,7 +178,13 @@ defmodule AiControl.Gateway.KnowledgeTest do
     )
 
     supervisor = start_supervised!(Task.Supervisor)
-    task = Task.Supervisor.async_nolink(supervisor, fn -> Gateway.chat(c.principal, rag()) end)
+    reference = run_reference_fixture(c.principal)
+
+    task =
+      Task.Supervisor.async_nolink(supervisor, fn ->
+        Gateway.chat(c.principal, rag(), run_context: reference)
+      end)
+
     assert_receive {:waiting, worker}
 
     Repo.update_all(
@@ -245,7 +252,7 @@ defmodule AiControl.Gateway.KnowledgeTest do
       "guards" => %{"ner" => %{"enabled" => true, "required" => true}}
     })
 
-    assert {:error, :guard_unavailable} = Gateway.chat(c.principal, rag())
+    assert {:error, :guard_unavailable} = chat(c.principal, rag())
     refute_received {:generated, _}
     activate_knowledge_policy(c.scope)
 
@@ -255,7 +262,7 @@ defmodule AiControl.Gateway.KnowledgeTest do
       []
     )
 
-    assert {:error, :audit_unavailable} = Gateway.chat(c.principal, rag())
+    assert {:error, :audit_unavailable} = chat(c.principal, rag())
     refute_received {:generated, _}
   end
 
@@ -293,5 +300,16 @@ defmodule AiControl.Gateway.KnowledgeTest do
       |> Map.put(guard, %{"enabled" => true, "required" => true})
 
     activate_knowledge_policy(scope, %{"guards" => guards})
+  end
+
+  defp chat(identity, params) do
+    {:ok, policy, _} = AiControl.Policies.snapshot_for_models(identity, nil)
+
+    opts =
+      if policy.settings["schema_version"] == 5,
+        do: [run_context: run_reference_fixture(identity)],
+        else: []
+
+    Gateway.chat(identity, params, opts)
   end
 end

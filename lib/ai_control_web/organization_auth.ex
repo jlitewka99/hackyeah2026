@@ -116,6 +116,8 @@ defmodule AiControlWeb.OrganizationAuth do
     end
   end
 
+  defp page_permission(AiControlWeb.OrganizationRunsLive), do: "workflows.read"
+  defp page_permission(AiControlWeb.OrganizationRunLive), do: "workflows.read"
   defp page_permission(AiControlWeb.OrganizationAgentsLive), do: "agents.read"
   defp page_permission(AiControlWeb.OrganizationApiKeysLive), do: "api_keys.read"
   defp page_permission(AiControlWeb.OrganizationPoliciesLive), do: "policies.read"

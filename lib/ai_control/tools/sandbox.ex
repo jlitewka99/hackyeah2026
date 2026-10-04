@@ -53,7 +53,7 @@ defmodule AiControl.Tools.Sandbox do
   def handle_call({:preflight, request}, _from, state) do
     result =
       with {:ok, _} <- target(request, state),
-           {:ok, workflow} <- Ecto.UUID.cast(Map.get(state.contexts, request.agent_id)) do
+           {:ok, workflow} <- workflow_id(request, state) do
         {:ok,
          %{
            workflow_id: workflow,
@@ -73,7 +73,7 @@ defmodule AiControl.Tools.Sandbox do
 
     result =
       with :ok <- owner_ready(ref, owner, deadline),
-           true <- Map.get(state.contexts, request.agent_id) == receipt.workflow_id,
+           true <- workflow_id(request, state) == {:ok, receipt.workflow_id},
            {:ok, target} <- target(request, state),
            :ok <- owner_ready(ref, owner, deadline),
            {:ok, _} <- Executions.dispatch(receipt, request),
@@ -101,6 +101,11 @@ defmodule AiControl.Tools.Sandbox do
       error -> {:reply, error, state}
     end
   end
+
+  defp workflow_id(%{run_context: nil} = request, state),
+    do: Ecto.UUID.cast(Map.get(state.contexts, request.agent_id))
+
+  defp workflow_id(%{run_context: context}, _state), do: {:ok, context.run_id}
 
   defp owner_ready(ref, owner, deadline) do
     receive do

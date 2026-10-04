@@ -2,11 +2,22 @@ defmodule AiControlWeb.GatewayController do
   use AiControlWeb, :controller
 
   alias AiControl.Gateway
-  alias AiControlWeb.GatewayError
+  alias AiControlWeb.{GatewayError, RunContext}
 
   def chat(conn, _params) do
+    case RunContext.parse(conn) do
+      {:ok, context} ->
+        chat_with_context(conn, context)
+
+      {:error, _} ->
+        RunContext.reject(conn, "chat")
+    end
+  end
+
+  defp chat_with_context(conn, context) do
     opts = [
       request_id: conn.assigns.request_id,
+      run_context: context,
       ingress_checked?: conn.assigns[:gateway_ingress_checked] == true
     ]
 
