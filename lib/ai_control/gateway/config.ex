@@ -14,12 +14,17 @@ defmodule AiControl.Gateway.Config do
       "signatures" => AiControl.Guards.Signatures,
       "ner" => AiControl.Guards.Ner,
       "semantic" => AiControl.Guards.Semantic,
-      "moderation" => AiControl.Guards.Moderation
+      "moderation" => AiControl.Guards.Moderation,
+      "granite" => AiControl.Guards.Granite
     },
     ner_url: "http://127.0.0.1:8001",
     semantic_url: "http://127.0.0.1:8003",
     prompt_guard_url: "http://127.0.0.1:8004",
     semantic_timeout: 30_000,
+    granite_url: "http://127.0.0.1:11434",
+    granite_tokenizer_url: "http://127.0.0.1:8002",
+    granite_timeout: 60_000,
+    granite_context_tokens: 8_192,
     input_bytes: 1_048_576,
     response_bytes: 4_194_304,
     stream_heartbeat_ms: 5_000,
@@ -64,6 +69,9 @@ defmodule AiControl.Gateway.Config do
     validate_provider!(config)
 
     validate_semantic!(config)
+
+    validate_granite!(config)
+
     validate_limits!(config)
 
     if !origin?(config[:tokenizer_url]),
@@ -98,6 +106,14 @@ defmodule AiControl.Gateway.Config do
       do: raise(ArgumentError, "semantic_timeout must be between 1 and 30000 ms")
   end
 
+  defp validate_granite!(config) do
+    if !origin?(config[:granite_url]) or !origin?(config[:granite_tokenizer_url]) or
+         !(is_integer(config[:granite_timeout]) and config[:granite_timeout] in 1..60_000) or
+         !(is_integer(config[:granite_context_tokens]) and
+             config[:granite_context_tokens] in 128..8_192),
+       do: raise(ArgumentError, "invalid Granite origin, deadline or context limit")
+  end
+
   defp origin?(url) when is_binary(url) do
     uri = URI.parse(url)
 
@@ -120,7 +136,7 @@ defmodule AiControl.Gateway.Config do
     do:
       is_map(guards) &&
         Enum.all?(guards, fn {name, module} ->
-          name in Configuration.guards(3) && is_atom(module)
+          name in Configuration.guards(6) && is_atom(module)
         end)
 
   defp validate_limits!(config) do

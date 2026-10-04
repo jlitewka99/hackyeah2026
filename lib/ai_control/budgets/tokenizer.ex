@@ -1,5 +1,5 @@
 defmodule AiControl.Budgets.Tokenizer do
-  @moduledoc "Private token counts of the prepared DeepSeek request using pinned V4.1 artifacts."
+  @moduledoc "Private counts for prepared DeepSeek requests and pinned Granite guard prompts."
   alias AiControl.Gateway.Config
 
   @manifest Jason.decode!(File.read!("sidecar/tokenizer/models.v1.json"))
@@ -18,6 +18,27 @@ defmodule AiControl.Budgets.Tokenizer do
       {:ok, tokens}
     else
       _ -> {:error, :tokenizer_unavailable}
+    end
+  end
+
+  def count_pinned(model, digest, prompt, config) do
+    with {:ok, response} <-
+           request(:post, "/count", %{model: model, digest: digest, prompt: prompt}, config),
+         %{"tokens" => tokens, "digest" => ^digest, "runtime" => "0.35.1"} <- response,
+         true <- is_integer(tokens) && tokens >= 0 do
+      {:ok, tokens}
+    else
+      _ -> {:error, :tokenizer_unavailable}
+    end
+  end
+
+  def pinned_ready?(model, digest, config) do
+    case request(:get, "/ready", nil, config) do
+      {:ok, %{"status" => "ready", "models" => models, "runtime" => "0.35.1"}} ->
+        models[model] == digest
+
+      _ ->
+        false
     end
   end
 

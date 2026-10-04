@@ -1,0 +1,147 @@
+<section id="policy-granite" class="list-section mb-6" aria-labelledby="policy-granite-heading">
+  <h3 id="policy-granite-heading">Deep semantic analysis</h3>
+  <p class="muted mt-2 mb-4 max-w-prose">
+    Granite Guardian checks selected requests after existing controls. Every selected check must succeed; an unavailable check blocks the request. Save, compare and activate this version to apply these settings.
+  </p>
+  <.input
+    type="checkbox"
+    name="policy[granite][enabled]"
+    id="policy-granite-enabled"
+    label="Enable Granite Guardian"
+    checked={granite(@form)["enabled"] in [true, "true"]}
+  />
+  <div class="mt-6">
+    <h4 class="font-medium">Select requests</h4>
+    <.input
+      type="checkbox"
+      name="policy[granite][suspicious_input]"
+      id="policy-granite-suspicious"
+      label="Check suspicious input"
+      checked={granite(@form)["suspicious_input"] in [true, "true"]}
+    />
+    <p class="muted mt-2 mb-4 max-w-prose">
+      Earlier findings, Qwen Unsafe or Controversial labels, or a Prompt Guard score at or above this threshold select an input check. Requests already blocked stop earlier.
+    </p>
+    <.input
+      type="number"
+      name="policy[granite][suspicious_threshold]"
+      id="policy-granite-threshold"
+      label="Prompt Guard suspicion threshold"
+      min="0"
+      max="1"
+      step="0.01"
+      value={granite(@form)["suspicious_threshold"]}
+    />
+    <.input
+      type="select"
+      multiple
+      name="policy[granite][high_risk_tools][]"
+      id="policy-granite-tools"
+      label="High risk operations"
+      options={Enum.map(tool_catalog(), & &1["name"])}
+      value={granite(@form)["high_risk_tools"] || []}
+    />
+  </div>
+  <div class="mt-6">
+    <h4 class="font-medium">Privileged resources</h4>
+    <p class="muted mt-2 mb-4 max-w-prose">
+      One exact selector per line, matching an existing operator grant. These selectors add checks and do not grant access.
+    </p>
+    <.input
+      :for={kind <- AiControl.Policies.ConfigurationV6.resource_kinds()}
+      type="textarea"
+      name={"policy[granite][privileged_resources][#{kind}]"}
+      id={"policy-granite-resource-#{kind}"}
+      label={label(kind)}
+      value={get_in(granite(@form), ["privileged_resources", kind]) || ""}
+      rows="2"
+    />
+  </div>
+  <div class="mt-6" id="policy-granite-criteria">
+    <h4 class="font-medium">Judging criteria</h4>
+    <p class="muted mt-2 mb-4 max-w-prose">
+      Edit the ready criteria or add your own. A score says whether the text meets your criterion. Choose explicitly which score blocks. Groundedness runs only when the response uses retrieved sources.
+    </p>
+    <fieldset
+      :for={{key, criterion} <- Enum.sort(granite(@form)["criteria"] || %{})}
+      id={granite_id(key)}
+      class="list-section mt-5 min-w-0"
+    >
+      <legend class="font-medium break-all">{criterion["id"] || key}</legend>
+      <.input
+        type="text"
+        name={"policy[granite][criteria][#{key}][id]"}
+        id={"#{granite_id(key)}-id"}
+        label="Criterion ID"
+        value={criterion["id"] || key}
+        maxlength="80"
+        required
+      />
+      <.input
+        type="checkbox"
+        name={"policy[granite][criteria][#{key}][enabled]"}
+        id={"#{granite_id(key)}-enabled"}
+        label="Use this criterion"
+        checked={criterion["enabled"] in [true, "true"]}
+      />
+      <.input
+        type="select"
+        name={"policy[granite][criteria][#{key}][task]"}
+        id={"#{granite_id(key)}-task"}
+        label="Apply to"
+        options={granite_tasks()}
+        value={criterion["task"]}
+      />
+      <.input
+        type="textarea"
+        name={"policy[granite][criteria][#{key}][text]"}
+        id={"#{granite_id(key)}-text"}
+        label="Criterion"
+        value={criterion["text"]}
+        rows="4"
+        maxlength="4096"
+        required
+      />
+      <.input
+        type="select"
+        name={"policy[granite][criteria][#{key}][block_on]"}
+        id={"#{granite_id(key)}-block-on"}
+        label="Result that blocks"
+        options={[{"Yes — criterion is met", "yes"}, {"No — criterion is not met", "no"}]}
+        value={criterion["block_on"]}
+      />
+      <p id={"#{granite_id(key)}-meaning"} class="muted mt-2">
+        {if criterion["block_on"] == "no",
+          do: "No blocks; yes allows this check.",
+          else: "Yes blocks; no allows this check."}
+      </p>
+      <button
+        type="button"
+        id={"#{granite_id(key)}-remove"}
+        class="text-link mt-3"
+        phx-click="granite_remove_criterion"
+        phx-value-id={key}
+      >Remove criterion</button>
+    </fieldset>
+    <button
+      type="button"
+      id="policy-granite-add-criterion"
+      class="button-secondary mt-4"
+      phx-click="granite_add_criterion"
+      disabled={map_size(granite(@form)["criteria"] || %{}) >= 8}
+    >Add your own criterion</button>
+  </div>
+  <div
+    :if={granite_error?(@errors)}
+    id="policy-granite-errors"
+    class="report-error mt-4"
+    role="alert"
+  >
+    <p :for={{path, message} <- @errors} :if={String.starts_with?(path, "granite")}>
+      {path}: {message}
+    </p>
+  </div>
+  <p class="muted mt-6 max-w-prose">
+    This 8B model adds latency. It was trained and tested in English; Polish performance needs qualification. Groundedness checks agreement with sources, without confirming that the sources are true.
+  </p>
+</section>

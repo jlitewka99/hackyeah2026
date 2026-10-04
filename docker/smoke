@@ -92,6 +92,7 @@ docker run --rm --entrypoint /opt/ner/bin/python -e NER_LIVE=1 -e PYTHONPATH=/ap
 docker run --rm --entrypoint /opt/tokenizer/bin/python -e PYTHONPATH=/app/tokenizer \
   -v "$PWD/tests/tokenizer:/app/tests/tokenizer:ro" "$image" -m unittest discover -s /app/tests/tokenizer
 docker exec "$container" /opt/tokenizer/bin/python /app/tokenizer/models.py verify /app/tokenizer-models
+docker exec "$container" /opt/tokenizer/bin/python /app/tokenizer/models.py verify-granite /app/granite-tokenizer-models
 docker exec "$container" /opt/ner/bin/python /app/ner/benchmark.py | tee /tmp/step7-ner-benchmark.json
 docker exec "$container" /opt/ner/bin/python /app/ner/benchmark_v2.py | tee /tmp/step18-ner-benchmark.json
 docker exec "$container" /app/bin/ai_control rpc '

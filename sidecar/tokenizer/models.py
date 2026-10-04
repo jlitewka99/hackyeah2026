@@ -13,8 +13,12 @@ DOWNLOAD_ATTEMPTS = 4
 TRANSIENT_HTTP = {429, 500, 502, 503, 504}
 
 
-def verify(directory):
-    for entry in MANIFEST["files"]:
+GRANITE_MANIFEST = json.loads(Path(__file__).with_name("granite.v1.json").read_text())
+
+
+def verify(directory, manifest=None):
+    manifest = MANIFEST if manifest is None else manifest
+    for entry in manifest["files"]:
         verify_file(Path(directory) / entry["path"], entry)
 
 
@@ -54,15 +58,18 @@ def download_file(path, entry):
         time.sleep(2 ** attempt)
 
 
-def download(directory):
-    for entry in MANIFEST["files"]:
+def download(directory, manifest=None):
+    manifest = MANIFEST if manifest is None else manifest
+    for entry in manifest["files"]:
         path = Path(directory) / entry["path"]
         path.parent.mkdir(parents=True, exist_ok=True)
         download_file(path, entry)
-    verify(directory)
+    verify(directory, manifest)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3 or sys.argv[1] not in {"download", "verify"}:
-        raise SystemExit("Usage: models.py download|verify DIRECTORY")
-    {"download": download, "verify": verify}[sys.argv[1]](sys.argv[2])
+    if len(sys.argv) != 3 or sys.argv[1] not in {"download", "verify", "download-granite", "verify-granite"}:
+        raise SystemExit("Usage: models.py download|verify|download-granite|verify-granite DIRECTORY")
+    operation = sys.argv[1].removesuffix("-granite")
+    manifest = GRANITE_MANIFEST if sys.argv[1].endswith("-granite") else MANIFEST
+    {"download": download, "verify": verify}[operation](sys.argv[2], manifest)

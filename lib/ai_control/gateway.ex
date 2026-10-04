@@ -280,6 +280,7 @@ defmodule AiControl.Gateway do
              :output,
              Keyword.merge(opts,
                tool_contract: contract,
+               granite_messages: safe["messages"],
                semantic_prompt: Jason.encode!(safe["messages"])
              )
            ),

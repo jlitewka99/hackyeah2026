@@ -8,6 +8,7 @@ defmodule AiControl.Workflows do
   alias AiControl.{Audit, Budgets, Policies, Repo}
   alias AiControl.Budgets.Reservation
   alias AiControl.Organizations.{Access, Grants, Organization}
+  alias AiControl.Policies.Configuration
   alias AiControl.Security.Fingerprint
   alias AiControl.Tools.{Execution, Executions}
   alias AiControl.Workflows.{Action, Context, Operation, Participant, Run, Runtime}
@@ -26,7 +27,7 @@ defmodule AiControl.Workflows do
          goal = String.trim(goal),
          true <- String.valid?(goal) && length(String.codepoints(goal)) in 1..240,
          {:ok, policy, current} <- Policies.snapshot_for_models(identity, nil),
-         true <- policy.settings["schema_version"] in [5, 6],
+         true <- Configuration.workflow?(policy.settings),
          {:ok, fingerprint} <- fingerprint(current.organization_id, {"goal", goal}) do
       result =
         transaction(current.organization_id, fn ->
@@ -133,7 +134,7 @@ defmodule AiControl.Workflows do
   defp start_runtime(error), do: error
 
   def resolve(_identity, policy, nil) do
-    if policy.settings["schema_version"] in [5, 6],
+    if Configuration.workflow?(policy.settings),
       do: {:error, :workflow_context_required},
       else: {:ok, nil}
   end
@@ -148,6 +149,28 @@ defmodule AiControl.Workflows do
   end
 
   def resolve(_, _, _), do: {:error, :forbidden}
+
+  @doc "Internal judging data, loaded only after revalidating tenant and workflow membership."
+  def judging_context(identity, policy, reference) do
+    with {:ok, context} <- resolve(identity, policy, reference),
+         true <- not is_nil(context),
+         %Run{} = run <-
+           Repo.get_by(Run, [id: context.run_id, organization_id: context.organization_id],
+             log: false
+           ) do
+      {:ok,
+       %{
+         "organization_id" => context.organization_id,
+         "agent_id" => context.agent_id,
+         "run_id" => context.run_id,
+         "participant_id" => context.participant_id,
+         "goal" => run.goal,
+         "permitted_operations" => policy.settings["tools"]
+       }}
+    else
+      _ -> {:error, :guard_unavailable}
+    end
+  end
 
   defp resolve_locked(current, policy, run_id, participant_id) do
     run = locked!(current.organization_id, run_id)

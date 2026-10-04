@@ -61,6 +61,7 @@ defmodule AiControl.Tools.Executor do
     opts = [
       content_adapter: Content,
       tool_request: request,
+      run_context: request.run_context,
       resource_grant: resources.grant,
       resource_files: resources.files
     ]

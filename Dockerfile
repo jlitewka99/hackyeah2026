@@ -15,6 +15,7 @@ COPY assets assets
 COPY sidecar/semantic/models.v1.json sidecar/semantic/models.v1.json
 COPY sidecar/prompt_guard/models.v1.json sidecar/prompt_guard/models.v1.json
 COPY sidecar/tokenizer/models.v1.json sidecar/tokenizer/models.v1.json
+COPY sidecar/tokenizer/granite.v1.json sidecar/tokenizer/granite.v1.json
 RUN mix compile && mix assets.deploy
 COPY config/runtime.exs config/
 COPY rel rel
@@ -51,6 +52,8 @@ COPY sidecar/tokenizer/requirements.lock /tmp/tokenizer-requirements.lock
 RUN python -m venv /opt/tokenizer && /opt/tokenizer/bin/pip install --no-cache-dir -r /tmp/tokenizer-requirements.lock
 COPY sidecar/tokenizer /app/tokenizer
 RUN /opt/tokenizer/bin/python /app/tokenizer/models.py download /app/tokenizer-models
+RUN /opt/tokenizer/bin/python /app/tokenizer/models.py download-granite /app/granite-tokenizer-models
+ENV GRANITE_TOKENIZER_MODELS_DIR=/app/granite-tokenizer-models
 RUN apt-get update && apt-get install -y --no-install-recommends libstdc++6 libncurses6 libgomp1 openssl ca-certificates tini curl bash && rm -rf /var/lib/apt/lists/* && useradd --uid 10001 --create-home app
 WORKDIR /app
 COPY --from=builder --chown=app:app /app/_build/prod/rel/ai_control ./

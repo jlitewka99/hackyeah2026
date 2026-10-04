@@ -5,6 +5,7 @@ defmodule AiControl.Budgets.TokenizerTest do
 
   alias AiControl.Budgets.Tokenizer
   alias AiControl.Gateway.{Config, DeepSeek}
+  alias AiControl.Guards.Granite.Model
 
   @manifest Jason.decode!(File.read!("sidecar/tokenizer/models.v1.json"))
   defp artifacts do
@@ -46,5 +47,45 @@ defmodule AiControl.Budgets.TokenizerTest do
     refute Tokenizer.ready?(config)
     Req.Test.stub(__MODULE__, &Plug.Conn.send_resp(&1, 200, String.duplicate("x", 4097)))
     refute Tokenizer.ready?(config)
+  end
+
+  test "shared sidecar preserves separate DeepSeek artifacts and Granite digest checks" do
+    config = Keyword.put(Config.get(), :tokenizer_http_plug, {Req.Test, __MODULE__})
+
+    ready =
+      Map.merge(artifacts(), %{
+        "status" => "ready",
+        "models" => %{Model.name() => Model.digest()},
+        "runtime" => "0.35.1"
+      })
+
+    Req.Test.stub(__MODULE__, &Req.Test.json(&1, ready))
+    assert Tokenizer.ready?(config)
+    assert Tokenizer.pinned_ready?(Model.name(), Model.digest(), config)
+    refute Tokenizer.pinned_ready?("deepseek-flash", Model.digest(), config)
+    refute Tokenizer.pinned_ready?(Model.name(), "changed", config)
+
+    Req.Test.stub(__MODULE__, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+
+      assert Jason.decode!(body) == %{
+               "model" => Model.name(),
+               "digest" => Model.digest(),
+               "prompt" => "guard prompt"
+             }
+
+      Req.Test.json(conn, %{tokens: 100, digest: Model.digest(), runtime: "0.35.1"})
+    end)
+
+    assert {:ok, 100} =
+             Tokenizer.count_pinned(Model.name(), Model.digest(), "guard prompt", config)
+
+    Req.Test.stub(
+      __MODULE__,
+      &Req.Test.json(&1, %{tokens: 100, digest: "changed", runtime: "0.35.1"})
+    )
+
+    assert {:error, :tokenizer_unavailable} =
+             Tokenizer.count_pinned(Model.name(), Model.digest(), "guard prompt", config)
   end
 end

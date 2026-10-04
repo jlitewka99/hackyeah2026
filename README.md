@@ -623,8 +623,11 @@ It never changes the platform balanced policy. Ordinary `mix test` excludes the
 
 After Step 8 merges, the remaining MVP integration order is **9 → 10 → full 12 → 11**.
 The Polish semantic benchmark and the complete tool ACL retain their acceptance criteria in
-[the implementation roadmap](AI_CONTROL_LAYER_IMPLEMENTATION_PLAN.md). Granite
-remains step 14; RAG, memory and further PII work remain step 18.
+[the implementation roadmap](AI_CONTROL_LAYER_IMPLEMENTATION_PLAN.md).
+[Selective Granite Guardian](docs/granite-guardian.md) is available as an optional
+local guard, disabled by default. Its pinned tokenizer shares the private sidecar
+with the DeepSeek recipe encoder; enabling Granite requires its external Ollama
+service. DeepSeek remains the sole model exposed for generating chat responses.
 
 ## Output filtering
 

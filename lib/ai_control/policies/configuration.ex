@@ -13,12 +13,14 @@ defmodule AiControl.Policies.Configuration do
   def categories(version \\ 1),
     do:
       ConfigurationV2.categories() ++
-        if(version in [3, 4, 5, 6], do: ["content_safety"], else: [])
+        if(version in [3, 4, 5, 6], do: ["content_safety"], else: []) ++
+        if(version == 6, do: ["granite_violation"], else: [])
 
   def guards(version \\ 1),
     do:
       ConfigurationV2.guards(min(version, 2)) ++
-        if(version in [3, 4, 5, 6], do: ["moderation"], else: [])
+        if(version in [3, 4, 5, 6], do: ["moderation"], else: []) ++
+        if(version == 6, do: ["granite"], else: [])
 
   def ner_entities, do: ConfigurationV2.ner_entities()
 
@@ -52,17 +54,20 @@ defmodule AiControl.Policies.Configuration do
 
   def upgrade(source, version \\ 3)
 
-  def upgrade(source, 6),
-    do:
-      source
-      |> upgrade(5)
-      |> Map.put("schema_version", 6)
-      |> Map.put_new("review", ConfigurationV6.defaults())
+  def upgrade(source, 6) do
+    source
+    |> upgrade(5)
+    |> Map.put("schema_version", 6)
+    |> Map.put_new("granite", ConfigurationV6.defaults())
+    |> Map.put_new("review", ConfigurationV6.review_defaults())
+  end
 
   def upgrade(source, 5) do
+    version = if source["schema_version"] == 6, do: 6, else: 5
+
     source =
       if(source["schema_version"] in [4, 5, 6], do: source, else: upgrade(source, 4))
-      |> Map.put("schema_version", 5)
+      |> Map.put("schema_version", version)
 
     prior = get_in(source, ["budgets", "workflow"]) || %{}
 
@@ -96,7 +101,11 @@ defmodule AiControl.Policies.Configuration do
 
   def validate(%{"schema_version" => 6} = source), do: ConfigurationV6.validate(source)
   def validate(%{"schema_version" => 5} = source), do: ConfigurationV5.validate(source)
+
   def validate(%{"schema_version" => 4} = source), do: ConfigurationV4.validate(source)
   def validate(%{"schema_version" => 3} = source), do: ConfigurationV3.validate(source)
   def validate(source), do: ConfigurationV2.validate(source)
+
+  def workflow?(%{"schema_version" => version}), do: version in [5, 6]
+  def workflow?(_), do: false
 end

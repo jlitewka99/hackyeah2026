@@ -1,12 +1,13 @@
 """Real pinned V4.1 encoding, full requests and content-free failure boundaries."""
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
-from models import MANIFEST, verify
+from models import MANIFEST, GRANITE_MANIFEST, verify
 from service import app
 
 
@@ -33,6 +34,7 @@ class TokenizerTest(unittest.TestCase):
         ready = self.client.get("/ready").json()
         self.assertEqual(ready["status"], "ready")
         self.assertEqual(ready["recipe_version"], "0.1.1")
+        self.assertNotIn(MANIFEST["model"], ready["models"])
         response = self.client.post("/count", json=self.payload("Zażółć gęślą jaźń 😀"))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["tokens"], 17)
@@ -103,6 +105,43 @@ class TokenizerTest(unittest.TestCase):
             Path(directory, "tokenizer.json").write_bytes(b"changed")
             with self.assertRaises(RuntimeError):
                 verify(directory)
+
+    def test_granite_exact_prompt_uses_its_own_pinned_tokenizer(self):
+        payload = {"model": GRANITE_MANIFEST["model"], "digest": GRANITE_MANIFEST["digest"],
+                   "prompt": "<|start_of_role|>user<|end_of_role|>Zażółć gęślą jaźń<|end_of_text|>"}
+        response = self.client.post("/count", json=payload)
+        if os.environ.get("GRANITE_TOKENIZER_MODELS_DIR"):
+            self.assertEqual(response.status_code, 200)
+            from tokenizers import Tokenizer
+            tokenizer = Tokenizer.from_file(str(Path(os.environ["GRANITE_TOKENIZER_MODELS_DIR"]) / "tokenizer.json"))
+            self.assertEqual(response.json()["tokens"], len(tokenizer.encode(payload["prompt"], add_special_tokens=False).ids))
+            self.assertEqual(response.json()["digest"], GRANITE_MANIFEST["digest"])
+            self.assertIn(GRANITE_MANIFEST["model"], self.client.get("/ready").json()["models"])
+        else:
+            self.assertEqual(response.status_code, 503)
+        payload["digest"] = MANIFEST["files"][0]["sha256"]
+        self.assertEqual(self.client.post("/count", json=payload).status_code, 400)
+
+    def test_model_counting_contracts_cannot_be_interchanged(self):
+        raw = {"model": MANIFEST["model"], "digest": GRANITE_MANIFEST["digest"],
+               "prompt": "private guard prompt"}
+        self.assertEqual(self.client.post("/count", json=raw).status_code, 400)
+        prepared = self.payload("private message")
+        prepared["model"] = GRANITE_MANIFEST["model"]
+        self.assertEqual(self.client.post("/count", json=prepared).status_code, 400)
+        with patch("service.GRANITE_TOKENIZER", None):
+            self.assertEqual(self.client.get("/ready").json()["models"], {})
+            self.assertEqual(self.client.post("/count", json=self.payload("hello")).status_code, 200)
+            raw["model"] = GRANITE_MANIFEST["model"]
+            self.assertEqual(self.client.post("/count", json=raw).status_code, 503)
+
+    def test_granite_missing_artifact_fails_verified_setup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(RuntimeError):
+                verify(directory, GRANITE_MANIFEST)
+            Path(directory, "tokenizer.json").write_bytes(b"changed")
+            with self.assertRaises(RuntimeError):
+                verify(directory, GRANITE_MANIFEST)
 
 
 if __name__ == "__main__":

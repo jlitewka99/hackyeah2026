@@ -8,24 +8,31 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from deepseek_recipe import ChatCompletionRequest, ConversionOptions, DeepseekV41Encoding, Tokenizer
 from importlib.metadata import version
+from tokenizers import Tokenizer as GraniteTokenizer
 
-from models import MANIFEST, verify
+from models import MANIFEST, GRANITE_MANIFEST, verify
 
 LIMIT = 4_194_304
 TOKENIZER = None
+GRANITE_TOKENIZER = None
 
 
 @asynccontextmanager
 async def lifespan(app):
-    global TOKENIZER
+    global TOKENIZER, GRANITE_TOKENIZER
     directory = Path(os.environ.get("TOKENIZER_MODELS_DIR", Path(__file__).parent / "models"))
     verify(directory)
     if version("deepseek-recipe") != MANIFEST["recipe_version"]:
         raise RuntimeError("tokenizer_recipe_mismatch")
     TOKENIZER = DeepseekV41Encoding().with_tokenizer(
         Tokenizer.from_file(str(directory / "tokenizer.json")))
+    granite_directory = os.environ.get("GRANITE_TOKENIZER_MODELS_DIR")
+    if granite_directory:
+        verify(granite_directory, GRANITE_MANIFEST)
+        GRANITE_TOKENIZER = GraniteTokenizer.from_file(str(Path(granite_directory) / "tokenizer.json"))
     yield
     TOKENIZER = None
+    GRANITE_TOKENIZER = None
 
 
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
@@ -35,9 +42,13 @@ app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None
 def ready():
     if TOKENIZER is None:
         return JSONResponse({"error": "tokenizer_unavailable"}, status_code=503)
+    models = {}
+    if GRANITE_TOKENIZER is not None:
+        models[GRANITE_MANIFEST["model"]] = GRANITE_MANIFEST["digest"]
     return {"status": "ready", "model": MANIFEST["model"],
             "tokenizer_sha256": MANIFEST["files"][0]["sha256"],
-            "recipe_version": MANIFEST["recipe_version"], "encoding": MANIFEST["encoding"]}
+            "recipe_version": MANIFEST["recipe_version"], "encoding": MANIFEST["encoding"],
+            "models": models, "runtime": GRANITE_MANIFEST["runtime"]}
 
 
 @app.post("/count")
@@ -49,11 +60,24 @@ async def count(request: Request):
             return JSONResponse({"error": "input_too_large"}, status_code=413)
     try:
         data = json.loads(body)
-        if (not isinstance(data, dict) or set(data) != {"model", "request"}
-                or data["model"] != MANIFEST["model"]
-                or not valid_request(data["request"])):
+        if not isinstance(data, dict):
             raise ValueError()
         json.dumps(data, ensure_ascii=False).encode("utf-8", errors="strict")
+        if data.get("model") == GRANITE_MANIFEST["model"]:
+            if (set(data) != {"model", "digest", "prompt"}
+                    or data["digest"] != GRANITE_MANIFEST["digest"]
+                    or not isinstance(data["prompt"], str)):
+                raise ValueError()
+            if GRANITE_TOKENIZER is None:
+                return JSONResponse({"error": "tokenizer_unavailable"}, status_code=503)
+            # The Granite guard's raw prompt already contains its special tokens.
+            tokens = len(GRANITE_TOKENIZER.encode(data["prompt"], add_special_tokens=False).ids)
+            return {"tokens": tokens, "digest": GRANITE_MANIFEST["digest"],
+                    "runtime": GRANITE_MANIFEST["runtime"]}
+        if (set(data) != {"model", "request"}
+                or data.get("model") != MANIFEST["model"]
+                or not valid_request(data["request"])):
+            raise ValueError()
         if TOKENIZER is None:
             return JSONResponse({"error": "tokenizer_unavailable"}, status_code=503)
         converted = ChatCompletionRequest(data["request"]).convert(ConversionOptions())

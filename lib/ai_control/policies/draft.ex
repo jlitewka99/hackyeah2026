@@ -21,16 +21,18 @@ defmodule AiControl.Policies.Draft do
     field :budgets, :map, default: %{}
     field :review, :map, default: %{}
     field :knowledge, :map, default: %{}
+    field :granite, :map, default: %{}
     field :ner_model_set, :string, default: "pl-nkjp.v2"
   end
 
-  @fields ~w(schema_version detector_sets tools tool_selection profile allowed_models allowed_agents agent_models rules guards budgets knowledge ner_model_set review)a
+  @fields ~w(schema_version detector_sets tools tool_selection profile allowed_models allowed_agents agent_models rules guards budgets knowledge granite ner_model_set review)a
 
   def from_source(source) do
     %__MODULE__{
       schema_version: source["schema_version"],
-      review: Map.get(source, "review", %{}),
+      review: source["review"],
       knowledge: Map.get(source, "knowledge", %{}),
+      granite: granite_form(source["granite"]),
       ner_model_set: Map.get(source, "ner_model_set", "pl-nkjp.v2"),
       detector_sets: Map.get(source, "detector_sets", %{}),
       tools: Map.get(source, "tools", %{}),
@@ -38,7 +40,7 @@ defmodule AiControl.Policies.Draft do
       profile: source["profile"],
       allowed_models: Enum.join(source["allowed_models"], "\n"),
       allowed_agents: source["allowed_agents"],
-      rules: source["rules"],
+      rules: Map.delete(source["rules"], "granite_violation"),
       budgets: source["budgets"],
       agent_models:
         Map.new(source["agent_models"], fn {id, models} ->
@@ -49,7 +51,7 @@ defmodule AiControl.Policies.Draft do
            }}
         end),
       guards:
-        Map.new(source["guards"], fn {id, guard} ->
+        Map.new(Map.delete(source["guards"], "granite"), fn {id, guard} ->
           mode =
             cond do
               guard["enabled"] == false -> "disabled"
@@ -109,22 +111,51 @@ defmodule AiControl.Policies.Draft do
       end
 
     source =
-      if draft.schema_version == 6,
+      if draft.schema_version in [5, 6] do
+        knowledge =
+          Map.new(draft.knowledge, fn {key, value} ->
+            {key,
+             if(key in ~w(enabled memory_write_enabled), do: value in [true, "true"], else: value)}
+          end)
+
+        Map.merge(source, %{"knowledge" => knowledge, "ner_model_set" => draft.ner_model_set})
+      else
+        source
+      end
+
+    source =
+      if draft.schema_version == 6 and not is_nil(draft.review),
         do: Map.put(source, "review", normalize_review(draft.review)),
         else: source
 
-    if draft.schema_version in [5, 6] do
-      knowledge =
-        Map.new(draft.knowledge, fn {key, value} ->
-          {key,
-           if(key in ~w(enabled memory_write_enabled), do: value in [true, "true"], else: value)}
-        end)
+    if draft.schema_version == 6 and not is_nil(draft.granite),
+      do: Map.put(source, "granite", granite_source(draft.granite)),
+      else: source
+  end
 
-      Map.merge(source, %{"knowledge" => knowledge, "ner_model_set" => draft.ner_model_set})
+  defp granite_form(%{"criteria" => criteria} = settings) do
+    settings
+    |> Map.update!("criteria", fn _ ->
+      Map.new(criteria, fn {id, c} -> {id, Map.put(c, "id", id)} end)
+    end)
+    |> Map.update!("privileged_resources", fn resources ->
+      Map.new(resources, fn {kind, values} -> {kind, Enum.join(values, "\n")} end)
+    end)
+  end
+
+  defp granite_form(value), do: value
+
+  defp granite_source(settings) when is_map(settings) do
+    if is_map(settings["criteria"]) and is_map(settings["privileged_resources"]) and
+         is_list(settings["high_risk_tools"]) and
+         Enum.all?(settings["criteria"], fn {_, entry} -> is_map(entry) end) do
+      normalize_granite(settings)
     else
-      source
+      settings
     end
   end
+
+  defp granite_source(value), do: value
 
   defp normalize_review(review) do
     review
@@ -136,6 +167,35 @@ defmodule AiControl.Policies.Draft do
          else: value
        )}
     end)
+  end
+
+  defp normalize_granite(settings) do
+    criteria =
+      Enum.map(Map.get(settings, "criteria", %{}), fn {key, criterion} ->
+        {Map.get(criterion, "id", key),
+         criterion |> Map.delete("id") |> Map.update("enabled", false, &(&1 in [true, "true"]))}
+      end)
+
+    criteria =
+      if length(Enum.uniq_by(criteria, &elem(&1, 0))) == length(criteria),
+        do: Map.new(criteria),
+        else: criteria
+
+    settings
+    |> Map.put("criteria", criteria)
+    |> Map.update("enabled", false, &(&1 in [true, "true"]))
+    |> Map.update("suspicious_input", false, &(&1 in [true, "true"]))
+    |> Map.update("suspicious_threshold", 0.25, fn value -> number(value) end)
+    |> Map.update("privileged_resources", %{}, fn resources ->
+      Map.new(resources, fn {kind, values} ->
+        {kind,
+         if(is_binary(values),
+           do: values |> String.split("\n", trim: true) |> Enum.map(&String.trim/1),
+           else: values
+         )}
+      end)
+    end)
+    |> Map.update("high_risk_tools", [], &Enum.reject(&1, fn value -> value == "" end))
   end
 
   defp selected_tools(%{tool_selection: nil, tools: tools}), do: normalize_tools(tools)
