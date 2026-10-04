@@ -21,7 +21,8 @@ violating content or `[DONE]`. Heartbeats default to five seconds. A 30-second
 delivery watchdog also covers the final `[DONE]` write. Wire, assembled and
 redacted response limits are each 4 MiB by default.
 
-The supervised session owns usage checkpointing, cancellation and final audit.
+The supervised session owns budget admission, usage checkpointing, cancellation
+and final audit, closing the gap between database admission and session registration.
 Client/worker death or write failures cancel transport and release the LLM slot.
 Validated final usage is settled idempotently even when later parsing, filtering
 or delivery fails. Before dispatch reservations are released; without final
@@ -46,7 +47,7 @@ manifest-verified Ollama 0.35.1 and qwen3.5:4b digest
 
 | Check | Result |
 | --- | --- |
-| `PGPORT=55437 mix precommit` | 555 ExUnit passed, 11 tagged tests excluded; 3 JS passed; format/compile/Credo/lockfile passed |
+| `PGPORT=55437 mix precommit` | 556 ExUnit passed, 11 tagged tests excluded; 3 JS passed; format/compile/Credo/lockfile passed |
 | Python Stream harness contract | 3 passed; no models/network needed |
 | `MIX_ENV=test mix dialyzer --format github` | Passed, zero project errors |
 | `MIX_ENV=test mix security` | Passed; dependency audit found no vulnerabilities; Sobelow retains existing low-confidence findings |
@@ -66,7 +67,8 @@ guard failure and JSON compatibility.
 Real HTTP fixtures use two supervised Bandit servers and actual TCP connections.
 They cover comments before approval, client disconnect during generation and
 during a 2.4 MB approved delivery, upstream process termination, owner death,
-pre-dispatch release, post-dispatch uncertainty, policy activation while held,
+owner death during preflight budget preparation, pre-dispatch release,
+post-dispatch uncertainty, policy activation while held,
 generation timeout and delivery watchdog. Synchronization uses messages,
 monitors and server calls, with no `Process.sleep/1` in tests.
 
@@ -150,3 +152,7 @@ failure handling and SIGTERM. The optional gated Prompt Guard job was skipped
 as configured and is outside Step 17. Container evidence supplements the actual
 macOS Ollama/SSE and model comparison; neither is represented by a simulated
 benchmark.
+
+The [PR checks](https://github.com/jlitewka99/hackyeah2026/pull/20/checks) track
+verification of subsequent revisions, including session-owned admission and its
+preflight cancellation regression.

@@ -55,7 +55,9 @@ defmodule AiControl.Gateway.Stream do
         stream_context: fn identity, policy ->
           GenServer.call(session, {:context, identity, policy})
         end,
-        stream_receipt: fn receipt -> GenServer.call(session, {:receipt, receipt}) end
+        stream_admit: fn identity, model, policy ->
+          GenServer.call(session, {:admit, identity, model, policy}, :infinity)
+        end
       )
 
     task = worker(fn -> Gateway.prepare_stream(state.identity, state.params, opts) end)
@@ -66,7 +68,18 @@ defmodule AiControl.Gateway.Stream do
   def handle_call({:context, identity, policy}, _, state),
     do: {:reply, :ok, %{state | identity: identity, policy: policy}}
 
-  def handle_call({:receipt, receipt}, _, state), do: {:reply, :ok, %{state | receipt: receipt}}
+  def handle_call({:admit, identity, model, policy}, _, state) do
+    result =
+      Budgets.admit(identity, state.opts[:agent_id], model, policy, state.opts[:request_id])
+
+    state =
+      case result do
+        {:ok, receipt} -> %{state | receipt: receipt}
+        _ -> state
+      end
+
+    {:reply, result, state}
+  end
 
   def handle_call({:received, bytes}, _, state) do
     evidence =

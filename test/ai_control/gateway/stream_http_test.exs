@@ -114,6 +114,44 @@ defmodule AiControl.Gateway.StreamHTTPTest do
     refute_received {:upstream_started, _}
   end
 
+  test "owner death during budget preparation releases the admitted reservation", context do
+    owner = self()
+
+    config =
+      Keyword.put(Config.get(), :test_tokenizer, fn _, _ ->
+        send(owner, {:preparation_held, self()})
+
+        receive do
+          :release_tokenizer -> {:ok, 12}
+        end
+      end)
+
+    Application.put_env(:ai_control, Config, config)
+
+    child =
+      start_supervised!(
+        {Task,
+         fn ->
+           Gateway.start_stream(context.principal, stream_request())
+         end}
+      )
+
+    child_ref = Process.monitor(child)
+    assert_receive {:preparation_held, worker}, 2000
+    worker_ref = Process.monitor(worker)
+    [session] = sessions()
+    session_ref = Process.monitor(session)
+    receipt = Repo.get_by!(Reservation, organization_id: context.scope.organization.id)
+    assert receipt.status == "admitted"
+    Process.exit(child, :kill)
+    assert_receive {:DOWN, ^child_ref, :process, ^child, :killed}, 2000
+    assert_receive {:DOWN, ^worker_ref, :process, ^worker, _}, 2000
+    assert_receive {:DOWN, ^session_ref, :process, ^session, :normal}, 2000
+    assert Repo.get!(Reservation, receipt.id).status == "released"
+    assert :sys.get_state(Slots).leases == %{}
+    refute_received {:upstream_started, _}
+  end
+
   test "socket disconnect during approved delivery records partial writes and settles usage once",
        context do
     uri = URI.parse(context.url)

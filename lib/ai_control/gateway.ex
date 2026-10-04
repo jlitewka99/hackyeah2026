@@ -51,12 +51,10 @@ defmodule AiControl.Gateway do
            measure(
              :budget_admission,
              fn ->
-               Budgets.admit(current, opts[:agent_id], params["model"], policy, request_id)
+               opts[:stream_admit].(current, params["model"], policy)
              end,
              opts
            ) do
-      opts[:stream_receipt].(receipt)
-
       with {:ok, safe} <- Stages.evaluate(params, current, policy, request_id, :input, opts),
            {:ok, safe} <- Request.validate(safe),
            {:ok, contract} <- ToolSchemas.prepare(safe),
