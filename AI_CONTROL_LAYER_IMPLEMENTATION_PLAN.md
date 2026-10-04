@@ -976,7 +976,8 @@ przerwany transfer, sprzątanie oraz zachowanie istniejącego artefaktu; cały
 zestaw tokenizera ma 9 testów. Wszystkie przechodzą na hoście oraz w kontenerze
 Linux po rzeczywistym pobraniu i weryfikacji przypiętych bajtów; `mix precommit`
 przechodzi: 690 ExUnit (16 opt-in excluded) i 5 JS.
-Ponowny CI jest dostępny w PR #26. Polityki,
+PR #26 został scalony przed poprawką; naprawę wydzielono na branch
+`JL/fix-tokenizer-ci-download` z `main` (`6f00150`) do osobnego PR. Polityki,
 przypięte bajty, offline runtime i zakaz retry w enforcement nie zmieniły się.
 
 ### Krok 12. Tool firewall i ograniczenia zasobów

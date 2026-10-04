@@ -177,8 +177,9 @@ failures leave the previous artifact intact and remove temporary bytes.
 Permanent HTTP errors and artifact mismatches fail immediately. The existing
 120-second request timeout is preserved; inference transport remains bounded
 and has no retry or fallback. Five download regressions and the four real
-offline tokenizer contracts pass locally (9/9). Follow-up Linux CI results are
-visible in [PR #26](https://github.com/jlitewka99/hackyeah2026/pull/26).
+offline tokenizer contracts pass locally (9/9). PR #26 was merged before the
+repair, so the fix is carried by `JL/fix-tokenizer-ci-download` from `main`
+(`6f00150`) in a separate follow-up PR.
 The same 9/9 tests also pass in the Linux container after a fresh real download
 through the repaired helper and pinned verification. `mix precommit` passes
 690 ExUnit tests (16 opt-in excluded) and 5 JavaScript tests after this repair.
