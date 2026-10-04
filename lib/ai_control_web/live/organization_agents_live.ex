@@ -2,13 +2,17 @@ defmodule AiControlWeb.OrganizationAgentsLive do
   use AiControlWeb, :live_view
 
   alias AiControl.Agents
+  alias AiControl.Audit.Filters
+  alias AiControl.Dashboard
   alias AiControl.Organizations.Access
   alias AiControlWeb.OrganizationUI
+  alias AiControlWeb.{ReportingHTML, ReportingLive}
 
   def mount(_, _, socket) do
     {:ok,
      socket
      |> assign(page_title: "Agents", editing_id: nil, form: agent_form(), edit_form: agent_form())
+     |> ReportingLive.install(&refresh/1)
      |> refresh()}
   end
 
@@ -39,6 +43,26 @@ defmodule AiControlWeb.OrganizationAgentsLive do
     end
   end
 
+  def handle_event("validate_edit", %{"agent" => attrs}, socket) do
+    case Agents.fetch_agent(
+           socket.assigns.current_scope,
+           socket.assigns.editing_id,
+           "agents.manage"
+         ) do
+      {:ok, agent} ->
+        form =
+          agent
+          |> Agents.change_agent(attrs)
+          |> Map.put(:action, :validate)
+          |> to_form(as: :agent)
+
+        {:noreply, socket |> assign(:edit_form, form) |> stream_insert(:agents, agent)}
+
+      {:error, reason} ->
+        failure(socket, reason)
+    end
+  end
+
   def handle_event("cancel_edit", _, socket),
     do: {:noreply, socket |> assign(:editing_id, nil) |> refresh()}
 
@@ -49,7 +73,7 @@ defmodule AiControlWeb.OrganizationAgentsLive do
          socket |> assign(:editing_id, nil) |> put_flash(:info, "Agent updated.") |> refresh()}
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        {:noreply, assign(socket, :edit_form, to_form(changeset, as: :agent))}
+        {:noreply, socket |> assign(:edit_form, to_form(changeset, as: :agent)) |> refresh()}
 
       {:error, reason} ->
         failure(socket, reason)
@@ -93,6 +117,19 @@ defmodule AiControlWeb.OrganizationAgentsLive do
       editing_id: editing_id
     )
     |> stream(:agents, agents, reset: true)
+    |> summaries(agents)
+  end
+
+  defp summaries(socket, _agents) do
+    {:ok, filters} = Filters.parse()
+
+    summaries =
+      case Dashboard.agent_summaries(socket.assigns.current_scope, filters) do
+        {:ok, values} -> values
+        _ -> %{}
+      end
+
+    assign(socket, :activity_summaries, summaries)
   end
 
   defp agent_form, do: to_form(Agents.change_agent(), as: :agent)

@@ -1,0 +1,53 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} active_page="events">
+  <div class="page-content" id="organization-events">
+    <div class="policy-heading">
+      <div>
+        <h1>Events</h1><p class="page-description">
+          Investigate actual decisions and usage. Audit evidence contains no interaction content.
+        </p>
+      </div>
+      <.link
+        :if={"events.export" in @current_scope.grants.permissions}
+        id="events-export"
+        href={
+          ~p"/organizations/#{@current_scope.organization.id}/events/export?#{ReportingHTML.filter_params(@filters)}"
+        }
+        class="button-secondary"
+      ><.icon name="hero-arrow-down-tray" class="size-4" /> Export JSONL</.link>
+    </div>
+    <ReportingHTML.filters form={@form} id="event-filters" detailed />
+    <p class="report-range muted" id="event-time-range">
+      {ReportingHTML.time(@filters.from)} — {ReportingHTML.time(@filters.to)}
+    </p>
+    <p :if={@report_error} role="alert" class="report-error" id="events-error">{@report_error}</p>
+    <div id="audit-event-list" phx-update="stream" class="report-list">
+      <p id="events-empty" class="hidden only:block muted py-8">
+        No events match these filters. Send an interaction through the gateway or broaden the time range.
+      </p>
+      <ReportingHTML.event_row
+        :for={{id, event} <- @streams.events}
+        id={id}
+        event={event}
+        organization_id={@current_scope.organization.id}
+      />
+    </div>
+    <nav class="report-links" aria-label="Event pages">
+      <.link
+        :if={@filters.cursor}
+        id="events-first"
+        patch={
+          ~p"/organizations/#{@current_scope.organization.id}/events?#{ReportingHTML.filter_params(@filters)}"
+        }
+        class="button-secondary"
+      >Newest events</.link>
+      <.link
+        :if={@next_cursor}
+        id="events-next"
+        patch={
+          ~p"/organizations/#{@current_scope.organization.id}/events?#{Map.put(ReportingHTML.filter_params(@filters), "cursor", @next_cursor)}"
+        }
+        class="button-secondary"
+      >Older events <.icon name="hero-arrow-right" class="size-4" /></.link>
+    </nav>
+  </div>
+</Layouts.app>

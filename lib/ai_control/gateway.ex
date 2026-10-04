@@ -5,10 +5,11 @@ defmodule AiControl.Gateway do
   alias AiControl.{Audit, Budgets, Policies}
   alias AiControl.Budgets.Usage
   alias AiControl.Gateway.{Config, Limiter, Models, Request, Response, Slots, Stages, ToolSchemas}
+  alias AiControl.Gateway.Measurements
   alias AiControl.Security.SecurityContext
 
   def chat(identity, params, opts \\ []) do
-    execute(identity, opts, fn current, request_id ->
+    execute(identity, Keyword.put(opts, :operation, "chat"), fn current, request_id, opts ->
       with :ok <- input_size(params),
            {:ok, params} <- Request.validate(params),
            {:ok, policy, current} <- Policies.snapshot_for_models(current, opts[:agent_id]) do
@@ -23,9 +24,13 @@ defmodule AiControl.Gateway do
   defp process_chat(current, params, policy, request_id, opts) do
     with :ok <- Policies.model_access(current, policy, opts[:agent_id], params["model"]),
          {:ok, receipt} <-
-           measure(:budget_admission, fn ->
-             Budgets.admit(current, opts[:agent_id], params["model"], policy, request_id)
-           end) do
+           measure(
+             :budget_admission,
+             fn ->
+               Budgets.admit(current, opts[:agent_id], params["model"], policy, request_id)
+             end,
+             opts
+           ) do
       {result, stage} =
         try do
           run_chat(current, params, policy, request_id, opts, receipt)
@@ -40,13 +45,13 @@ defmodule AiControl.Gateway do
   end
 
   defp run_chat(current, params, policy, request_id, opts, receipt) do
-    with {:ok, safe} <- Stages.evaluate(params, current, policy, request_id, :input),
+    with {:ok, safe} <- Stages.evaluate(params, current, policy, request_id, :input, opts),
          {:ok, safe} <- Request.validate(safe),
          {:ok, contract} <- ToolSchemas.prepare(safe),
          :ok <- authorize_again(current, policy, opts[:agent_id], params["model"]) do
       case generate(safe, receipt, current, policy, opts) do
         {:ok, response} ->
-          {filter_output(response, current, policy, request_id, safe, contract), :output}
+          {filter_output(response, current, policy, request_id, safe, contract, opts), :output}
 
         error ->
           {error, :output}
@@ -56,18 +61,25 @@ defmodule AiControl.Gateway do
     end
   end
 
-  defp filter_output(response, current, policy, request_id, safe, contract) do
+  defp filter_output(response, current, policy, request_id, safe, contract, opts) do
     with {:ok, response} <- Response.normalize(response, safe["model"], request_id),
          :ok <- Response.validate(response, contract) do
-      Stages.evaluate(response, current, policy, request_id, :output,
-        tool_contract: contract,
-        semantic_prompt: Jason.encode!(safe["messages"])
+      Stages.evaluate(
+        response,
+        current,
+        policy,
+        request_id,
+        :output,
+        Keyword.merge(opts,
+          tool_contract: contract,
+          semantic_prompt: Jason.encode!(safe["messages"])
+        )
       )
     end
   end
 
   def models(identity, opts \\ []) do
-    execute(identity, opts, fn current, _ ->
+    execute(identity, Keyword.put(opts, :operation, "models"), fn current, _, _ ->
       case Policies.snapshot_for_models(current, opts[:agent_id]) do
         {:ok, policy, current} ->
           models =
@@ -89,6 +101,12 @@ defmodule AiControl.Gateway do
   end
 
   defp execute(identity, opts, callback) do
+    Measurements.run(fn pid ->
+      execute_measured(identity, Keyword.put(opts, :measurements, pid), callback)
+    end)
+  end
+
+  defp execute_measured(identity, opts, callback) do
     request_id = opts[:request_id] || Ecto.UUID.generate()
     started = System.monotonic_time()
 
@@ -96,17 +114,17 @@ defmodule AiControl.Gateway do
       {:ok, current} ->
         {result, policy, stage} =
           case ingress(current, opts) do
-            :ok -> callback.(current, request_id)
+            :ok -> callback.(current, request_id, opts)
             error -> {error, nil, :input}
           end
 
-        finish(current, request_id, result, policy, started, stage)
+        finish(current, request_id, result, policy, started, stage, opts)
 
       {:error, :forbidden} = error ->
         # These are trusted adapters whose previously verified access was revoked.
         case identity do
-          %Principal{} -> finish(identity, request_id, error, nil, started)
-          %Scope{} -> finish(identity, request_id, error, nil, started)
+          %Principal{} -> finish(identity, request_id, error, nil, started, :input, opts)
+          %Scope{} -> finish(identity, request_id, error, nil, started, :input, opts)
           _ -> error
         end
     end
@@ -116,7 +134,7 @@ defmodule AiControl.Gateway do
     :exit, _ -> {:error, :upstream_unavailable}
   end
 
-  defp finish(identity, request_id, result, policy, started, stage \\ :input) do
+  defp finish(identity, request_id, result, policy, started, stage, opts) do
     {result, evidence} =
       case result do
         {:accounted, outcome, receipt} -> {outcome, Budgets.evidence(receipt)}
@@ -131,13 +149,28 @@ defmodule AiControl.Gateway do
       end
 
     duration = duration(started)
+    Measurements.record(opts[:measurements], "request", duration)
+
+    observation = %{
+      operation: opts[:operation],
+      timings: Measurements.snapshot(opts[:measurements])
+    }
 
     :telemetry.execute([:ai_control, :gateway, :request], %{duration_us: duration}, %{
       code: code,
       stage: stage
     })
 
-    case Audit.record_gateway(identity, request_id, code, duration, policy, stage, evidence) do
+    case Audit.record_gateway(
+           identity,
+           request_id,
+           code,
+           duration,
+           policy,
+           stage,
+           evidence,
+           observation
+         ) do
       {:ok, _} -> result
       _ -> {:error, :audit_unavailable}
     end
@@ -163,15 +196,19 @@ defmodule AiControl.Gateway do
   defp identity_access(%Principal{}, _, _), do: :ok
 
   defp generate(params, receipt, identity, policy, opts) do
-    measure(:generation, fn ->
-      Slots.run(:llm, Config.get(:llm_timeout), fn ->
-        provider_chat(params, receipt, identity, policy, opts)
-      end)
-    end)
+    measure(
+      :generation,
+      fn ->
+        Slots.run(:llm, Config.get(:llm_timeout), fn ->
+          provider_chat(params, receipt, identity, policy, opts)
+        end)
+      end,
+      opts
+    )
   end
 
   defp provider_chat(params, receipt, identity, policy, opts) do
-    config = Config.get()
+    config = Keyword.merge(Config.get(), Keyword.take(opts, [:measurements]))
     provider = config[:provider]
 
     with {:ok, models} <- provider.models(config),
@@ -181,9 +218,15 @@ defmodule AiControl.Gateway do
          :ok <- authorize_again(identity, policy, opts[:agent_id], params["model"]),
          {:ok, receipt} <- Budgets.dispatch(receipt),
          {:ok, response} <-
-           provider.chat(params, Keyword.put(config, :budget_reservation_id, receipt.id)),
+           measure(
+             :upstream,
+             fn ->
+               provider.chat(params, Keyword.put(config, :budget_reservation_id, receipt.id))
+             end,
+             opts
+           ),
          {:ok, usage} <- response_usage(response),
-         {:ok, _} <- measure(:budget_settlement, fn -> Budgets.settle(receipt, usage) end) do
+         {:ok, _} <- measure(:budget_settlement, fn -> Budgets.settle(receipt, usage) end, opts) do
       {:ok, response}
     end
   end
@@ -193,9 +236,13 @@ defmodule AiControl.Gateway do
       params = Map.put_new(params, "max_tokens", config[:default_max_tokens])
       tokenizer = config[:tokenizer]
 
-      measure(:budget_reservation, fn ->
-        reserve_tokens(params, receipt, provider, tokenizer, config)
-      end)
+      measure(
+        :budget_reservation,
+        fn ->
+          reserve_tokens(params, receipt, provider, tokenizer, config)
+        end,
+        config
+      )
     else
       {:ok, params, receipt}
     end
@@ -259,14 +306,21 @@ defmodule AiControl.Gateway do
     )
   end
 
-  def measure(stage, callback) do
+  def measure(stage, callback, opts \\ []) do
     started = System.monotonic_time()
 
     try do
       callback.()
     after
+      elapsed = duration(started)
+
+      key =
+        if is_tuple(stage), do: stage |> Tuple.to_list() |> Enum.join("."), else: to_string(stage)
+
+      Measurements.record(opts[:measurements], key, elapsed)
+
       :telemetry.execute([:ai_control, :gateway, :stage], %{duration_us: duration(started)}, %{
-        stage: stage
+        stage: if(is_tuple(stage), do: :guard, else: stage)
       })
     end
   end

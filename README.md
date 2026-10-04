@@ -390,8 +390,52 @@ the organization lock during delivery.
 refresh `events.read` access and restrict results to the scope's organization.
 The maximum page size is 200. An organizer can inspect suspended organizations;
 ordinary members lose access on suspension or revocation. The serializer uses
-closed fields and rejects raw payloads and exceptions. Dashboard, export,
-and retention are scheduled for later roadmap steps.
+closed fields and rejects raw payloads and exceptions. Reporting and JSONL export
+are available below; retention remains a later roadmap step.
+
+### Organization reporting and JSONL export (step 11A)
+
+Overview combines terminal gateway decisions, current hourly budgets, measured
+latency and active controls. Each section needs its own read capability; the
+organization overview itself remains available without reporting grants.
+The read-only `/organizations/:organization_id/budgets` and `/signatures` pages
+use limited policy summaries without requiring `policies.read`. Configuration
+stays in Policies. Organization accounting totals retain their existing access
+rules, while individual agent rows require the corresponding resource grant.
+
+`/organizations/:organization_id/events` requires `events.read`. Its URL filters
+cover UTC time range (`range=1h|24h|7d|custom`, `from`, `to`), `kind`, `action`,
+`stage`, `guard`, `agent_id`, `reason_code` and `request_id`. Default range is 24 h;
+custom boundaries are inclusive/exclusive. Pages contain 50 events, using an
+opaque `(occurred_at, id)` cursor. Event details show a request chronology and a
+closed projection of identifiers, rules, signals, semantic evidence and usage.
+Historical operation/timing gaps remain unrecorded. Latency uses nearest-rank
+p50/p95 with sample counts, in milliseconds; overlapping stages are not subtracted.
+The upstream sample measures only `provider.chat`, and gateway total ends before
+the terminal audit write.
+
+`GET /organizations/:organization_id/events/export` requires both `events.read`
+and `events.export`, and accepts the same filters. The Events download link freezes
+its current range. The response is `application/x-ndjson`, with no-store caching:
+each line has `type: "event"`, `schema_version: 1` and `event`; the final line has
+`type: "export_complete"`, `schema_version: 1` and `count`. Consumers must require
+the completion line before treating a download as complete. The export streams
+500 events at a time, ordered by `(occurred_at, id)`, in a READ COMMITTED transaction.
+It refreshes both grants before each chunk and the completion line; revocation or
+disconnect stops the stream. A large download holds one database connection, with
+a five-minute transaction timeout. Exported nested evidence uses explicit field
+and type allowlists; prompts, responses, tool arguments and arbitrary data are
+never copied into the result.
+
+Content-free organization PubSub signals refresh reporting after successful
+commits, coalesced over 200 ms; a minute timer advances rolling ranges and the UTC
+hour. Access is rechecked before refreshing. Agent rename and policy drafts survive
+updates. Code that wraps a context in its own transaction must emit its notification
+after committing; nested operations suppress premature notifications.
+
+Step 11A does not complete step 11: real tool execution integration remains 12B,
+and model comparison and full MVP acceptance remain 11B. A proposal or pattern
+detection does not demonstrate that a tool executed.
 
 ## LLM gateway
 
@@ -636,8 +680,8 @@ tools:
 Only the shipped immutable sets are accepted. `tools.allowed_tools` validates
 unique tool identifiers and defaults to empty. Step 12B enforces this list in
 `POST /v1/tool_calls` together with operator resources, guards, audit and budgets.
-The separate Signatures dashboard remains step 11. Step 8 applies these adapters
-to generated text and decoded tool arguments before returning any output.
+The read-only Signatures dashboard is available in step 11A. Step 8 applies these
+adapters to generated text and decoded tool arguments before returning any output.
 
 ### Qwen semantic analysis and schema v3
 

@@ -78,7 +78,11 @@ defmodule AiControlWeb.GatewayBody do
           conn.assigns.api_principal,
           conn.assigns.request_id,
           Atom.to_string(code),
-          0
+          0,
+          nil,
+          :input,
+          nil,
+          %{operation: "chat", timings: %{}}
         )
       end
 

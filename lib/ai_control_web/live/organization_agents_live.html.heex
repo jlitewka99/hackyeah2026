@@ -4,6 +4,7 @@
     <p class="page-description">
       Register the agents that connect to {@current_scope.organization.name}. Suspending an agent pauses access for all of its API keys.
     </p>
+    <ReportingHTML.related_links scope={@current_scope} id="agent-report-links" />
     <section :if={@create?} class="list-section" aria-labelledby="create-agent-heading">
       <h2 id="create-agent-heading">Register an agent</h2>
       <.form for={@form} id="agent-create-form" phx-submit="create" class="inline-task-form mt-6">
@@ -27,7 +28,12 @@
         <div :for={{id, agent} <- @streams.agents} id={id} class="resource-row agent-row">
           <div class="min-w-0 flex-1">
             <%= if @editing_id == agent.id do %>
-              <.form for={@edit_form} id={"agent-edit-form-#{agent.id}"} phx-submit="save">
+              <.form
+                for={@edit_form}
+                id={"agent-edit-form-#{agent.id}"}
+                phx-submit="save"
+                phx-change="validate_edit"
+              >
                 <.input
                   field={@edit_form[:name]}
                   id={"agent-edit-name-#{agent.id}"}
@@ -55,6 +61,20 @@
             <p class="resource-status mt-2" data-status={agent.status}>
               {if agent.status == :active, do: "Active", else: "Suspended"}
             </p>
+            <%= if summary = @activity_summaries[agent.id] do %>
+              <p class="muted text-sm mt-2" id={"agent-activity-#{agent.id}"}>
+                {summary.total} terminal requests · {summary.counts["block"]} blocked · {summary.counts[
+                  "redact"
+                ]} redacted in the last 24 hours
+              </p>
+              <.link
+                navigate={
+                  ~p"/organizations/#{@current_scope.organization.id}/events?#{%{"agent_id" => agent.id}}"
+                }
+                id={"agent-events-#{agent.id}"}
+                class="text-link text-sm"
+              >Inspect events</.link>
+            <% end %>
           </div>
           <div :if={@manage? && @editing_id != agent.id} class="row-actions">
             <button

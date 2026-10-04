@@ -24,6 +24,21 @@ defmodule AiControl.Guards.Registry do
   }
 
   def sets, do: @sets
+
+  def catalog do
+    data = Jason.decode!(@detectors_raw)
+
+    %{
+      version: data["catalog_version"],
+      origin: data["origin"],
+      checksum: @detectors_expected,
+      rules:
+        Map.new(data["rules"], fn {id, rule} ->
+          {id, %{unsafe: rule["unsafe"], safe_alternative: rule["safe_alternative"]}}
+        end)
+    }
+  end
+
   def country(code), do: Map.get(@countries, code)
   def valid?, do: checksum(@raw) == @expected && checksum(@detectors_raw) == @detectors_expected
   defp checksum(raw), do: Base.encode16(:crypto.hash(:sha256, raw), case: :lower)

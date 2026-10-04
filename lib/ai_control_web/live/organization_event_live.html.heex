@@ -1,0 +1,57 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} active_page="events">
+  <div class="page-content" id="event-details">
+    <.link
+      navigate={~p"/organizations/#{@current_scope.organization.id}/events"}
+      class="text-link"
+      id="event-back"
+    >All events</.link>
+    <h1 class="mt-6">Event details</h1>
+    <p class="page-description">{@event.event_type} · {ReportingHTML.time(@event.occurred_at)}</p>
+    <dl class="report-facts">
+      <div>
+        <dt>Request ID</dt><dd class="resource-identifier">{@event.request_id}</dd>
+      </div>
+      <div>
+        <dt>Stage</dt><dd>{@event.stage}</dd>
+      </div>
+      <div>
+        <dt>Action / reason</dt><dd>
+          {if @event.action,
+            do: ReportingHTML.label(@event.action),
+            else: Enum.join(@event.reason_codes, ", ")}
+        </dd>
+      </div>
+      <div>
+        <dt>Policy version</dt><dd class="resource-identifier">
+          {@event.policy_version || "Not recorded"}
+        </dd>
+      </div>
+      <div>
+        <dt>Policy checksum</dt><dd class="resource-identifier">
+          {@event.policy_checksum || "Not recorded"}
+        </dd>
+      </div>
+    </dl>
+    <section class="list-section" aria-labelledby="request-chronology-heading">
+      <h2 id="request-chronology-heading">Request chronology</h2>
+      <div id="request-chronology" phx-update="stream">
+        <ReportingHTML.event_row
+          :for={{id, event} <- @streams.chronology}
+          id={id}
+          event={event}
+          organization_id={@current_scope.organization.id}
+        />
+      </div>
+    </section>
+    <section class="list-section" aria-labelledby="event-evidence-heading">
+      <h2 id="event-evidence-heading">Recorded evidence</h2><p class="muted mt-2">
+        Rule and detector IDs, measured signals, classifier labels and safe usage. Model proposals do not prove tool execution.
+      </p><pre
+        id="event-evidence"
+        class="evidence-json"
+        tabindex="0"
+        aria-labelledby="event-evidence-heading"
+      >{@evidence}</pre>
+    </section>
+  </div>
+</Layouts.app>
