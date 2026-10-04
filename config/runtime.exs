@@ -8,6 +8,7 @@ gateway_models =
   end
 
 gateway_config = [
+  prompt_guard_url: System.get_env("PROMPT_GUARD_BASE_URL", "http://127.0.0.1:8004"),
   semantic_url: System.get_env("SEMANTIC_BASE_URL", "http://127.0.0.1:8003"),
   semantic_timeout: String.to_integer(System.get_env("GATEWAY_SEMANTIC_TIMEOUT_MS", "30000")),
   tokenizer_url: System.get_env("TOKENIZER_BASE_URL", "http://127.0.0.1:8002"),

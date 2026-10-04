@@ -5,6 +5,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      prompt_guard:
+        description: Run gated Prompt Guard container acceptance (requires approved HF_TOKEN secret)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -36,6 +41,20 @@ jobs:
           name: step7-linux-ner-benchmark
           path: /tmp/step7-ner-benchmark.json
           if-no-files-found: warn
+
+  prompt-guard:
+    name: Gated Prompt Guard container acceptance
+    if: github.event_name == 'workflow_dispatch' && inputs.prompt_guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Build with approved gated access
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: docker build --build-arg WITH_PROMPT_GUARD=1 --secret id=hf_token,env=HF_TOKEN --tag ai-control:step11b .
+      - name: Real Prompt Guard and five-process supervision
+        run: bash docker/smoke ai-control:step11b --prompt-guard
 
   quality:
     name: Quality

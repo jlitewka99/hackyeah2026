@@ -79,7 +79,7 @@ defmodule AiControlWeb.PolicyLive do
   end
 
   def event("upgrade", _, socket) do
-    source = socket.assigns.form.source |> Draft.source() |> Configuration.upgrade()
+    source = socket.assigns.form.source |> Draft.source() |> Configuration.upgrade(4)
 
     {:noreply,
      assign(socket,
@@ -96,6 +96,22 @@ defmodule AiControlWeb.PolicyLive do
     do: {:noreply, assign(socket, editing?: false, errors: [], preview: nil)}
 
   def event("validate", %{"policy" => attrs}, socket) do
+    previous = AiControlWeb.PolicyHTML.injection_provider(socket.assigns.form)
+    provider = get_in(attrs, ["guards", "semantic", "provider"])
+
+    attrs =
+      if provider in ~w(qwen prompt_guard) && provider != previous do
+        rules = Map.get(attrs, "rules", %{})
+
+        rule =
+          Map.get(rules, "prompt_injection", %{})
+          |> Map.put("threshold", if(provider == "qwen", do: "0", else: ""))
+
+        Map.put(attrs, "rules", Map.put(rules, "prompt_injection", rule))
+      else
+        attrs
+      end
+
     case Draft.validate(attrs) do
       {:ok, changeset, _} ->
         {:noreply, assign(socket, form: to_form(changeset, as: :policy), errors: [])}

@@ -22,6 +22,10 @@ pids+=("$!")
 pids+=("$!")
 /opt/tokenizer/bin/python -m uvicorn service:app --app-dir /app/tokenizer --host 127.0.0.1 --port 8002 --workers 1 --timeout-graceful-shutdown 10 --no-access-log --log-level critical &
 pids+=("$!")
+if [[ "${PROMPT_GUARD_ENABLED:-0}" == 1 ]]; then
+  /opt/semantic/bin/python -m uvicorn service:app --app-dir /app/prompt_guard --host 127.0.0.1 --port 8004 --workers 1 --timeout-graceful-shutdown 10 --no-access-log --log-level critical &
+  pids+=("$!")
+fi
 ./bin/ai_control start &
 pids+=("$!")
 status=0

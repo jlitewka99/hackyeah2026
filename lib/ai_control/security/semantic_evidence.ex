@@ -19,7 +19,28 @@ defmodule AiControl.Security.SemanticEvidence do
       is_list(windows) && length(windows) <= 128 && Enum.all?(windows, &window?/1)
   end
 
+  def valid?(
+        %{
+          "model_set" => set,
+          "revision" => revision,
+          "task" => "injection",
+          "signal_kind" => "classifier_score",
+          "windows" => windows
+        } = evidence
+      ) do
+    map_size(evidence) == 5 && Validation.code?(set) && is_binary(revision) &&
+      Regex.match?(~r/\A[0-9a-f]{40}\z/, revision) && is_list(windows) &&
+      length(windows) <= 128 && Enum.all?(windows, &score_window?/1)
+  end
+
   def valid?(_), do: false
+
+  def score_window?(
+        %{"field_index" => index, "start_byte" => first, "end_byte" => last, "score" => score} =
+          window
+      ), do: map_size(window) == 4 && range?(index, first, last) && Validation.score?(score)
+
+  def score_window?(_), do: false
 
   def window?(
         %{

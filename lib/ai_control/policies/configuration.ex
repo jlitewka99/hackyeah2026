@@ -1,14 +1,16 @@
 defmodule AiControl.Policies.Configuration do
   @moduledoc "Versioned policy dispatch; legacy defaults and checksums remain frozen."
-  alias AiControl.Policies.{ConfigurationV2, ConfigurationV3}
+  alias AiControl.Policies.{ConfigurationV2, ConfigurationV3, ConfigurationV4}
 
   def profiles, do: ConfigurationV2.profiles()
 
   def categories(version \\ 1),
-    do: ConfigurationV2.categories() ++ if(version == 3, do: ["content_safety"], else: [])
+    do: ConfigurationV2.categories() ++ if(version in [3, 4], do: ["content_safety"], else: [])
 
   def guards(version \\ 1),
-    do: ConfigurationV2.guards(min(version, 2)) ++ if(version == 3, do: ["moderation"], else: [])
+    do:
+      ConfigurationV2.guards(min(version, 2)) ++
+        if(version in [3, 4], do: ["moderation"], else: [])
 
   def ner_entities, do: ConfigurationV2.ner_entities()
   def budget_fields, do: ConfigurationV2.budget_fields()
@@ -27,9 +29,11 @@ defmodule AiControl.Policies.Configuration do
     ]
 
   def default(version \\ 1)
+  def default(4), do: default(3) |> Map.put("schema_version", 4)
   def default(3), do: ConfigurationV2.default(2) |> Map.put("schema_version", 3)
   def default(version), do: ConfigurationV2.default(version)
   def upgrade(source, version \\ 3)
+  def upgrade(source, 4), do: upgrade(source, 3) |> Map.put("schema_version", 4)
   def upgrade(source, 2), do: ConfigurationV2.upgrade(source)
 
   def upgrade(source, 3) do
@@ -43,6 +47,7 @@ defmodule AiControl.Policies.Configuration do
     end)
   end
 
+  def validate(%{"schema_version" => 4} = source), do: ConfigurationV4.validate(source)
   def validate(%{"schema_version" => 3} = source), do: ConfigurationV3.validate(source)
   def validate(source), do: ConfigurationV2.validate(source)
 end

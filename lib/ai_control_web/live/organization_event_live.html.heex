@@ -44,8 +44,9 @@
       </div>
     </section>
     <section class="list-section" aria-labelledby="event-evidence-heading">
+      <p :if={@model_signal} id="event-model-signal" class="muted mb-4">{@model_signal}</p>
       <h2 id="event-evidence-heading">Recorded evidence</h2><p class="muted mt-2">
-        Rule and detector IDs, measured signals, classifier labels and safe usage. Model proposals do not prove tool execution.
+        Rule and detector IDs, measured signals, classifier labels or malicious scores and safe usage. Scores are not calibrated probabilities. Model proposals do not prove tool execution.
       </p><pre
         id="event-evidence"
         class="evidence-json"

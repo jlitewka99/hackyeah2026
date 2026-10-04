@@ -4,3 +4,6 @@ curl --fail --silent --max-time 2 http://127.0.0.1:${PORT:-4000}/health >/dev/nu
 curl --fail --silent --max-time 2 http://127.0.0.1:8001/ready >/dev/null
 curl --fail --silent --max-time 2 http://127.0.0.1:8002/ready >/dev/null
 curl --fail --silent --max-time 2 http://127.0.0.1:8003/ready >/dev/null
+if [ "${PROMPT_GUARD_ENABLED:-0}" = 1 ]; then
+  curl --fail --silent --max-time 2 http://127.0.0.1:8004/ready >/dev/null
+fi

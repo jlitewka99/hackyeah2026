@@ -119,7 +119,7 @@ defmodule AiControl.Guards.Semantic.Local do
     end) == byte_size(text)
   end
 
-  defp request(method, path, payload, config) do
+  def request(method, path, payload, config) do
     options = [
       method: method,
       url: String.trim_trailing(config[:semantic_url], "/") <> path,

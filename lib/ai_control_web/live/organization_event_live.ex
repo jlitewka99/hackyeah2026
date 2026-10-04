@@ -20,6 +20,7 @@ defmodule AiControlWeb.OrganizationEventLive do
          {:ok, events} <- Audit.request_events(socket.assigns.current_scope, event.request_id) do
       socket
       |> assign(event: event, evidence: Jason.encode!(Serializer.event(event), pretty: true))
+      |> assign(:model_signal, model_signal(Serializer.data(event.data)))
       |> stream(:chronology, events, reset: true)
     else
       _ ->
@@ -28,4 +29,26 @@ defmodule AiControlWeb.OrganizationEventLive do
         |> redirect(to: ~p"/organizations/#{socket.assigns.current_scope.organization.id}/events")
     end
   end
+
+  defp model_signal(data) do
+    guard = Enum.find(Map.get(data, "guards", []), &(&1["guard"] == "semantic"))
+    evidence = guard && guard["evidence"]
+
+    explain_signal(
+      evidence,
+      get_in(data, ["policy_evidence", "rules", "prompt_injection", "threshold"])
+    )
+  end
+
+  defp explain_signal(%{"signal_kind" => "classifier_score", "windows" => windows}, threshold) do
+    score = Enum.map(windows, & &1["score"]) |> Enum.max(fn -> nil end)
+
+    "Llama Prompt Guard recorded a maximum malicious score of #{score || "Not recorded"} across #{length(windows)} windows. The recorded policy threshold was #{threshold || "Not recorded"}. This score is not a calibrated probability."
+  end
+
+  defp explain_signal(%{"signal_kind" => "label_mapping_binary", "windows" => windows}, _) do
+    "Qwen recorded severity and category labels across #{length(windows)} windows. Injection matches require a selected severity and the Jailbreak category; the binary signal records that label mapping."
+  end
+
+  defp explain_signal(_, _), do: nil
 end

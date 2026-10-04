@@ -54,8 +54,11 @@
       </div>
       <div>
         <dt>Prompt injection</dt><dd>
-          {String.capitalize(@current.version.settings["rules"]["prompt_injection"]["action"])}
-          <%= if @current.version.settings["schema_version"] == 3 do %>
+          <span id="policy-active-provider">{provider_label(
+            get_in(@current.version.settings, ["guards", "semantic", "provider"])
+          )}</span>
+          · {String.capitalize(@current.version.settings["rules"]["prompt_injection"]["action"])}
+          <%= if label_rule_settings?(@current.version.settings, "prompt_injection") do %>
             · {Enum.join(@current.version.settings["guards"]["semantic"]["severities"], ", ")}
           <% else %>
             from {@current.version.settings["rules"]["prompt_injection"]["threshold"]}
@@ -103,14 +106,10 @@
         <div :for={{category, rule} <- Enum.sort(@current.version.settings["rules"])}>
           <dt class="font-medium">{label(category)}</dt><dd class="muted">
             {String.capitalize(rule["action"])}
-            <span :if={
-              @current.version.settings["schema_version"] == 3 &&
-                category in ~w(prompt_injection content_safety)
-            }> · Selected severity labels</span>
-            <span :if={
-              !(@current.version.settings["schema_version"] == 3 &&
-                  category in ~w(prompt_injection content_safety))
-            }> from {rule["threshold"]}</span>
+            <span :if={label_rule_settings?(@current.version.settings, category)}> · Selected severity labels</span>
+            <span :if={!label_rule_settings?(@current.version.settings, category)}> from {rule[
+              "threshold"
+            ]}</span>
             · {rule["id"]}
           </dd>
         </div>
@@ -201,9 +200,33 @@
         class="policy-diff-row"
         id={"policy-diff-#{String.replace(change.path, ".", "-")}"}
       >
-        <p class="font-medium break-all">{change.path}</p>
-        <p><span class="muted">Current: </span><span class="break-all">{change.before}</span></p>
-        <p><span class="muted">New: </span><span class="break-all">{change.after}</span></p>
+        <div>
+          <p class="font-medium break-words">{diff_label(change.path)}</p>
+          <p :if={diff_label(change.path) != change.path} class="muted text-sm break-all mt-1">
+            {change.path}
+          </p>
+        </div>
+        <p>
+          <span class="muted">Current: </span><span class="break-words">{diff_value(
+            change,
+            @current.version.settings,
+            :before
+          )}</span>
+        </p>
+        <p>
+          <span class="muted">New: </span><span class="break-words">{diff_value(
+            change,
+            @preview.settings,
+            :after
+          )}</span>
+        </p>
+        <p
+          :if={change.path == "guards.semantic.provider"}
+          id="policy-provider-change-notice"
+          class="muted md:col-span-3"
+        >
+          {provider_change_notice(@preview.settings)}
+        </p>
       </div>
     </div>
     <div :if={@manage? && @preview.id != @current.version.id} class="row-actions mt-6">
@@ -267,18 +290,18 @@
       <div class="policy-heading mb-6">
         <p id="policy-draft-schema" class="font-medium">Schema v{schema_version(@form)}</p>
         <button
-          :if={schema_version(@form) < 3}
+          :if={schema_version(@form) < 4}
           id="policy-upgrade"
           type="button"
           class="button-secondary"
           phx-click="upgrade"
           phx-disable-with="Upgrading…"
-        >Upgrade to v3</button>
+        >Upgrade to v4</button>
       </div>
-      <p :if={schema_version(@form) < 3} class="muted mb-6">
-        Upgrade this draft to configure label mapping and optional response moderation. Saving and activation remain separate steps.
+      <p :if={schema_version(@form) < 4} class="muted mb-6">
+        Upgrade this draft to choose an injection provider and configure response moderation. Saving and activation remain separate steps.
       </p>
-      <section :if={schema_version(@form) in [2, 3]} id="policy-detector-sets" class="mb-6">
+      <section :if={schema_version(@form) in [2, 3, 4]} id="policy-detector-sets" class="mb-6">
         <h3 class="font-medium">Detector sets</h3>
         <p class="muted mt-2">
           Immutable sets keep detection reproducible.
@@ -326,7 +349,11 @@
             min="0"
             max="1"
             step="0.01"
-            label="Threshold override"
+            label={
+              if category == "prompt_injection" && injection_provider(@form) == "prompt_guard",
+                do: "Malicious score threshold",
+                else: "Threshold override"
+            }
             placeholder={to_string(draft_defaults["rules"][category]["threshold"])}
             errors={field_errors(@errors, "rules.#{category}.threshold")}
           />
@@ -353,7 +380,7 @@
           An unavailable required guard blocks the request. Select Profile default to remove an override.
         </p>
         <p
-          :if={schema_version(@form) in [2, 3]}
+          :if={schema_version(@form) in [2, 3, 4]}
           id="policy-phase-order"
           class="muted text-sm mt-2"
         >
@@ -393,7 +420,39 @@
             Output only. Disabled by default.
           </p>
           <div
-            :if={schema_version(@form) == 3 && guard in ["semantic", "moderation"]}
+            :if={schema_version(@form) == 4 && guard == "semantic"}
+            class="md:col-start-2 md:col-span-2"
+          >
+            <.input
+              name="policy[guards][semantic][provider]"
+              id="policy-semantic-provider"
+              type="select"
+              label="Injection provider"
+              value={injection_provider(@form)}
+              options={[
+                {"Qwen3Guard Gen 0.6B", "qwen"},
+                {"Llama Prompt Guard 2 86M", "prompt_guard"}
+              ]}
+              errors={field_errors(@errors, "guards.semantic.provider")}
+              aria-describedby="policy-provider-help"
+            />
+            <p id="policy-provider-help" class="muted text-sm mt-2">
+              A required provider must be available. There is no automatic fallback. Response moderation uses Qwen independently.
+            </p>
+            <p
+              :if={injection_provider(@form) == "prompt_guard"}
+              id="policy-score-help"
+              class="muted text-sm mt-2"
+            >
+              Set the prompt injection threshold above. The maximum malicious score across all windows triggers the rule; this score is not a calibrated probability. Approved model access is required.
+            </p>
+          </div>
+          <div
+            :if={
+              schema_version(@form) in [3, 4] &&
+                (guard == "moderation" ||
+                   (guard == "semantic" && injection_provider(@form) == "qwen"))
+            }
             class="md:col-start-2 md:col-span-2"
           >
             <.input
@@ -525,7 +584,7 @@
         </div>
       </details>
       <details
-        :if={schema_version(@form) in [2, 3]}
+        :if={schema_version(@form) in [2, 3, 4]}
         class="policy-details"
         id="policy-tools"
         open={MapSet.member?(@open_sections, "tools")}

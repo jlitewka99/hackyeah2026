@@ -13,6 +13,7 @@ COPY lib lib
 COPY priv priv
 COPY assets assets
 COPY sidecar/semantic/models.v1.json sidecar/semantic/models.v1.json
+COPY sidecar/prompt_guard/models.v1.json sidecar/prompt_guard/models.v1.json
 RUN mix compile && mix assets.deploy
 COPY config/runtime.exs config/
 COPY rel rel
@@ -32,7 +33,17 @@ RUN python -m venv /opt/semantic && /opt/semantic/bin/pip install --no-cache-dir
 COPY sidecar/semantic ./
 RUN /opt/semantic/bin/python models.py download /semantic-models
 
+COPY sidecar/prompt_guard /build/prompt_guard
+ARG WITH_PROMPT_GUARD=0
+RUN --mount=type=secret,id=hf_token mkdir -p /prompt-guard-models && \
+    if [ "$WITH_PROMPT_GUARD" = 1 ]; then \
+      test -s /run/secrets/hf_token && HF_TOKEN="$(cat /run/secrets/hf_token)" && export HF_TOKEN && \
+      /opt/semantic/bin/python /build/prompt_guard/models.py download /prompt-guard-models; \
+    elif [ "$WITH_PROMPT_GUARD" != 0 ]; then exit 1; fi
+
 FROM ${PYTHON_IMAGE} AS runner
+ARG WITH_PROMPT_GUARD=0
+ENV PROMPT_GUARD_ENABLED=${WITH_PROMPT_GUARD} PROMPT_GUARD_BASE_URL=http://127.0.0.1:8004 PROMPT_GUARD_MODELS_DIR=/app/prompt-guard-models
 COPY sidecar/tokenizer/requirements.lock /tmp/tokenizer-requirements.lock
 RUN python -m venv /opt/tokenizer && /opt/tokenizer/bin/pip install --no-cache-dir -r /tmp/tokenizer-requirements.lock
 COPY sidecar/tokenizer /app/tokenizer
@@ -45,6 +56,8 @@ COPY --from=ner-builder /models /app/models
 COPY --chown=app:app sidecar/ner /app/ner
 COPY --from=semantic-builder /opt/semantic /opt/semantic
 COPY --from=semantic-builder /semantic-models /app/semantic-models
+COPY --from=semantic-builder --chown=app:app /prompt-guard-models /app/prompt-guard-models
+COPY --chown=app:app sidecar/prompt_guard /app/prompt_guard
 COPY --chown=app:app sidecar/semantic /app/semantic
 COPY --chmod=755 docker/start docker/healthcheck /app/docker/
 ENV LANG=C.UTF-8 PHX_SERVER=true PORT=4000 NER_BASE_URL=http://127.0.0.1:8001 SEMANTIC_BASE_URL=http://127.0.0.1:8003 TOKENIZER_BASE_URL=http://127.0.0.1:8002 TOKENIZER_MODELS_DIR=/app/tokenizer-models STANZA_RESOURCES_DIR=/app/models SEMANTIC_MODELS_DIR=/app/semantic-models HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 PYTHONDONTWRITEBYTECODE=1

@@ -688,6 +688,28 @@ unique tool identifiers and defaults to empty. Step 12B enforces this list in
 The read-only Signatures dashboard is available in step 11A. Step 8 applies these
 adapters to generated text and decoded tool arguments before returning any output.
 
+### Prompt Guard injection and schema v4 — Built with Llama
+
+Step 11B adds a per-organization `guards.semantic.provider` choice: `qwen` or
+`prompt_guard`. Prompt Guard compares the maximum malicious score against an
+inclusive 0–1 threshold; Qwen keeps severity/Jailbreak mapping. Response
+moderation continues to use Qwen. Upgrade only a draft, save, inspect its diff,
+and activate explicitly. Existing versions/checksums remain compatible.
+
+Prompt Guard is optional and requires manually approved model access under the
+Llama 4 Community License. The standard build/CI does not require that access.
+See [operator setup, license and BuildKit secret](docs/prompt-guard.md), the
+[unqualified example](docs/prompt-guard-example.yaml) and
+[Step 11B acceptance/gates](docs/acceptance/step11b.md). The real comparison has
+not qualified a winner; Step 11 and MVP acceptance remain open.
+
+`PROMPT_GUARD_BASE_URL` defaults to `http://127.0.0.1:8004`. The optional image
+build starts a fifth offline supervised process; a required unavailable provider
+blocks traffic. `./run_security_tests.sh` runs the full shared suite and Python
+contracts; `--live-models` additionally requires all five real model services and
+fails when a dependency is missing. See the operator guide for Python/tokenizer
+prerequisites. Benchmark launch UI belongs to Step 16.
+
 ### Qwen semantic analysis and schema v3
 
 `Qwen/Qwen3Guard-Gen-0.6B` runs through the replaceable
@@ -784,6 +806,8 @@ Set these runtime variables using Coolify's secrets UI:
 | `TOKENIZER_BASE_URL` | Keep `http://127.0.0.1:8002` for this container |
 | `SEMANTIC_BASE_URL` | Keep `http://127.0.0.1:8003` for this container |
 | `SEMANTIC_CPU_THREADS` | Qwen CPU inference threads, default `2` |
+| `PROMPT_GUARD_BASE_URL` | Optional sidecar origin, default `http://127.0.0.1:8004` |
+| `PROMPT_GUARD_CPU_THREADS` | Prompt Guard CPU inference threads, default `2` |
 | `GATEWAY_SEMANTIC_TIMEOUT_MS` | Whole semantic call, default `30000`, maximum `30000` |
 | `POOL_SIZE` | PostgreSQL connections, default `10` |
 
