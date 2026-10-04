@@ -19,18 +19,21 @@ defmodule AiControl.GatewayTest do
     scope = organization_fixture()
     agent = agent_fixture(scope)
     principal = principal_fixture(scope, agent)
+    {:ok, version} = Policies.create_version(scope, Configuration.default())
+    {:ok, current} = Policies.current(scope)
+    {:ok, _} = Policies.activate(scope, version.id, current.set.revision)
     test = self()
 
     Req.Test.stub(__MODULE__, fn conn ->
       send(test, {:backend, conn.request_path})
 
       case conn.request_path do
-        "/api/tags" ->
+        "/models" ->
           Req.Test.json(conn, %{
-            models: [%{name: "qwen3.5:4b", digest: String.duplicate("a", 64)}]
+            data: [%{id: "deepseek-flash"}]
           })
 
-        "/v1/chat/completions" ->
+        "/chat/completions" ->
           Req.Test.json(conn, response())
       end
     end)
@@ -81,8 +84,8 @@ defmodule AiControl.GatewayTest do
     id = Ecto.UUID.generate()
     assert {:ok, data} = Gateway.chat(context.principal, request(), request_id: id)
     assert data["choices"] |> hd() |> get_in(["message", "content"]) == "Bezpieczna odpowiedź"
-    assert_received {:backend, "/api/tags"}
-    assert_received {:backend, "/v1/chat/completions"}
+    assert_received {:backend, "/models"}
+    assert_received {:backend, "/chat/completions"}
     events = Repo.all(from(e in Event, where: e.request_id == ^id))
     assert Enum.sort(Enum.map(events, & &1.kind)) == [:decision, :decision, :gateway]
 
@@ -94,16 +97,19 @@ defmodule AiControl.GatewayTest do
     refute events |> Enum.map(&Map.take(&1, Event.fields())) |> Jason.encode!() =~ "Zażółć"
 
     refute events |> Enum.map(&Map.take(&1, Event.fields())) |> Jason.encode!() =~
+             Config.get(:api_key)
+
+    refute events |> Enum.map(&Map.take(&1, Event.fields())) |> Jason.encode!() =~
              "Bezpieczna odpowiedź"
   end
 
   test "model catalog respects policy, per-agent restrictions and current user grants", context do
     activate_gateway_policy(context.scope, %{
       "allowed_models" => ["*"],
-      "agent_models" => %{context.agent.id => ["qwen3.5:4b"]}
+      "agent_models" => %{context.agent.id => ["deepseek-flash"]}
     })
 
-    assert {:ok, %{"data" => [%{"id" => "qwen3.5:4b"}]}} = Gateway.models(context.principal)
+    assert {:ok, %{"data" => [%{"id" => "deepseek-flash"}]}} = Gateway.models(context.principal)
 
     member =
       member_fixture(context.scope, :user, %{
@@ -136,7 +142,7 @@ defmodule AiControl.GatewayTest do
       member_fixture(context.scope, :user, %{
         permissions: ["ai.use"],
         agents: [context.agent.id],
-        models: ["qwen3.5:4b"]
+        models: ["deepseek-flash"]
       })
 
     assert {:ok, _} =
@@ -186,17 +192,17 @@ defmodule AiControl.GatewayTest do
     )
 
     assert {:error, :audit_unavailable} = Gateway.chat(context.principal, request())
-    assert_received {:backend, "/v1/chat/completions"}
+    assert_received {:backend, "/chat/completions"}
   end
 
-  test "missing model and wrong digest never generate", context do
+  test "missing model and malformed catalog never generate", context do
     activate_gateway_policy(context.scope)
 
     for {models, code} <- [
           {[], :model_unavailable},
-          {[%{name: "qwen3.5:4b", digest: String.duplicate("b", 64)}], :model_digest_mismatch}
+          {[%{name: "deepseek-flash"}], :upstream_invalid_response}
         ] do
-      Req.Test.stub(__MODULE__, &Req.Test.json(&1, %{models: models}))
+      Req.Test.stub(__MODULE__, &Req.Test.json(&1, %{data: models}))
       assert {:error, ^code} = Gateway.chat(context.principal, request())
     end
   end
@@ -207,9 +213,9 @@ defmodule AiControl.GatewayTest do
 
     Req.Test.stub(__MODULE__, fn conn ->
       case conn.request_path do
-        "/api/tags" ->
+        "/models" ->
           Req.Test.json(conn, %{
-            models: [%{name: "qwen3.5:4b", digest: String.duplicate("a", 64)}]
+            data: [%{id: "deepseek-flash"}]
           })
 
         _ ->
@@ -240,9 +246,9 @@ defmodule AiControl.GatewayTest do
 
     Req.Test.stub(__MODULE__, fn conn ->
       case conn.request_path do
-        "/api/tags" ->
+        "/models" ->
           Req.Test.json(conn, %{
-            models: [%{name: "qwen3.5:4b", digest: String.duplicate("a", 64)}]
+            data: [%{id: "deepseek-flash"}]
           })
 
         _ ->
@@ -293,9 +299,9 @@ defmodule AiControl.GatewayTest do
 
     Req.Test.stub(__MODULE__, fn conn ->
       case conn.request_path do
-        "/api/tags" ->
+        "/models" ->
           Req.Test.json(conn, %{
-            models: [%{name: "qwen3.5:4b", digest: String.duplicate("a", 64)}]
+            data: [%{id: "deepseek-flash"}]
           })
 
         _ ->
@@ -341,9 +347,9 @@ defmodule AiControl.GatewayTest do
 
     Req.Test.stub(__MODULE__, fn conn ->
       case conn.request_path do
-        "/api/tags" ->
+        "/models" ->
           Req.Test.json(conn, %{
-            models: [%{name: "qwen3.5:4b", digest: String.duplicate("a", 64)}]
+            data: [%{id: "deepseek-flash"}]
           })
 
         _ ->

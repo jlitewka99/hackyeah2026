@@ -1,4 +1,4 @@
-defmodule AiControl.Gateway.LiveOllamaTest do
+defmodule AiControl.Gateway.LiveDeepSeekTest do
   use AiControlWeb.ConnCase, async: false
 
   import AiControl.AgentsFixtures
@@ -11,24 +11,27 @@ defmodule AiControl.Gateway.LiveOllamaTest do
   @moduletag :live_models
   @moduletag timeout: 150_000
 
-  test "real pinned Ollama generates through the authenticated audited gateway", %{conn: conn} do
+  test "real DeepSeek generates through the authenticated audited gateway", %{conn: conn} do
     old = Application.fetch_env!(:ai_control, Config)
-    models = File.read!("priv/models/ollama-demo.json") |> Jason.decode!()
+    models = File.read!("priv/models/deepseek-demo.json") |> Jason.decode!()
 
     Application.put_env(
       :ai_control,
       Config,
-      old |> Keyword.put(:models, models) |> Keyword.delete(:http_plug)
+      old
+      |> Keyword.put(:models, models)
+      |> Keyword.put(:api_key, System.fetch_env!("DEEPSEEK_API_KEY"))
+      |> Keyword.delete(:http_plug)
     )
 
     on_exit(fn -> Application.put_env(:ai_control, Config, old) end)
-    scope = organization_fixture(%{name: "Isolated real Ollama acceptance"})
+    scope = organization_fixture(%{name: "Isolated real DeepSeek acceptance"})
     agent = agent_fixture(scope)
     {_key, token} = key_fixture(scope, agent)
     activate_gateway_policy(scope)
     conn = conn |> put_req_header("authorization", "Bearer " <> token)
     models_conn = get(conn, "/v1/models")
-    assert json_response(models_conn, 200)["data"] |> Enum.map(& &1["id"]) == ["qwen3.5:4b"]
+    assert json_response(models_conn, 200)["data"] |> Enum.map(& &1["id"]) == ["deepseek-flash"]
 
     conn =
       conn
@@ -36,7 +39,7 @@ defmodule AiControl.Gateway.LiveOllamaTest do
       |> post(
         "/v1/chat/completions",
         Jason.encode!(%{
-          "model" => "qwen3.5:4b",
+          "model" => "deepseek-flash",
           "stream" => false,
           "max_tokens" => 512,
           "messages" => [

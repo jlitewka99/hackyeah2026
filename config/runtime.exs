@@ -1,12 +1,6 @@
 import Config
 
-# Operator configuration only. A missing catalog permits no model access.
-gateway_models =
-  case Jason.decode(System.get_env("GATEWAY_MODELS", "{}")) do
-    {:ok, models} when is_map(models) -> models
-    _ -> raise "GATEWAY_MODELS must be a JSON object of model names and full SHA-256 digests"
-  end
-
+# The generating model is fixed; operator secrets never come from public requests.
 gateway_config = [
   granite_url:
     System.get_env(
@@ -27,20 +21,22 @@ gateway_config = [
   ip_requests_per_minute:
     String.to_integer(System.get_env("GATEWAY_IP_REQUESTS_PER_MINUTE", "300")),
   prices:
-    case Jason.decode(System.get_env("GATEWAY_PRICES", "{}")) do
+    case Jason.decode(
+           System.get_env(
+             "GATEWAY_PRICES",
+             ~s({"deepseek-flash":{"currency":"USD","input_per_million":"0.30","output_per_million":"1.20"}})
+           )
+         ) do
       {:ok, prices} when is_map(prices) -> prices
       _ -> raise "GATEWAY_PRICES must be a JSON object"
     end,
   ner_url: System.get_env("NER_BASE_URL", "http://127.0.0.1:8001"),
   guard_timeout: String.to_integer(System.get_env("GATEWAY_GUARD_TIMEOUT_MS", "10000")),
   readiness_timeout: String.to_integer(System.get_env("GATEWAY_READINESS_TIMEOUT_MS", "5000")),
-  ollama_reasoning_effort:
-    case System.get_env("OLLAMA_REASONING_EFFORT", "none") do
-      "default" -> nil
-      effort when effort in ["none", "low", "medium", "high"] -> effort
-      _ -> raise "OLLAMA_REASONING_EFFORT must be default, none, low, medium or high"
-    end,
-  base_url: System.get_env("OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
+  api_key:
+    System.get_env("DEEPSEEK_API_KEY") ||
+      if(config_env() == :test, do: "synthetic-deepseek-test-key"),
+  base_url: "https://api.deepseek.com",
   input_bytes: String.to_integer(System.get_env("GATEWAY_INPUT_BYTES", "1048576")),
   response_bytes: String.to_integer(System.get_env("GATEWAY_RESPONSE_BYTES", "4194304")),
   connect_timeout: String.to_integer(System.get_env("GATEWAY_CONNECT_TIMEOUT_MS", "2000")),
@@ -49,11 +45,6 @@ gateway_config = [
   guard_slots: String.to_integer(System.get_env("GATEWAY_GUARD_SLOTS", "2")),
   requests_per_minute: String.to_integer(System.get_env("GATEWAY_REQUESTS_PER_MINUTE", "60"))
 ]
-
-gateway_config =
-  if config_env() == :test && !System.get_env("GATEWAY_MODELS"),
-    do: gateway_config,
-    else: Keyword.put(gateway_config, :models, gateway_models)
 
 config :ai_control, AiControl.Gateway.Config, gateway_config
 

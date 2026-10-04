@@ -17,7 +17,7 @@ defmodule AiControl.Testing.Runner do
       Keyword.merge(config,
         provider: AiControl.Testing.Provider,
         tokenizer: AiControl.Testing.Tokenizer,
-        models: %{"synthetic:controlled" => String.duplicate("a", 64)}
+        models: %{"synthetic:controlled" => "synthetic:controlled"}
       )
 
     Application.put_env(:ai_control, Config, controlled)

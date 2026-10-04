@@ -11,7 +11,7 @@ ollama pull granite4.1-guardian:8b
 curl http://127.0.0.1:11434/api/tags
 ```
 
-The required full digest is `f82c0882cec110279601307cdd632d868e29f16eaa59947bef51096e5f740492`. The adapter refuses a different digest. Granite is a separate guard; do not add it to the client-facing `GATEWAY_MODELS` allowlist merely to enable the guard.
+The required full digest is `f82c0882cec110279601307cdd632d868e29f16eaa59947bef51096e5f740492`. The adapter refuses a different digest. Granite is a separate, optional local guard. The public generating model remains `deepseek-flash` through the direct DeepSeek API.
 
 The existing tokenizer service must load the separately pinned Granite tokenizer. Install its existing locked dependencies, download during setup, and verify offline at startup:
 
@@ -26,7 +26,7 @@ export GRANITE_TOKENIZER_MODELS_DIR="$PWD/_build/granite-tokenizer"
   --host 127.0.0.1 --port 8002 --workers 1 --no-access-log --log-level critical
 ```
 
-The manifest [granite.v1.json](../sidecar/tokenizer/granite.v1.json) fixes the tokenizer revision, file size and SHA-256. Requests never download artifacts. `/ready` must list both model digests; `/count` selects a tokenizer by the exact model name and digest.
+The manifest [granite.v1.json](../sidecar/tokenizer/granite.v1.json) fixes the tokenizer revision, file size and SHA-256. Requests never download artifacts. `/ready` reports the DeepSeek recipe version, encoding and tokenizer hash, plus the Granite model digest in `models` when its tokenizer is loaded. `/count` accepts complete prepared DeepSeek requests or Granite raw prompts with the exact guard model name and digest. The DeepSeek API identifier has no locally verified model digest.
 
 Configure the application with operator-owned origins:
 
@@ -72,7 +72,7 @@ GRANITE_ACCEPTANCE_REPORT=_build/granite-acceptance.json \
 PYTHON=/path/to/locked/sidecar/python ./run_security_tests.sh --live-models
 ```
 
-The full live gate requires Qwen3.5, NER, Qwen3Guard, Prompt Guard, Granite and both tokenizers. Missing services fail qualification. Do not set a real `GATEWAY_MODELS` catalog for the mixed stub/real test suite; real-model tests set their own pinned catalog. Supply the separate service origins through their existing environment variables.
+The full live gate requires `DEEPSEEK_API_KEY` with an active balance, NER, Qwen3Guard, Prompt Guard, Granite and both tokenizers. Missing services fail qualification. Supply the separate guard service origins through their existing environment variables. Real API acceptance also compares the prepared-request counter with DeepSeek's `usage.prompt_tokens`.
 
 The Granite fixture contains twelve synthetic safe/unsafe cases across PL/EN input, tools and groundedness. Reports record errors, per-case usage, p50/p95 and the digest. Record Ollama `/api/version` and `/api/ps` alongside each run to retain runtime, quantization and memory information. See the [acceptance report](acceptance/step14-granite-acceptance.md) for results and remaining qualification.
 

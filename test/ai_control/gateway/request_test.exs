@@ -86,11 +86,11 @@ defmodule AiControl.Gateway.RequestTest do
       |> Map.put("private", "secret")
       |> put_in(["choices", Access.at(0), "message", "reasoning"], "secret chain of thought")
 
-    assert {:ok, safe} = Response.normalize(data, "qwen3.5:4b", Ecto.UUID.generate())
+    assert {:ok, safe} = Response.normalize(data, "deepseek-flash", Ecto.UUID.generate())
     refute Jason.encode!(safe) =~ "secret"
 
     assert {:error, :upstream_invalid_response} =
-             Response.normalize(%{"choices" => []}, "qwen3.5:4b", Ecto.UUID.generate())
+             Response.normalize(%{"choices" => []}, "deepseek-flash", Ecto.UUID.generate())
   end
 
   test "merged Unicode ranges redact once and invalid text boundaries fail" do

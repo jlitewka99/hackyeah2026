@@ -1,11 +1,11 @@
 defmodule AiControl.Policies.SchemaVersionTest do
   use ExUnit.Case, async: true
 
-  alias AiControl.Policies.{Configuration, Draft, YAML}
+  alias AiControl.Policies.{Configuration, ConfigurationV2, Draft, YAML}
   alias AiControl.Policy.Snapshot
 
   test "v1 checksum and resolved settings are frozen and never enable NER" do
-    source = Configuration.default()
+    source = ConfigurationV2.default()
     {:ok, %{settings: settings}} = Configuration.validate(source)
 
     rules =

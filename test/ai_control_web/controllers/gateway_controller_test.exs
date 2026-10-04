@@ -18,6 +18,9 @@ defmodule AiControlWeb.GatewayControllerTest do
     scope = organization_fixture()
     agent = agent_fixture(scope)
     {_key, token} = key_fixture(scope, agent)
+    {:ok, version} = AiControl.Policies.create_version(scope, Configuration.default())
+    {:ok, current} = AiControl.Policies.current(scope)
+    {:ok, _} = AiControl.Policies.activate(scope, version.id, current.set.revision)
 
     conn =
       conn
@@ -32,7 +35,7 @@ defmodule AiControlWeb.GatewayControllerTest do
     assert build_conn() |> get("/health") |> json_response(200) == %{"status" => "ok"}
 
     assert get(conn, "/v1/models") |> json_response(200) |> get_in(["data", Access.at(0), "id"]) ==
-             "qwen3.5:4b"
+             "deepseek-flash"
 
     assert get(conn, "/ready") |> json_response(503) == %{"status" => "not_ready"}
   end
@@ -74,16 +77,13 @@ defmodule AiControlWeb.GatewayControllerTest do
 
       Req.Test.stub(__MODULE__, fn conn ->
         case conn.request_path do
-          "/api/tags" ->
+          "/models" ->
             Req.Test.json(conn, %{
-              models: [%{name: "qwen3.5:4b", digest: String.duplicate("a", 64)}]
+              data: [%{id: "deepseek-flash"}]
             })
 
-          "/api/version" ->
-            Req.Test.json(conn, %{version: "0.35.1"})
-
           _ ->
-            Req.Test.json(conn, %{_debug_info: %{rendered_template: "prompt"}})
+            Req.Test.json(conn, response())
         end
       end)
 
@@ -144,9 +144,9 @@ defmodule AiControlWeb.GatewayControllerTest do
 
     Req.Test.stub(__MODULE__, fn conn ->
       case conn.request_path do
-        "/api/tags" ->
+        "/models" ->
           Req.Test.json(conn, %{
-            models: [%{name: "qwen3.5:4b", digest: String.duplicate("a", 64)}]
+            data: [%{id: "deepseek-flash"}]
           })
 
         _ ->
@@ -161,15 +161,17 @@ defmodule AiControlWeb.GatewayControllerTest do
       end)
 
     refute logs =~ "PRIVATE_OUTPUT_SECRET"
+    refute logs =~ Config.get(:api_key)
     refute logs =~ "Zażółć"
   end
 
-  test "ready requires every effective policy guard and verifies backend digests", context do
+  test "ready requires every effective policy guard and verifies available model identifiers",
+       context do
     Application.put_env(
       :ai_control,
       Config,
       Config.get()
-      |> Keyword.put(:models, %{"qwen3.5:4b" => String.duplicate("a", 64)})
+      |> Keyword.put(:models, %{"deepseek-flash" => "deepseek-flash"})
       |> Keyword.put(
         :guards,
         Map.new(Configuration.guards(), &{&1, AiControl.TestGatewayGuard})
@@ -178,7 +180,7 @@ defmodule AiControlWeb.GatewayControllerTest do
 
     Req.Test.stub(
       __MODULE__,
-      &Req.Test.json(&1, %{models: [%{name: "qwen3.5:4b", digest: String.duplicate("a", 64)}]})
+      &Req.Test.json(&1, %{data: [%{id: "deepseek-flash"}]})
     )
 
     assert get(context.conn, "/ready") |> json_response(200) == %{"status" => "ready"}

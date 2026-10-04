@@ -69,7 +69,7 @@ defmodule AiControlWeb.ToolPoliciesLiveTest do
       |> Draft.source()
       |> Map.put("tool_selection", %{"future.operation" => "true", "file.read" => "true"})
 
-    params = Map.put(params, "allowed_models", "qwen3.5:4b")
+    params = Map.put(params, "allowed_models", "deepseek-flash")
     {:ok, changeset, config} = Draft.validate(params)
     assert config.source["tools"]["allowed_tools"] == ["future.operation", "file.read"]
 

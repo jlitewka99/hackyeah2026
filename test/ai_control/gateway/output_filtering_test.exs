@@ -436,8 +436,8 @@ defmodule AiControl.Gateway.OutputFilteringTest do
     send(owner, {:backend, conn.request_path})
 
     case conn.request_path do
-      "/api/tags" ->
-        Req.Test.json(conn, %{models: [%{name: "qwen3.5:4b", digest: String.duplicate("a", 64)}]})
+      "/models" ->
+        Req.Test.json(conn, %{data: [%{id: "deepseek-flash"}]})
 
       _ ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)

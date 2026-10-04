@@ -1,13 +1,23 @@
 defmodule AiControl.Budgets.Tokenizer do
-  @moduledoc "Private, digest-bound token counts of the actual Ollama-rendered prompt."
-  alias AiControl.Gateway.{Config, Models}
+  @moduledoc "Private counts for prepared DeepSeek requests and pinned Granite guard prompts."
+  alias AiControl.Gateway.Config
 
-  @callback count(String.t(), String.t(), keyword()) ::
+  @manifest Jason.decode!(File.read!("sidecar/tokenizer/models.v1.json"))
+  @external_resource "sidecar/tokenizer/models.v1.json"
+  @sha get_in(@manifest, ["files", Access.at(0), "sha256"])
+
+  @callback count(String.t(), map(), keyword()) ::
               {:ok, non_neg_integer()} | {:error, atom()}
   @callback ready?(keyword()) :: boolean()
-  def count(model, prompt, config) do
-    with {:ok, digest} <- Models.digest(model) do
-      count_pinned(model, digest, prompt, config)
+  def count(model, prepared, config) do
+    with true <- model == "deepseek-flash" && prepared["model"] == model,
+         {:ok, response} <- request(:post, "/count", %{model: model, request: prepared}, config),
+         %{"tokens" => tokens} <- response,
+         true <- artifacts?(response),
+         true <- is_integer(tokens) && tokens >= 0 do
+      {:ok, tokens}
+    else
+      _ -> {:error, :tokenizer_unavailable}
     end
   end
 
@@ -34,13 +44,19 @@ defmodule AiControl.Budgets.Tokenizer do
 
   def ready?(config) do
     case request(:get, "/ready", nil, config) do
-      {:ok, %{"status" => "ready", "models" => models, "runtime" => "0.35.1"}} ->
-        Enum.all?(Config.get(:models), fn {name, digest} -> models[name] == digest end)
-
-      _ ->
-        false
+      {:ok, %{"status" => "ready"} = response} -> artifacts?(response)
+      _ -> false
     end
   end
+
+  defp artifacts?(%{
+         "model" => "deepseek-flash",
+         "tokenizer_sha256" => @sha,
+         "recipe_version" => "0.1.1",
+         "encoding" => "v41"
+       }), do: true
+
+  defp artifacts?(_), do: false
 
   defp request(method, path, payload, config) do
     options = [

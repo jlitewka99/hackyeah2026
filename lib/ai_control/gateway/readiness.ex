@@ -1,5 +1,5 @@
 defmodule AiControl.Gateway.Readiness do
-  @moduledoc "Bounded readiness of effective policies, pinned models and required guard adapters."
+  @moduledoc "Bounded readiness of effective policies, available models and required guard adapters."
   alias AiControl.{Gateway, Policies, Repo}
   alias AiControl.Gateway.{Config, Slots}
   alias AiControl.Guards.Semantic
@@ -16,7 +16,7 @@ defmodule AiControl.Gateway.Readiness do
          {:ok, policies} when policies != [] <- Policies.readiness_snapshots(),
          true <- map_size(config[:models]) > 0,
          {:ok, models} <- provider.models(config),
-         true <- pinned_catalog?(config, models),
+         true <- available_catalog?(config, models),
          true <- guards_ready?(policies, config),
          true <- tokenizer_ready?(policies, config) do
       :ok
@@ -34,10 +34,10 @@ defmodule AiControl.Gateway.Readiness do
     end
   end
 
-  defp pinned_catalog?(config, models),
+  defp available_catalog?(config, models),
     do:
-      Enum.all?(config[:models], fn {name, digest} ->
-        Gateway.pinned(models, name, digest) == :ok
+      Enum.all?(config[:models], fn {name, _identifier} ->
+        Gateway.available(models, name) == :ok
       end)
 
   defp guards_ready?(policies, config) do

@@ -16,12 +16,15 @@ defmodule AiControl.Gateway.LiveBudgetTokenizerTest do
 
   test "pinned tokenizer counts the actual Polish, history and tool prompts exactly" do
     old = Application.fetch_env!(:ai_control, Config)
-    models = File.read!("priv/models/ollama-demo.json") |> Jason.decode!()
+    models = File.read!("priv/models/deepseek-demo.json") |> Jason.decode!()
 
     Application.put_env(
       :ai_control,
       Config,
-      old |> Keyword.put(:models, models) |> Keyword.delete(:http_plug)
+      old
+      |> Keyword.put(:models, models)
+      |> Keyword.put(:api_key, System.fetch_env!("DEEPSEEK_API_KEY"))
+      |> Keyword.delete(:http_plug)
     )
 
     on_exit(fn -> Application.put_env(:ai_control, Config, old) end)
@@ -74,6 +77,15 @@ defmodule AiControl.Gateway.LiveBudgetTokenizerTest do
     for {scenario, params} <- [
           {:polish, request()},
           {:history, Map.put(request(), "messages", history)},
+          {:rag,
+           Map.put(request(), "messages", [
+             %{
+               "role" => "user",
+               "name" => "retrieved_context",
+               "content" => "Dane RAG: godziny wsparcia 9–17."
+             },
+             %{"role" => "user", "content" => "Podsumuj godziny wsparcia."}
+           ])},
           {:tools, Map.put(request(), "tools", tools)},
           {:tool_history,
            request() |> Map.put("tools", tools) |> Map.put("messages", tool_history)}
@@ -97,7 +109,7 @@ defmodule AiControl.Gateway.LiveBudgetTokenizerTest do
 
   test "actual generation is settled before real NER redacts its output" do
     old = Application.fetch_env!(:ai_control, Config)
-    models = File.read!("priv/models/ollama-demo.json") |> Jason.decode!()
+    models = File.read!("priv/models/deepseek-demo.json") |> Jason.decode!()
 
     Application.put_env(
       :ai_control,
@@ -105,6 +117,7 @@ defmodule AiControl.Gateway.LiveBudgetTokenizerTest do
       old
       |> Keyword.put(:models, models)
       |> Keyword.put(:guards, %{"ner" => Ner})
+      |> Keyword.put(:api_key, System.fetch_env!("DEEPSEEK_API_KEY"))
       |> Keyword.delete(:http_plug)
     )
 
@@ -135,7 +148,6 @@ defmodule AiControl.Gateway.LiveBudgetTokenizerTest do
       request()
       |> Map.put("max_tokens", 128)
       |> Map.put("temperature", 0)
-      |> Map.put("seed", 1)
       |> Map.put("messages", [
         %{
           "role" => "user",

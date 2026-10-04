@@ -216,6 +216,7 @@ defmodule AiControl.Budgets do
       usage: current.usage,
       overrun: current.overrun,
       cost: cost_evidence(current),
+      cost_basis: "operator_estimate",
       currency: if(current.price, do: current.price["currency"])
     }
   end

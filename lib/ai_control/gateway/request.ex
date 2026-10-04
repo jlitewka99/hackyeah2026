@@ -1,6 +1,6 @@
 defmodule AiControl.Gateway.Request do
   @moduledoc "Explicit text-only Chat Completions subset. Identity is a separate argument."
-  @keys ~w(model messages tools tool_choice stream stream_options temperature top_p max_tokens seed stop n context)
+  @keys ~w(model messages tools tool_choice stream stream_options temperature top_p max_tokens stop n context)
   @message_keys ~w(role content name tool_calls tool_call_id)
 
   def validate(%{"context" => %{"query" => query}})
@@ -101,9 +101,8 @@ defmodule AiControl.Gateway.Request do
     is_boolean(Map.get(params, "stream", false)) && stream_options?(params) &&
       Map.get(params, "n", 1) == 1 &&
       optional?(params, "temperature", &range?(&1, 0, 2)) &&
-      optional?(params, "top_p", &range?(&1, 0, 1)) &&
+      optional?(params, "top_p", &(&1 == 1)) &&
       optional?(params, "max_tokens", &integer_range?(&1, 1..32_768)) &&
-      optional?(params, "seed", &seed?/1) &&
       optional?(params, "stop", &stops?/1)
   end
 
@@ -128,7 +127,6 @@ defmodule AiControl.Gateway.Request do
 
   defp range?(value, first, last), do: is_number(value) && value >= first && value <= last
   defp integer_range?(value, range), do: is_integer(value) && value in range
-  defp seed?(value), do: is_integer(value) && abs(value) < 9_223_372_036_854_775_808
 
   defp stops?(stop) when is_binary(stop), do: text?(stop)
   defp stops?(stop), do: is_list(stop) && length(stop) in 1..4 && Enum.all?(stop, &text?/1)

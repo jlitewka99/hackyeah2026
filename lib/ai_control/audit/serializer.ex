@@ -27,7 +27,7 @@ defmodule AiControl.Audit.Serializer do
       "budget",
       project(
         data["budget"],
-        ~w(reservation_id window status reserved_tokens overrun cost currency)
+        ~w(reservation_id window status reserved_tokens overrun cost currency cost_basis)
       )
       |> put(
         "usage",
@@ -147,6 +147,8 @@ defmodule AiControl.Audit.Serializer do
     do: value in ~w(pending dispatching completed rejected output_blocked failed uncertain)
 
   defp safe_field?("tool", value), do: Enum.any?(Catalog.all(), &(&1["name"] == value))
+
+  defp safe_field?("cost_basis", value), do: value == "operator_estimate"
 
   defp safe_field?("cost", value) when value in ["not configured", "unavailable"], do: true
 

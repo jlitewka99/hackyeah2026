@@ -50,9 +50,9 @@ defmodule AiControl.Gateway.LiveNerTest do
 
     Req.Test.stub(:step8_live_output, fn conn ->
       case conn.request_path do
-        "/api/tags" ->
+        "/models" ->
           Req.Test.json(conn, %{
-            models: [%{name: "qwen3.5:4b", digest: String.duplicate("a", 64)}]
+            data: [%{id: "deepseek-flash"}]
           })
 
         _ ->
@@ -132,12 +132,12 @@ defmodule AiControl.Gateway.LiveNerTest do
 
     Req.Test.stub(__MODULE__, fn conn ->
       case conn.request_path do
-        "/api/tags" ->
+        "/models" ->
           Req.Test.json(conn, %{
-            models: [%{name: "qwen3.5:4b", digest: String.duplicate("a", 64)}]
+            data: [%{id: "deepseek-flash"}]
           })
 
-        "/v1/chat/completions" ->
+        "/chat/completions" ->
           {:ok, body, conn} = Plug.Conn.read_body(conn)
           send(owner, {:generated_with, Jason.decode!(body)})
           Req.Test.json(conn, response("Oblicz wynik: dwa plus dwa."))

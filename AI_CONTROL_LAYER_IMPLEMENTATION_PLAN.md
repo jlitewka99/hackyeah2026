@@ -1,5 +1,113 @@
 # AI Control Layer — plan implementacji krok po kroku
 
+## Aktualna integracja LLM — DeepSeek (2026-10-04)
+
+Głównym modelem generującym jest wyłącznie **`deepseek-flash` przez bezpośrednie
+API DeepSeek** (obecnie V4.1 Flash). Qwen Guard, opcjonalny Prompt Guard i NER
+pozostają lokalnie. Ta aktualizacja zastępuje bieżące instrukcje Ollamy w krokach
+6, 9, 17 i 19. Wcześniejsze raporty odbioru, pomiary i polityki opisujące Qwena/Ollamę
+pozostają historycznym zapisem; nie stanowią odbioru nowego API.
+
+- Adapter `AiControl.Gateway.DeepSeek` korzysta z `Req`, Bearer `DEEPSEEK_API_KEY`,
+  `POST https://api.deepseek.com/chat/completions` i `GET /models`. Sekret pochodzi
+  wyłącznie ze środowiska. Generowanie nie używa retry, przekierowań ani fallbacku.
+- Publiczne `/v1/chat/completions`, `/v1/models` i format odpowiedzi pozostają.
+  Sprawdzamy dostępność identyfikatora API, bez deklaracji weryfikacji wag.
+  `thinking` jest zawsze wyłączone, domyślny limit wyjścia wynosi 1024 tokeny,
+  maksimum aplikacji 32768. `developer` przechodzi na `system`; `seed` i `top_p`
+  inne niż 1 zwracają błąd walidacji. Historia i function tools pozostają obsługiwane.
+- Prywatny sidecar liczy cały przygotowany request po redakcji i RAG przez
+  `deepseek-recipe==0.1.1` i `DeepseekV41Encoding`. Oficjalny tokenizer jest przypięty
+  do commita `8cadfede7063c896b944e7bae05daa3549ae97ea`, rozmiaru i SHA-256 w
+  `sidecar/tokenizer/models.v1.json`. Ten sam request trafia do API; brak licznika
+  przy wymaganym limicie blokuje wywołanie.
+- Rezerwujemy wejście plus maksymalne wyjście przed dispatch i rozliczamy
+  rzeczywiste `usage` przed kontrolą wyjścia. SSE pozostaje buforowane. Parser
+  obsługuje końcowy fragment z `finish_reason`, pustymi polami delta i `usage`;
+  znane odrzucenia dostawcy z poprawnym usage nadal rozliczają tokeny.
+- Domyślne stawki USD 0,30/M wejścia i 1,20/M wyjścia są **szacunkiem** operatora,
+  bez rabatów cache i godzin pozaszczytowych. Audyt oznacza podstawę jako
+  `operator_estimate`; stawki można zmienić przez `GATEWAY_PRICES`.
+- Nowe domyślne konfiguracje autorskie wskazują DeepSeek. Historyczne normalizatory,
+  migracje, checksumy i raporty pozostają. Bootstrap świeżej instalacji dopisuje
+  nową wersję systemową i aktywację, zachowując wcześniejszą wersję; istniejącej
+  bazy nie przełączamy automatycznie.
+- Zintegrowano najnowsze `origin/main` (`cec0a91`, PR #30) na gałęzi
+  `JL/deepseek-api`, razem z zatwierdzeniami operacji z kroku 19. Podgląd LLM jest
+  tym samym przygotowanym requestem DeepSeek, który trafia do licznika i API.
+  Zatwierdzenie wiąże identyfikator API i parametry; zmiana domyślnego limitu
+  unieważnia zgodę. Generowanie i rezerwacja tokenów nadal wymagają wznowienia
+  po decyzji człowieka. Zachowano historyczny materiał fingerprintów zatwierdzeń
+  narzędzi i delegacji oraz poprawki `main` dotyczące publikacji artefaktów
+  tokenizera i diagnostyki nadzoru procesów.
+- Następnie scalono `origin/main` (`e963993`, PR #29 / Granite Guardian).
+  Rozwiązano konflikty Dockerfile, klienta i sidecara tokenizera oraz skryptu
+  odbioru, zachowując pełny request DeepSeek i niezależny, przypięty raw tokenizer
+  Granite. Sidecar raportuje tożsamość artefaktów DeepSeek oraz digest wyłącznie
+  lokalnego guarda Granite. Opcjonalny Granite pozostaje domyślnie wyłączony;
+  jego włączenie wymaga zewnętrznego Ollama, bez zmiany głównego modelu API.
+  Skrypt live obejmuje oba tokenizery, Granite, DeepSeek i wcześniejsze kontrole.
+  Test groundedness JSON/SSE z `main` dostosowano do nowego API i zachowano
+  rozliczanie generacji mimo blokady wyjścia. Po połączeniu **`mix precommit`
+  przeszedł: 761 testów ExUnit, 5 JavaScript; 19 integracji wyłączonych**.
+  **14/14 testów Pythona** przeszło z oboma rzeczywistymi tokenizerami; testy
+  sprawdzają też odrzucenie zamiany ich kontraktów. `mix dialyzer` bez błędów,
+  `mix security` przeszedł.
+  Pełny build obrazu `ai-control:deepseek-granite-merged` zakończył się poprawnie
+  (`sha256:9555ff53d4b7655752b57b18d46685e5e295f0c564d2f3baecea0706dc984f09`).
+  W Linux ARM64 przeszły bootstrap świeżej polityki, rzeczywista redakcja NER,
+  5 testów NER oraz 14 testów obu tokenizerów i weryfikacja ich artefaktów.
+  **Pełny smoke po tym merge pozostaje nieukończony:** podczas benchmarku NER v2
+  środowisko OrbStack/Docker przestało udostępniać socket; test zakończył się
+  kodem 255, a diagnostyka i cleanup również nie mogły połączyć się z daemonem.
+  Nie zastępuje to pełnego odbioru sprzed merge opisanego poniżej; aktualny smoke
+  wymaga powtórzenia na działającym Dockerze, także w CI.
+
+**Przełączenie istniejącej bazy przez administratora:** ustawić klucz jako sekret,
+zmienić jawne przydziały modeli członków i oczekujących zaproszeń, wyeksportować
+aktywną politykę globalną i każdą własną politykę organizacji, zmienić
+`allowed_models`/jawne `agent_models` i selektory v6 `review.llm_models` na
+`deepseek-flash`, następnie zapisać i
+aktywować nowe wersje. Przydziały `*` obejmują nowy model. Inne ustawienia polityk
+należy zachować. Starego identyfikatora nie mapujemy automatycznie; oczekujące
+zgody LLM dla poprzedniego backendu wymagają nowej operacji i nowej decyzji.
+Szczegóły i
+komendy uruchomienia: [README](README.md#switching-an-existing-database-to-deepseek).
+
+**Odbiór:** testy adaptera obejmują autoryzację, tekst, narzędzia, SSE, limity,
+401/429/5xx, timeouty i brak ponowień. Regresje obejmują redakcję przed wysłaniem,
+blokowanie wyjścia, budżety, przerwania i audyt bez treści. Testy Pythona używają
+rzeczywistego przypiętego tokenizera. **Wyniki lokalne 2026-10-04 po scaleniu
+`cec0a91`:** końcowy `mix precommit` przeszedł (731 testów ExUnit, 5 testów
+JavaScript; 18 integracji wyłączonych domyślnie). 10/10 testów Pythona na
+rzeczywistym tokenizerze, w tym testy pobierania i publikacji artefaktów z `main`,
+przeszło na hoście i w Linux ARM64. Analiza bezpieczeństwa, zależności i typów
+(`mix dialyzer`) przeszła. Osobny przebieg zatwierdzeń, adaptera i bootstrapu:
+38/38, jedna integracja API wyłączona bez klucza. Przed scaleniem testy osobnego
+runnera przeszły 5/5, wraz z anulowaniem procesu.
+
+Pełny build aktualnego `Dockerfile` i `bash docker/smoke ai-control:deepseek-merged`
+przeszły. Kontener potwierdził świeżą politykę DeepSeek z zachowaniem poprzedniej
+wersji, health i izolację portów, rzeczywisty NER v1/v2, Qwen injection/moderation,
+10 testów tokenizera, 5 NER, 8 kontraktu semantyki i 9 kontraktu Prompt Guard.
+Przeszły zatwierdzenia w release, 15 scenariuszy HTTP/budżetów/audytu w osobnym
+procesie i bazie, awarie czterech procesów oraz SIGTERM. Naprawiono błąd testu
+zatwierdzeń z `main`: email organizatora jest ustawiany w środowisku działającej
+aplikacji, gdyż `rpc` nie przekazuje środowiska klienta do serwera. Tymczasowe
+kontenery, sieć i bazy usunięto. Obraz domyślny nie zawiera opcjonalnych wag
+Prompt Guard; jego rzeczywista kwalifikacja pozostaje zapisana historycznie.
+
+**Odbiór API pozostaje otwarty:** obecnie brak `DEEPSEEK_API_KEY` w środowisku.
+Testy z prawdziwym API wymagają `DEEPSEEK_API_KEY` z saldem:
+porównanie `input_tokens` z `usage.prompt_tokens` dla polskiego tekstu, historii,
+RAG i narzędzi jest obowiązkowe do odbioru twardych limitów. Brak klucza lub drift
+pozostawia ten odbiór otwarty. `/health` sprawdza proces aplikacji; `/ready` także
+API i wymagane lokalne kontrole. Deployment na VPS pozostaje osobnym zadaniem.
+
+Źródła: [API](https://api-docs.deepseek.com/api/create-chat-completion/),
+[cennik](https://api-docs.deepseek.com/quick_start/pricing/),
+[oficjalny tokenizer](https://github.com/deepseek-ai/deepseek-recipe/blob/main/docs/tokenizer.md).
+
 ## Jak zlecać i realizować kolejne kroki
 
 Plan opiera się na [AI_CONTROL_LAYER_REQUIREMENTS.md](AI_CONTROL_LAYER_REQUIREMENTS.md), przesłanej propozycji architektury i decyzjach ustalonych w rozmowie. Zachowujemy namespace `AiControl` i rozwijamy istniejącą aplikację Phoenix etapami.
@@ -44,7 +152,7 @@ Zasady dla agenta implementującego:
 - **Jedno konto organizatora:** tworzy, zawiesza i przywraca organizacje oraz zaprasza ich pierwszych superadminów.
 - **Konta firm:** użytkownicy logują się emailem i hasłem; aplikacje oraz agenci używają kluczy API.
 - **Polityki:** PostgreSQL jako źródło prawdy, edycja w dashboardzie, import i eksport YAML.
-- **Modele lokalne:** Ollama oraz lokalny sidecar klasyfikatora.
+- **LLM:** bezpośrednie API DeepSeek (`deepseek-flash`); lokalne sidecary Qwen Guard, NER i opcjonalny Prompt Guard.
 - **Pełna roadmapa:** MVP obejmuje podstawowy NER i pełny tool firewall; później MCP, ochrona workflowów i dalsze rozszerzenia.
 - Interfejs aplikacji, dokumentacja projektu dla użytkowników i komunikaty API pozostają po angielsku. Ten plan roboczy zachowuje język ustalony w rozmowie.
 - Pierwsze demo działa na jednej instancji aplikacji. Skalowanie do klastra nie jest warunkiem ukończenia planu.
@@ -500,7 +608,7 @@ system wizualny i opisuje uwagi detektora bez rozszerzania jego zasad.
 
 - Dodać `POST /v1/chat/completions`, uwierzytelniane `GET /v1/models`, `GET /health` i `GET /ready`. Katalog zwraca tylko modele dostępne dla bieżącej tożsamości i polityki, nie całą konfigurację backendu.
 - W pierwszej wersji obsługiwać tekst, wiadomości, definicje narzędzi i `stream: false`. Nieobsługiwane formaty odrzucać jawnie.
-- Użyć `Req` do komunikacji z Ollama; ustawić timeouty, limity rozmiaru oraz brak automatycznych ponowień generacji.
+- Użyć `Req` do komunikacji z API DeepSeek; ustawić timeouty, limity rozmiaru oraz brak automatycznych ponowień generacji.
 - Docelowy adres backendu pochodzi z konfiguracji operatora.
 - Przygotować wymienny adapter providera oraz pipeline korzystający z `SecurityContext`, `GuardResult`, `SecurityAssessment`, snapshotu i audytu kroków 4–5. Pobrać snapshot raz na żądanie; deklarowane przez klienta `user_id` nie zastępuje tożsamości z Bearer/scope.
 - Dodać prosty limiter wejściowy na istniejącym Hammer/ETS, przed kosztownymi kontrolami, oraz ograniczenie równoczesnych wywołań LLM/sidecarów. Rezerwacje i trwałe limity organizacji/agenta powstają w kroku 9. Zwolnić slot również po timeout, anulowaniu i zakończeniu procesu żądania.
@@ -508,7 +616,7 @@ system wizualny i opisuje uwagi detektora bez rozszerzania jego zasad.
 - Podłączyć katalog modeli do `ResourceResolver` i egzekwować dostęp do AI oraz obu wymiarów zasobów dla wywołań użytkownika przed polityką i downstream. Klucze agentów podlegają osobnemu zakresowi klucza i polityce.
 - `/health` sprawdza żywotność aplikacji, `/ready` gotowość bazy, aktywnej polityki, backendu i wymaganych usług guardów; odpowiedzi nie ujawniają adresów ani sekretów. Niedostępna wymagana kontrola nie jest zastępowana wynikiem `:ok`.
 - Emitować zdarzenia `:telemetry` dla żądań, odmów, audytu, kontrolowanych błędów i latencji upstream. Metadane zawierają zamknięte identyfikatory, bez promptów, odpowiedzi i nagłówków Authorization.
-- Domyślny model demo: `qwen3.5:4b`. Zapisać używany digest modelu w konfiguracji demo. [Model](https://ollama.com/library/qwen3.5:4b), [kompatybilność API Ollama](https://docs.ollama.com/api/openai-compatibility).
+- Domyślny model demo: `deepseek-flash`. Sprawdzić autoryzację i dostępność w `/models`; nie deklarować weryfikacji wag. [API DeepSeek](https://api-docs.deepseek.com/api/create-chat-completion/).
 
 **Gotowe, gdy:** klient z kluczem API otrzymuje odpowiedź lokalnego modelu przy jawnej polityce testowej, niedozwolony model nie zostaje wywołany, a błędy upstream/guardów/audytu mają kontrolowane odpowiedzi. Do ukończenia wymaganych guardów test proxy używa wydzielonej organizacji z jawną konfiguracją nieobowiązkowych, wyłączonych kontroli. Nie osłabia domyślnej polityki `balanced` ani nie udaje gotowego enforcement; brak obowiązkowej kontroli nadal blokuje. Testy obejmują timeout, limit rozmiaru i współbieżności, izolację katalogu oraz brak wywołania backendu po odmowie lub błędzie audytu.
 
@@ -1365,7 +1473,7 @@ Konfiguracja, format pakietu, migracje, retencja, komendy odbioru i szczegółow
 
 **Implementacja:** `AiControl.Approvals` i migracja `20261004062837_create_human_approvals` wprowadzają trwały rejestr dla narzędzi REST/MCP, Chat Completions, buffered SSE i delegacji workflowów. Jawne selektory polityki v6 (`review.enabled`, `review.tools`, `review.llm_models`, `review.delegation_agents`) domyślnie są wyłączone/puste. Istniejące źródła, checksumy i zachowanie v1–v5 pozostają zachowane; v6 zachowuje ustawienia workflow, Knowledge/memory, NER i sygnatur. Włączenie wymaga zapisania i aktywowania nowej polityki. Guardy nie otrzymują akcji REVIEW ani możliwości uchylenia BLOCK.
 
-**Kontrakt:** bramka działa po wymaganych kontrolach wejścia, autoryzacji zasobów i redakcji, przed rezerwacją tokenów, wykonaniem narzędzia, generacją lub utworzeniem uczestnika delegacji. Administrator widzi escapowany, przygotowany payload; dla LLM zawiera on efektywne parametry generacji, limit wyjścia i tryb streamingu. Fingerprinty wiążą kanoniczne żądanie, właściciela, workflow/uczestnika oraz przygotowany payload, digest modelu i rewizje źródeł RAG. Zmiana argumentów, redakcji, efektywnych parametrów lub rewizji źródła unieważnia zgodę.
+**Kontrakt:** bramka działa po wymaganych kontrolach wejścia, autoryzacji zasobów i redakcji, przed rezerwacją tokenów, wykonaniem narzędzia, generacją lub utworzeniem uczestnika delegacji. Administrator widzi escapowany, przygotowany payload; dla LLM zawiera on efektywne parametry generacji, limit wyjścia i tryb streamingu. Fingerprinty wiążą kanoniczne żądanie, właściciela, workflow/uczestnika oraz przygotowany payload, identyfikator API DeepSeek i rewizje źródeł RAG. Identyfikator nie potwierdza wag dostawcy. Zmiana argumentów, redakcji, efektywnych parametrów lub rewizji źródła unieważnia zgodę.
 
 Rekord przechodzi przez `pending`, `approved`, `claimed`, `consumed`, `rejected`, `expired`, `invalidated` albo `uncertain`. Decyzja administratora wymaga oczekiwanej rewizji; wznowienie atomowo przejmuje zgodę i ponawia bieżące kontrole tożsamości, dostępu zatwierdzającego, guardów, zasobów, polityki, deadline i budżetu. Zużycie zgody, dispatch, naliczenie i wymagany audyt zatwierdzają się wspólnie przed efektem. Błąd po przejęciu nie przywraca zgody. Równoległe próby nie wykonują drugiego dispatchu. Oczekiwanie zachowuje jedną logiczną operację workflow i receipts `awaiting_review`, bez slotu, rezerwacji tokenów i aktywnego wykonawcy. Każda próba HTTP nadal podlega limiterom oraz godzinowemu budżetowi żądań. Zakończenie niewykorzystanej zgody zamyka oczekujące receipts bez wykonania/naliczenia dispatchu.
 
@@ -1381,7 +1489,7 @@ REST zwraca `409 approval_required` z identyfikatorem, stanem, rewizją i termin
 
 ### Krok 20. Przygotowanie kompletnego demo
 
-- Dodać instrukcję uruchomienia PostgreSQL, Ollama, sidecara i aplikacji oraz bootstrapu organizatora.
+- Dodać instrukcję uruchomienia PostgreSQL, konfiguracji API DeepSeek, sidecarów i aplikacji oraz bootstrapu organizatora.
 - Przygotować przykładowe polityki, dane demo, diagram architektury i ograniczenia poszczególnych detektorów.
 - Zweryfikować licencje zależności i modeli.
 - Przygotować scenariusze demo, pomiary opóźnień oraz materiały do prezentacji.

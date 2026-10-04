@@ -95,7 +95,7 @@ defmodule AiControl.Workflows.DomainTest do
 
       {:ok, payload} =
         Request.validate(%{
-          "model" => "qwen3.5:4b",
+          "model" => "deepseek-flash",
           "stream" => rem(i, 2) == 0,
           "messages" => [
             %{

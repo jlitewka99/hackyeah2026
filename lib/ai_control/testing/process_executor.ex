@@ -3,7 +3,7 @@ defmodule AiControl.Testing.ProcessExecutor do
   alias AiControl.Background
   alias AiControl.Testing.Protocol
 
-  @local_env ~w(GATEWAY_MODELS OLLAMA_BASE_URL NER_BASE_URL SEMANTIC_BASE_URL PROMPT_GUARD_BASE_URL TOKENIZER_BASE_URL OLLAMA_REASONING_EFFORT)
+  @local_env ~w(NER_BASE_URL SEMANTIC_BASE_URL PROMPT_GUARD_BASE_URL TOKENIZER_BASE_URL)
 
   def available? do
     match?({:ok, _}, database()) && match?({:ok, _}, command())
@@ -89,6 +89,11 @@ defmodule AiControl.Testing.ProcessExecutor do
         System.get_env(),
         @local_env ++ ~w(PATH HOME ASDF_DATA_DIR MIX_ENV TMPDIR MIX_HOME HEX_HOME)
       )
+
+    allowed =
+      if run.spec["mode"] == "live" && System.get_env("DEEPSEEK_API_KEY"),
+        do: Map.put(allowed, "DEEPSEEK_API_KEY", System.get_env("DEEPSEEK_API_KEY")),
+        else: allowed
 
     values =
       Map.merge(allowed, %{

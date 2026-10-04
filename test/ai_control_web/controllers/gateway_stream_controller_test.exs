@@ -106,7 +106,8 @@ defmodule AiControlWeb.GatewayStreamControllerTest do
 
     assert text =~ document["id"]
     assert_received {:rag_counted, prompt}
-    assert prompt =~ "Support is available"
+    assert Jason.encode!(prompt) =~ "Support is available"
+    assert prompt == params
     assert Repo.get_by!(Reservation, request_id: conn.assigns.request_id).input_tokens == 40
   end
 
@@ -152,20 +153,11 @@ defmodule AiControlWeb.GatewayStreamControllerTest do
 
     Req.Test.stub(__MODULE__, fn conn ->
       case conn.request_path do
-        "/api/tags" ->
-          Req.Test.json(conn, %{
-            models: [%{name: "qwen3.5:4b", digest: String.duplicate("a", 64)}]
-          })
+        "/models" ->
+          Req.Test.json(conn, %{data: [%{id: "deepseek-flash"}]})
 
-        "/api/version" ->
-          Req.Test.json(conn, %{version: "0.35.1"})
-
-        _ ->
-          {:ok, raw, conn} = Plug.Conn.read_body(conn)
-
-          if Jason.decode!(raw)["_debug_render_only"],
-            do: Req.Test.json(conn, %{_debug_info: %{rendered_template: "synthetic prompt"}}),
-            else: Req.Test.json(conn, response("PRIVATE_UNGROUNDED_RESPONSE"))
+        "/chat/completions" ->
+          Req.Test.json(conn, response("PRIVATE_UNGROUNDED_RESPONSE"))
       end
     end)
 
@@ -262,7 +254,7 @@ defmodule AiControlWeb.GatewayStreamControllerTest do
     conn = chat(context.conn, %{"stream_options" => %{"include_usage" => false}})
     refute conn.resp_body =~ "\"usage\""
     assert bucket(context).tokens == 16
-    stream_body() |> String.replace(~r/data: [^\n]*"choices":\[\][^\n]*\n\n/, "") |> backend()
+    stream_body() |> String.replace(~r/,"usage":\{[^}]*\}/, "") |> backend()
     conn = chat(context.conn)
     assert conn.resp_body =~ "upstream_invalid_response"
     refute conn.resp_body =~ "[DONE]"
@@ -424,15 +416,11 @@ defmodule AiControlWeb.GatewayStreamControllerTest do
     assert bucket(context).tokens == 16
   end
 
-  test "model pin failure stays HTTP and never starts the streamed generation", context do
-    Application.put_env(
-      :ai_control,
-      Config,
-      Keyword.put(Config.get(), :models, %{"qwen3.5:4b" => String.duplicate("b", 64)})
-    )
+  test "missing model stays HTTP and never starts the streamed generation", context do
+    Req.Test.stub(__MODULE__, fn conn -> Req.Test.json(conn, %{data: []}) end)
 
     conn = chat(context.conn)
-    assert json_response(conn, 503)["error"]["code"] == "model_digest_mismatch"
+    assert json_response(conn, 503)["error"]["code"] == "model_unavailable"
     refute_received :stream_generated
     assert bucket(context).reserved == 0
   end
@@ -477,11 +465,8 @@ defmodule AiControlWeb.GatewayStreamControllerTest do
 
   defp backend_request(conn, body, owner) do
     case conn.request_path do
-      "/api/tags" ->
-        Req.Test.json(conn, %{models: [%{name: "qwen3.5:4b", digest: String.duplicate("a", 64)}]})
-
-      "/api/version" ->
-        Req.Test.json(conn, %{version: "0.35.1"})
+      "/models" ->
+        Req.Test.json(conn, %{data: [%{id: "deepseek-flash"}]})
 
       _ ->
         generate_response(conn, body, owner)
@@ -492,17 +477,13 @@ defmodule AiControlWeb.GatewayStreamControllerTest do
     {:ok, raw, conn} = Plug.Conn.read_body(conn)
     params = Jason.decode!(raw)
 
-    if params["_debug_render_only"] do
-      Req.Test.json(conn, %{_debug_info: %{rendered_template: Jason.encode!(params["messages"])}})
-    else
-      send(owner, :stream_generated)
-      send(owner, {:stream_params, params})
-      assert params["stream_options"] == %{"include_usage" => true}
+    send(owner, :stream_generated)
+    send(owner, {:stream_params, params})
+    assert params["stream_options"] == %{"include_usage" => true}
 
-      conn
-      |> Plug.Conn.put_resp_content_type("text/event-stream")
-      |> Plug.Conn.send_resp(200, body)
-    end
+    conn
+    |> Plug.Conn.put_resp_content_type("text/event-stream")
+    |> Plug.Conn.send_resp(200, body)
   end
 
   defp bucket(context),

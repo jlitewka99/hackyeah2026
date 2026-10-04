@@ -40,7 +40,10 @@ defmodule AiControl.Gateway.StreamParserTest do
 
     assert {:ok, state} = StreamParser.feed(StreamParser.new(8192), body)
     assert {:ok, response} = StreamParser.finish(state)
-    assert {:ok, normalized} = Response.normalize(response, "qwen3.5:4b", Ecto.UUID.generate())
+
+    assert {:ok, normalized} =
+             Response.normalize(response, "deepseek-flash", Ecto.UUID.generate())
+
     call = hd(hd(normalized["choices"])["message"]["tool_calls"])
     assert Jason.decode!(call["function"]["arguments"]) == %{"city" => "Łódź"}
     assert call["id"] == "call_1"
@@ -154,7 +157,7 @@ defmodule AiControl.Gateway.StreamParserTest do
       Jason.encode!(%{
         "id" => "backend-id",
         "created" => 1,
-        "model" => "qwen3.5:4b",
+        "model" => "deepseek-flash",
         "object" => "chat.completion.chunk",
         "choices" => [],
         "usage" => response()["usage"]

@@ -12,12 +12,13 @@ defmodule AiControl.Gateway.LiveStreamTest do
   @moduletag :live_models
   @moduletag timeout: 180_000
 
-  test "pinned real Ollama completes SSE through actual deterministic output guards" do
+  test "real DeepSeek completes SSE through actual deterministic output guards" do
     old = Application.fetch_env!(:ai_control, Config)
-    models = File.read!("priv/models/ollama-demo.json") |> Jason.decode!()
+    models = File.read!("priv/models/deepseek-demo.json") |> Jason.decode!()
 
     config =
       old
+      |> Keyword.put(:api_key, System.fetch_env!("DEEPSEEK_API_KEY"))
       |> Keyword.delete(:http_plug)
       |> Keyword.put(:models, models)
       |> Keyword.put(:guards, %{"pii" => Pii, "secret" => Secret, "signatures" => Signatures})
@@ -53,7 +54,7 @@ defmodule AiControl.Gateway.LiveStreamTest do
         retry: false,
         receive_timeout: 150_000,
         json: %{
-          "model" => "qwen3.5:4b",
+          "model" => "deepseek-flash",
           "stream" => true,
           "max_tokens" => 64,
           "stream_options" => %{"include_usage" => true},

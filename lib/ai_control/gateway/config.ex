@@ -4,10 +4,10 @@ defmodule AiControl.Gateway.Config do
   alias AiControl.Policies.Configuration
 
   @defaults [
-    base_url: "http://127.0.0.1:11434",
-    provider: AiControl.Gateway.Ollama,
-    ollama_reasoning_effort: "none",
-    models: %{},
+    base_url: "https://api.deepseek.com",
+    provider: AiControl.Gateway.DeepSeek,
+    api_key: nil,
+    models: %{"deepseek-flash" => "deepseek-flash"},
     guards: %{
       "pii" => AiControl.Guards.Pii,
       "secret" => AiControl.Guards.Secret,
@@ -42,7 +42,13 @@ defmodule AiControl.Gateway.Config do
     tokenizer_url: "http://127.0.0.1:8002",
     tokenizer_timeout: 5_000,
     tokenizer: AiControl.Budgets.Tokenizer,
-    prices: %{}
+    prices: %{
+      "deepseek-flash" => %{
+        "currency" => "USD",
+        "input_per_million" => "0.30",
+        "output_per_million" => "1.20"
+      }
+    }
   ]
 
   def get, do: Keyword.merge(@defaults, Application.get_env(:ai_control, __MODULE__, []))
@@ -56,9 +62,11 @@ defmodule AiControl.Gateway.Config do
       do: raise(ArgumentError, "gateway base_url must be an HTTP origin")
 
     if !catalog?(config[:models]),
-      do: raise(ArgumentError, "gateway models require names and full SHA-256 digests")
+      do: raise(ArgumentError, "gateway models require matching model identifiers")
 
     if !origin?(config[:ner_url]), do: raise(ArgumentError, "ner_url must be an HTTP origin")
+
+    validate_provider!(config)
 
     validate_semantic!(config)
 
@@ -78,10 +86,13 @@ defmodule AiControl.Gateway.Config do
     if !guards?(config[:guards]),
       do: raise(ArgumentError, "gateway guards must use the policy guard catalog")
 
-    if config[:ollama_reasoning_effort] not in [nil, "none", "low", "medium", "high"],
-      do: raise(ArgumentError, "unsupported Ollama reasoning effort")
-
     :ok
+  end
+
+  defp validate_provider!(config) do
+    if config[:provider] == AiControl.Gateway.DeepSeek &&
+         Map.keys(config[:models]) != ["deepseek-flash"],
+       do: raise(ArgumentError, "DeepSeek supports only deepseek-flash")
   end
 
   defp validate_semantic!(config) do
@@ -116,10 +127,10 @@ defmodule AiControl.Gateway.Config do
   defp catalog?(models),
     do: is_map(models) && map_size(models) <= 500 && Enum.all?(models, &model?/1)
 
-  defp model?({name, digest}),
+  defp model?({name, identifier}),
     do:
       is_binary(name) && Regex.match?(~r/\A[a-zA-Z0-9][a-zA-Z0-9_.:\/-]{0,199}\z/, name) &&
-        is_binary(digest) && Regex.match?(~r/\A[0-9a-f]{64}\z/, digest)
+        identifier == name
 
   defp guards?(guards),
     do:

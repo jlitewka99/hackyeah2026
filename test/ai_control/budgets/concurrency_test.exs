@@ -104,7 +104,13 @@ defmodule AiControl.Budgets.ConcurrencyTest do
         context,
         for _ <- 1..2 do
           fn ->
-            Budgets.admit(context.principal, nil, "qwen3.5:4b", snapshot, Ecto.UUID.generate())
+            Budgets.admit(
+              context.principal,
+              nil,
+              "deepseek-flash",
+              snapshot,
+              Ecto.UUID.generate()
+            )
           end
         end
       )
@@ -138,10 +144,13 @@ defmodule AiControl.Budgets.ConcurrencyTest do
       {:ok, snapshot, _} = Policies.snapshot_for_models(context.principal, nil)
 
       {:ok, first} =
-        Budgets.admit(context.principal, nil, "qwen3.5:4b", snapshot, Ecto.UUID.generate())
+        Budgets.admit(context.principal, nil, "deepseek-flash", snapshot, Ecto.UUID.generate())
 
       principal = if other?, do: context.other, else: context.principal
-      {:ok, second} = Budgets.admit(principal, nil, "qwen3.5:4b", snapshot, Ecto.UUID.generate())
+
+      {:ok, second} =
+        Budgets.admit(principal, nil, "deepseek-flash", snapshot, Ecto.UUID.generate())
+
       {first, second}
     end)
   end

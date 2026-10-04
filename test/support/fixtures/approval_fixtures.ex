@@ -16,7 +16,7 @@ defmodule AiControl.ApprovalsFixtures do
           "review" => %{
             "enabled" => true,
             "tools" => ["file.write", "file.read", "email.send"],
-            "llm_models" => ["qwen3.5:4b"],
+            "llm_models" => ["deepseek-flash"],
             "delegation_agents" => ["*"]
           }
         },
@@ -70,22 +70,15 @@ defmodule AiControl.ApprovalsFixtures do
     Req.Test.stub(__MODULE__, &model_response(&1, parent))
   end
 
-  defp model_response(%{request_path: "/api/tags"} = conn, _),
-    do: Req.Test.json(conn, %{models: [%{name: "qwen3.5:4b", digest: String.duplicate("a", 64)}]})
-
-  defp model_response(%{request_path: "/api/version"} = conn, _),
-    do: Req.Test.json(conn, %{version: "0.35.1"})
+  defp model_response(%{request_path: "/models"} = conn, _),
+    do: Req.Test.json(conn, %{data: [%{id: "deepseek-flash"}]})
 
   defp model_response(conn, parent) do
     {:ok, body, conn} = Plug.Conn.read_body(conn)
     params = Jason.decode!(body)
 
-    if params["_debug_render_only"] do
-      Req.Test.json(conn, %{_debug_info: %{rendered_template: Jason.encode!(params["messages"])}})
-    else
-      send(parent, {:generated, params})
-      Req.Test.json(conn, AiControl.GatewayFixtures.response())
-    end
+    send(parent, {:generated, params})
+    Req.Test.json(conn, AiControl.GatewayFixtures.response())
   end
 
   def chat(c, extra \\ [], params \\ AiControl.GatewayFixtures.request()),

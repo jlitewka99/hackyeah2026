@@ -142,6 +142,10 @@ defmodule AiControl.DashboardTest do
   end
 
   test "budgets show durable held and settled tokens across UTC hours and assigned agents only" do
+    old = Config.get()
+    Application.put_env(:ai_control, Config, Keyword.put(old, :prices, %{}))
+    on_exit(fn -> Application.put_env(:ai_control, Config, old) end)
+
     scope = organization_fixture()
     agent = agent_fixture(scope)
     hidden = agent_fixture(scope)
@@ -155,7 +159,7 @@ defmodule AiControl.DashboardTest do
     now = ~U[2026-10-04 00:59:59Z]
 
     {:ok, receipt} =
-      Budgets.admit(principal, nil, "qwen3.5:4b", policy, Ecto.UUID.generate(), now)
+      Budgets.admit(principal, nil, "deepseek-flash", policy, Ecto.UUID.generate(), now)
 
     {:ok, receipt} = Budgets.reserve(receipt, 10, 20)
     reader = member_fixture(scope, :user, %{permissions: ["budgets.read"], agents: [agent.id]})
@@ -198,11 +202,11 @@ defmodule AiControl.DashboardTest do
       Application.put_env(
         :ai_control,
         Config,
-        Keyword.put(old, :prices, %{"qwen3.5:4b" => price})
+        Keyword.put(old, :prices, %{"deepseek-flash" => price})
       )
 
       {:ok, receipt} =
-        Budgets.admit(principal, nil, "qwen3.5:4b", policy, Ecto.UUID.generate(), now)
+        Budgets.admit(principal, nil, "deepseek-flash", policy, Ecto.UUID.generate(), now)
 
       {:ok, receipt} = Budgets.dispatch(receipt)
 
@@ -215,7 +219,7 @@ defmodule AiControl.DashboardTest do
     end
 
     {:ok, uncertain} =
-      Budgets.admit(principal, nil, "qwen3.5:4b", policy, Ecto.UUID.generate(), now)
+      Budgets.admit(principal, nil, "deepseek-flash", policy, Ecto.UUID.generate(), now)
 
     {:ok, uncertain} = Budgets.dispatch(uncertain)
     {:ok, _} = Budgets.abandon(uncertain)

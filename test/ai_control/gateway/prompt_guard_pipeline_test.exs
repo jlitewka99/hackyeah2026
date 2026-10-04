@@ -30,10 +30,10 @@ defmodule AiControl.Gateway.PromptGuardPipelineTest do
     Req.Test.stub(:pg_backend, fn conn ->
       send(parent, {:backend, conn.request_path})
 
-      if conn.request_path == "/api/tags",
+      if conn.request_path == "/models",
         do:
           Req.Test.json(conn, %{
-            models: [%{name: "qwen3.5:4b", digest: String.duplicate("a", 64)}]
+            data: [%{id: "deepseek-flash"}]
           }),
         else: Req.Test.json(conn, response("SAFE-OUTPUT"))
     end)
@@ -146,7 +146,7 @@ defmodule AiControl.Gateway.PromptGuardPipelineTest do
 
     config =
       Config.get()
-      |> Keyword.put(:models, %{"qwen3.5:4b" => String.duplicate("a", 64)})
+      |> Keyword.put(:models, %{"deepseek-flash" => "deepseek-flash"})
       |> Keyword.update!(
         :guards,
         &Map.merge(&1, %{

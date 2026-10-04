@@ -255,11 +255,14 @@ defmodule AiControl.Audit do
            currency: currency
          } = data
        ) do
-    map_size(data) == 8 && budget_identity?(id, window, status) &&
+    budget_estimate?(data) && budget_identity?(id, window, status) &&
       budget_values?(tokens, usage, overrun) && budget_cost?(cost) && budget_currency?(currency)
   end
 
   defp budget_evidence?(_), do: false
+
+  defp budget_estimate?(%{cost_basis: "operator_estimate"} = data), do: map_size(data) == 9
+  defp budget_estimate?(data), do: map_size(data) == 8
 
   defp budget_identity?(id, window, status) do
     Validation.uuid?(id) && is_binary(window) &&

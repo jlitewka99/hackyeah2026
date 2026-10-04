@@ -52,7 +52,7 @@ defmodule AiControl.Workflows.ConcurrencyTest do
           Budgets.admit(
             c.principal,
             nil,
-            "qwen3.5:4b",
+            "deepseek-flash",
             c.policy,
             operation.request_id,
             DateTime.utc_now(),

@@ -7,7 +7,9 @@ defmodule AiControl.Testing.Provider do
   @impl true
   def models(config), do: {:ok, config[:models]}
   @impl true
-  def prepare(params, _), do: {:ok, Jason.encode!(params["messages"])}
+  def prepare(params, config),
+    do: {:ok, Map.put_new(params, "max_tokens", config[:default_max_tokens])}
+
   @impl true
   def chat(params, _) do
     State.put(:messages, params["messages"])

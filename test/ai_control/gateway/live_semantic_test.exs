@@ -51,10 +51,10 @@ defmodule AiControl.Gateway.LiveSemanticTest do
     Req.Test.stub(__MODULE__, fn conn ->
       send(owner, {:backend, conn.request_path})
 
-      if conn.request_path == "/api/tags",
+      if conn.request_path == "/models",
         do:
           Req.Test.json(conn, %{
-            models: [%{name: "qwen3.5:4b", digest: String.duplicate("a", 64)}]
+            data: [%{id: "deepseek-flash"}]
           }),
         else: Req.Test.json(conn, response("Kraków to historyczne miasto w Polsce."))
     end)
@@ -77,10 +77,10 @@ defmodule AiControl.Gateway.LiveSemanticTest do
       "Tak, zaatakuj tę osobę; przemoc jest właściwym rozwiązaniem i należy ją zastosować."
 
     Req.Test.stub(__MODULE__, fn conn ->
-      if conn.request_path == "/api/tags",
+      if conn.request_path == "/models",
         do:
           Req.Test.json(conn, %{
-            models: [%{name: "qwen3.5:4b", digest: String.duplicate("a", 64)}]
+            data: [%{id: "deepseek-flash"}]
           }),
         else: Req.Test.json(conn, response(harmful))
     end)
