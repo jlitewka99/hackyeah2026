@@ -7,6 +7,7 @@ defmodule AiControlWeb.ReportingLive do
     if connected?(socket) do
       id = socket.assigns.current_scope.organization.id
       Phoenix.PubSub.subscribe(AiControl.PubSub, "organizations:#{id}:dashboard")
+      Phoenix.PubSub.subscribe(AiControl.PubSub, "organizations:#{id}:background")
       Phoenix.PubSub.subscribe(AiControl.PubSub, "organizations:#{id}:policies")
       Phoenix.PubSub.subscribe(AiControl.PubSub, "platform:policies")
       Process.send_after(self(), :reporting_tick, 60_000)
@@ -15,7 +16,8 @@ defmodule AiControlWeb.ReportingLive do
     socket
     |> assign(:reporting_pending?, false)
     |> attach_hook(:reporting_updates, :handle_info, fn
-      message, socket when message in [:dashboard_changed, :policies_changed] ->
+      message, socket
+      when message in [:dashboard_changed, :policies_changed, :background_changed] ->
         if !socket.assigns.reporting_pending?,
           do: Process.send_after(self(), :refresh_reporting, 200)
 

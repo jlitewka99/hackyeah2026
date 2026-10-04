@@ -123,6 +123,9 @@ defmodule AiControlWeb.OrganizationAuth do
   defp page_permission(AiControlWeb.OrganizationEventLive), do: "events.read"
   defp page_permission(AiControlWeb.OrganizationBudgetsLive), do: "budgets.read"
   defp page_permission(AiControlWeb.OrganizationSignaturesLive), do: "signatures.read"
+  defp page_permission(AiControlWeb.OrganizationTestsLive), do: "tests.read"
+  defp page_permission(AiControlWeb.OrganizationTestRunLive), do: "tests.read"
+  defp page_permission(AiControlWeb.OrganizationReportsLive), do: "events.read"
   defp page_permission(AiControlWeb.OrganizationKnowledgeLive), do: "knowledge.read"
   defp page_permission(_), do: nil
 end

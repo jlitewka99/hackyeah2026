@@ -41,6 +41,7 @@ defmodule AiControl.Gateway.Config do
   ]
 
   def get, do: Keyword.merge(@defaults, Application.get_env(:ai_control, __MODULE__, []))
+  def guard_modules, do: Keyword.fetch!(@defaults, :guards)
   def get(key), do: Keyword.fetch!(get(), key)
 
   def validate! do

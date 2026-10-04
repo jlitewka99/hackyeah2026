@@ -1,0 +1,68 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} active_page="tests">
+  <div class="page-content" id="organization-tests">
+    <h1>Tests</h1>
+    <p class="page-description">
+      Exercise gateway decisions, budgets and tools with synthetic policies in an isolated runner.
+    </p>
+    <p class="status-tag mt-5" id="tests-synthetic">Synthetic test data</p>
+    <section class="list-section" aria-labelledby="tests-launch-heading">
+      <h2 id="tests-launch-heading">Run a test suite</h2>
+      <p class="muted mt-2">
+        Controlled runs verify deterministic checks. Live runs also require pinned local models and measure the Polish dataset.
+      </p>
+      <p
+        :if={!@runner_available?}
+        id="tests-runner-unavailable"
+        class="report-error mt-4"
+        role="status"
+      >
+        The runner is unavailable. Ask an operator to configure a separate test database.
+      </p>
+      <.form for={@form} id="tests-run-form" phx-submit="run" class="background-form mt-6">
+        <.input
+          field={@form[:suite]}
+          type="select"
+          label="Suite"
+          options={[
+            {"Full gateway", "gateway.v1"},
+            {"Polish semantic benchmark", "semantic-pl.v1"}
+          ]}
+        />
+        <.input
+          field={@form[:mode]}
+          type="select"
+          label="Mode"
+          options={[{"Controlled", "controlled"}, {"Live", "live"}]}
+        />
+        <button
+          id="tests-run"
+          class="button-primary"
+          phx-disable-with="Queuing…"
+          disabled={!@runner_available? || "tests.run" not in @current_scope.grants.permissions}
+        ><.icon name="hero-play" class="size-4" /> Run tests</button>
+      </.form>
+      <p
+        :if={"tests.run" not in @current_scope.grants.permissions}
+        class="muted mt-3"
+        id="tests-read-only"
+      >
+        You can view results. Starting a run requires tests.run access.
+      </p>
+    </section>
+    <section class="list-section" aria-labelledby="tests-history-heading">
+      <h2 id="tests-history-heading">Run history</h2>
+      <p class="muted mt-2">Results are available for 7 days. Run history is kept for 30 days.</p>
+      <div id="test-runs" phx-update="stream" class="mt-4">
+        <p id="tests-empty" class="hidden only:block muted py-8">
+          No test runs yet. Choose a suite above to verify the gateway.
+        </p>
+        <BackgroundHTML.row
+          :for={{id, run} <- @streams.runs}
+          id={id}
+          run={run}
+          scope={@current_scope}
+        />
+      </div>
+    </section>
+  </div>
+</Layouts.app>

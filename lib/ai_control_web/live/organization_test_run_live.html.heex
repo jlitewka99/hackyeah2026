@@ -1,0 +1,62 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} active_page="tests">
+  <div class="page-content" id="organization-test-run">
+    <.link
+      navigate={~p"/organizations/#{@current_scope.organization.id}/tests"}
+      id="tests-back"
+      class="text-link"
+    ><.icon name="hero-arrow-left" class="size-4" /> Test history</.link>
+    <h1 class="mt-6">Test results</h1>
+    <p class="page-description">
+      Synthetic test data. These policies verify execution paths; they do not qualify a model for production.
+    </p>
+    <%= if @run do %>
+      <BackgroundHTML.row id="test-run-summary" run={@run} scope={@current_scope} />
+      <p
+        :if={@run.status == "completed" && !Background.results_expired?(@run)}
+        id="test-run-outcome"
+        class="mt-4"
+      >
+        {@run.result["passed"] || 0} passed · {@run.result["failed"] || 0} failed · {@run.result[
+          "error"
+        ] || 0} errors
+      </p>
+      <p :if={Background.active?(@run)} id="test-run-progress" class="muted mt-4" role="status">
+        {BackgroundHTML.status(@run)} · {@run.progress} scenarios recorded. Results appear as the runner progresses.
+      </p>
+      <p
+        :if={@run.checksum}
+        class="resource-identifier muted mt-3 break-all"
+        id="test-run-checksum"
+      >
+        SHA-256 {@run.checksum}
+      </p>
+      <section class="list-section" aria-labelledby="test-results-heading">
+        <h2 id="test-results-heading">Scenario results</h2>
+        <p class="muted mt-2">
+          Durations are shown in milliseconds. Evidence contains only status codes and counters.
+        </p>
+        <div id="test-case-results" phx-update="stream" class="mt-4">
+          <p id="test-cases-empty" class="hidden only:block muted py-8">
+            {BackgroundHTML.empty_results(@run)}
+          </p>
+          <article :for={{id, result} <- @streams.cases} id={id} class="background-row">
+            <div class="min-w-0">
+              <h3 class="font-medium">{BackgroundHTML.case_label(result.case_id)}</h3>
+              <dl class="report-facts mt-2">
+                <div :for={{key, value} <- Enum.sort(result.evidence)}>
+                  <dt>{BackgroundHTML.evidence_label(key)}</dt><dd>{to_string(value)}</dd>
+                </div>
+              </dl>
+            </div>
+            <div class="background-actions">
+              <span class="status-tag">{BackgroundHTML.label(result.status)}</span><span class="muted text-sm tabular-nums">{Float.round(
+                result.duration_us / 1000,
+                1
+              )} ms</span>
+            </div>
+          </article>
+        </div>
+      </section>
+    <% end %>
+  </div>
+</Layouts.app>
