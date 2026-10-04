@@ -742,9 +742,13 @@ and activate explicitly. Existing versions/checksums remain compatible.
 Prompt Guard is optional and requires manually approved model access under the
 Llama 4 Community License. The standard build/CI does not require that access.
 See [operator setup, license and BuildKit secret](docs/prompt-guard.md), the
-[unqualified example](docs/prompt-guard-example.yaml) and
+[measured injection example](docs/prompt-guard-example.yaml) and
 [Step 11B acceptance/gates](docs/acceptance/step11b.md). The real comparison has
-not qualified a winner; Step 11 and MVP acceptance remain open.
+qualified Prompt Guard at cutoff .50 (FPR 0%, mean direct/indirect recall 50%).
+The final complete live-service runner passes 11/11 and both container smoke
+runs pass. Step 11 and full MVP acceptance remain open for idle-hardware capacity
+validation and the Qwen long-input timeout observed in an earlier loaded run;
+see the recorded successful and failed attempts in the acceptance report.
 
 `PROMPT_GUARD_BASE_URL` defaults to `http://127.0.0.1:8004`. The optional image
 build starts a fifth offline supervised process; a required unavailable provider

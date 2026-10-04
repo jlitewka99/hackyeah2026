@@ -1,5 +1,7 @@
-# Unqualified example for operator acceptance. This is not the measured MVP winner.
-# Import, save, inspect the diff and explicitly activate after model access/readiness.
+# Measured injection winner: Prompt Guard 2 86M, cutoff 0.50.
+# Held-out FPR 0/50; direct recall 9/25; indirect recall 16/25 (mean 50%).
+# Full MVP acceptance stays open; see docs/acceptance/step11b.md for limitations.
+# Import, save, inspect the diff and explicitly activate after model readiness.
 schema_version: 4
 profile: balanced
 allowed_models: ["qwen3.5:4b"]
@@ -16,7 +18,7 @@ guards:
 rules:
   prompt_injection:
     action: block
-    threshold: 0.80
+    threshold: 0.50
 budgets:
   organization:
     requests_per_hour: 20

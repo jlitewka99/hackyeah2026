@@ -1,0 +1,31 @@
+{
+  "agent_models": {},
+  "allowed_agents": [
+    "*"
+  ],
+  "allowed_models": [
+    "qwen3.5:4b"
+  ],
+  "budgets": {},
+  "detector_sets": {
+    "ner": "pl-nkjp.v1",
+    "pii": "builtin.v1",
+    "secret": "builtin.v1",
+    "signatures": "builtin.v1"
+  },
+  "guards": {
+    "semantic": {
+      "provider": "prompt_guard"
+    }
+  },
+  "profile": "balanced",
+  "rules": {
+    "prompt_injection": {
+      "threshold": 0.5
+    }
+  },
+  "schema_version": 4,
+  "tools": {
+    "allowed_tools": []
+  }
+}

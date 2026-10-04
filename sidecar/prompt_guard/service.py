@@ -24,14 +24,23 @@ OVERLAP = 64
 class PromptGuard:
     def __init__(self):
         import torch
-        from transformers import AutoModelForSequenceClassification, AutoTokenizer
+        from transformers import AutoConfig, AutoModelForSequenceClassification, AutoTokenizer
         directory = Path(os.environ.get("PROMPT_GUARD_MODELS_DIR", "/app/prompt-guard-models"))
         verify(directory)
         torch.set_num_threads(int(os.environ.get("PROMPT_GUARD_CPU_THREADS", "2")))
+        config = AutoConfig.from_pretrained(directory, local_files_only=True)
+        labels = {int(k): v.upper() for k, v in config.id2label.items()}
+        # This pinned Meta config omits label names; Transformers supplies LABEL_0/1.
+        # The published binary head assigns index 0 to benign and 1 to malicious.
+        expected = {0: "BENIGN", 1: "MALICIOUS"}
+        if config.num_labels != 2 or labels not in (expected, {0: "LABEL_0", 1: "LABEL_1"}):
+            raise ValueError("unsupported_labels")
+        config.id2label = expected
+        config.label2id = {label: index for index, label in expected.items()}
         self.tokenizer = AutoTokenizer.from_pretrained(directory, local_files_only=True)
         self.model = AutoModelForSequenceClassification.from_pretrained(
-            directory, local_files_only=True, dtype=torch.float32).to("cpu").eval()
-        if {int(k): v.upper() for k, v in self.model.config.id2label.items()} != {0: "BENIGN", 1: "MALICIOUS"}:
+            directory, config=config, local_files_only=True, dtype=torch.float32).to("cpu").eval()
+        if {int(k): v.upper() for k, v in self.model.config.id2label.items()} != expected:
             raise ValueError("unsupported_labels")
         self.special_tokens = self.tokenizer.num_special_tokens_to_add(pair=False)
         self.torch = torch

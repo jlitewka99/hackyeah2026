@@ -38,7 +38,9 @@ ARG WITH_PROMPT_GUARD=0
 RUN --mount=type=secret,id=hf_token mkdir -p /prompt-guard-models && \
     if [ "$WITH_PROMPT_GUARD" = 1 ]; then \
       test -s /run/secrets/hf_token && HF_TOKEN="$(cat /run/secrets/hf_token)" && export HF_TOKEN && \
-      /opt/semantic/bin/python /build/prompt_guard/models.py download /prompt-guard-models; \
+      HF_HOME=/tmp/prompt-guard-download HF_HUB_CACHE=/tmp/prompt-guard-download/hub \
+      /opt/semantic/bin/python /build/prompt_guard/models.py download /prompt-guard-models && \
+      rm -rf /tmp/prompt-guard-download; \
     elif [ "$WITH_PROMPT_GUARD" != 0 ]; then exit 1; fi
 
 FROM ${PYTHON_IMAGE} AS runner

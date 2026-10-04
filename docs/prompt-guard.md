@@ -2,8 +2,9 @@
 
 Step 11B adds `meta-llama/Llama-Prompt-Guard-2-86M` for injection detection.
 Response moderation continues to use Qwen. Neither provider is automatically
-substituted on failure. Model qualification and complete MVP acceptance are
-still open; see [the acceptance report](acceptance/step11b.md).
+substituted on failure. The local comparison qualifies Prompt Guard at .50;
+complete MVP acceptance remains open. See [the acceptance report](acceptance/step11b.md)
+for the measured 50% mean recall and outstanding service reliability gate.
 
 ## Access, license and artifacts
 
@@ -56,6 +57,11 @@ state, device/dtype/threads, cold-start time and peak process RSS. `/analyze`
 accepts indexed UTF-8 fields and an injection task; it returns only identity,
 byte windows, malicious scores and elapsed time. It cannot perform moderation.
 
+The pinned Meta configuration omits class names. After artifact verification,
+the loader accepts a two-class head and explicitly maps index 0 to `BENIGN`
+and index 1 to `MALICIOUS`. Explicitly reversed labels or a different head size
+are rejected; naming the head does not change its weights or revision.
+
 The total context includes special tokens and never exceeds 512 tokens. Payload
 windows overlap by 64 tokens and use the original token IDs without truncation
 or retokenization. The maximum malicious score is compared inclusively with
@@ -91,8 +97,8 @@ starts the fifth supervised process on loopback; its health and unexpected exit
 are checked alongside Phoenix, NER, tokenizer and Qwen. The default image retains
 four processes and the ungated CI path. The optional GitHub workflow-dispatch
 input `prompt_guard=true` requires an approved repository `HF_TOKEN` secret.
-This job is intentionally opt-in. No local Docker acceptance is claimed while
-the daemon is unavailable.
+This job is intentionally opt-in. Local container results and remaining
+acceptance checks are recorded in [the report](acceptance/step11b.md).
 
 ## Policies and measurement
 
@@ -104,9 +110,11 @@ thresholds are relaxed .90, balanced .80, strict .65; these are authoring defaul
 not a measured recommendation. Qwen injection always requires Jailbreak and
 selected severity; its v4 threshold is zero because enforcement uses labels.
 
-The [example policy](prompt-guard-example.yaml) is deliberately **unqualified**.
-Only the comparison task can produce `qualified-policy.yaml` after complete,
-error-free calibration and test reports. It never activates it. Prepare both
+The [example policy](prompt-guard-example.yaml) now uses the measured injection
+winner, Prompt Guard at .50: held-out FPR 0%, mean direct/indirect recall 50%.
+See [the report](acceptance/step11b.md) for misses, latency limits and the still-open
+full MVP gate. The comparison task produces `qualified-policy.yaml` only for a
+complete, error-free qualifying candidate. It never activates it. Prepare both
 verified services on the same otherwise idle machine, with CPU FP32 and two
 threads. Start each freshly and let its load finish before starting the next,
 so cold-start measurements are not taken under concurrent model loading. Record
