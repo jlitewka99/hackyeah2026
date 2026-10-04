@@ -1,17 +1,19 @@
 """Offline contracts; fake tokenization cannot qualify real-weight detection quality."""
 import hashlib
+import json
 import math
+import os
 import sys
 import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Event
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sidecar" / "prompt_guard"))
 from fastapi.testclient import TestClient
-from service import analyze, make_app, valid_request
+from service import PromptGuard, analyze, make_app, valid_request
 from models import verify
 
 
@@ -31,6 +33,43 @@ def request(text="safe"):
 
 
 class ServiceTest(unittest.TestCase):
+    def test_offline_loader_assigns_published_binary_head_labels(self):
+        # Real pinned config has no id2label. Exercise actual offline AutoConfig
+        # resolution without gated weights; incompatible heads must still fail.
+        for labels, count, valid in [
+            (None, 2, True),
+            ({"0": "BENIGN", "1": "MALICIOUS"}, 2, True),
+            ({"0": "MALICIOUS", "1": "BENIGN"}, 2, False),
+            (None, 3, False),
+        ]:
+            with self.subTest(labels=labels, count=count), tempfile.TemporaryDirectory() as directory:
+                config = {"model_type": "deberta-v2", "num_labels": count}
+                if labels is not None:
+                    config["id2label"] = labels
+                (Path(directory) / "config.json").write_text(json.dumps(config))
+                tokenizer = Mock()
+                tokenizer.num_special_tokens_to_add.return_value = 2
+
+                def load_model(*args, **kwargs):
+                    model = Mock(config=kwargs["config"])
+                    model.to.return_value = model
+                    model.eval.return_value = model
+                    return model
+
+                with patch.dict(os.environ, {"PROMPT_GUARD_MODELS_DIR": directory}), \
+                        patch("service.verify"), \
+                        patch("transformers.AutoTokenizer.from_pretrained", return_value=tokenizer), \
+                        patch("transformers.AutoModelForSequenceClassification.from_pretrained", side_effect=load_model) as loader:
+                    if valid:
+                        model = PromptGuard()
+                        self.assertEqual(model.model.config.id2label, {0: "BENIGN", 1: "MALICIOUS"})
+                        self.assertEqual(model.model.config.label2id, {"BENIGN": 0, "MALICIOUS": 1})
+                        self.assertTrue(loader.call_args.kwargs["local_files_only"])
+                    else:
+                        with self.assertRaisesRegex(ValueError, "unsupported_labels"):
+                            PromptGuard()
+                        loader.assert_not_called()
+
     def test_tail_boundary_and_utf8_complete_coverage(self):
         for text in ["ą" * 507 + "ATTACK" + "ę" * 1000, "😀" * 1500 + "ATTACK"]:
             response = analyze(Fake(), request(text))
