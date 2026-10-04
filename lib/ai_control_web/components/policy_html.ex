@@ -28,6 +28,13 @@ defmodule AiControlWeb.PolicyHTML do
 
   def workflow_budget_fields(form), do: Configuration.budget_fields(schema_version(form))
 
+  def upgrade_available?(form) do
+    schema_version(form) < 5 ||
+      Enum.any?(Configuration.budget_fields(5)["workflow"], fn field ->
+        nested(form, :budgets, "workflow", field, nil) in [nil, ""]
+      end)
+  end
+
   def tool_catalog, do: Catalog.all()
 
   def tool_label(tool),

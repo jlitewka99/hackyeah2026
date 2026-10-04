@@ -6,6 +6,18 @@ defmodule AiControl.WorkflowsFixtures do
   alias AiControl.Policies.Configuration
   alias AiControl.Tools.Catalog
 
+  def run_reference_fixture(principal) do
+    {:ok, {run, participant}} =
+      Workflows.create(
+        principal,
+        %{"goal" => "Synthetic integration execution"},
+        Ecto.UUID.generate()
+      )
+
+    cleanup_run(run)
+    %{run_id: run.id, participant_id: participant.id}
+  end
+
   def activate_workflows(scope, limits \\ %{}, extra \\ %{}) do
     guards = Map.new(Configuration.guards(5), &{&1, %{"enabled" => false, "required" => false}})
 
@@ -43,6 +55,12 @@ defmodule AiControl.WorkflowsFixtures do
         participant_id: participant.id
       })
 
+    cleanup_run(run)
+
+    Map.merge(context, %{run: run, participant: participant, reference: reference, policy: policy})
+  end
+
+  defp cleanup_run(run) do
     ExUnit.Callbacks.on_exit(fn ->
       case Registry.lookup(AiControl.Workflows.Registry, {run.organization_id, run.id}) do
         [{pid, _}] ->
@@ -54,7 +72,5 @@ defmodule AiControl.WorkflowsFixtures do
 
       :sys.get_state(AiControl.Workflows.Manager)
     end)
-
-    Map.merge(context, %{run: run, participant: participant, reference: reference, policy: policy})
   end
 end

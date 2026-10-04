@@ -19,13 +19,17 @@ defmodule AiControl.Policies.Draft do
     field :rules, :map, default: %{}
     field :guards, :map, default: %{}
     field :budgets, :map, default: %{}
+    field :knowledge, :map, default: %{}
+    field :ner_model_set, :string, default: "pl-nkjp.v2"
   end
 
-  @fields ~w(schema_version detector_sets tools tool_selection profile allowed_models allowed_agents agent_models rules guards budgets)a
+  @fields ~w(schema_version detector_sets tools tool_selection profile allowed_models allowed_agents agent_models rules guards budgets knowledge ner_model_set)a
 
   def from_source(source) do
     %__MODULE__{
       schema_version: source["schema_version"],
+      knowledge: Map.get(source, "knowledge", %{}),
+      ner_model_set: Map.get(source, "ner_model_set", "pl-nkjp.v2"),
       detector_sets: Map.get(source, "detector_sets", %{}),
       tools: Map.get(source, "tools", %{}),
       tool_selection: Map.new(get_in(source, ["tools", "allowed_tools"]) || [], &{&1, "true"}),
@@ -92,11 +96,24 @@ defmodule AiControl.Policies.Draft do
       "budgets" => mapping(draft.budgets, &limits/1)
     }
 
-    if draft.schema_version in [2, 3, 4, 5] do
-      Map.merge(source, %{
-        "detector_sets" => draft.detector_sets,
-        "tools" => selected_tools(draft)
-      })
+    source =
+      if draft.schema_version in [2, 3, 4, 5] do
+        Map.merge(source, %{
+          "detector_sets" => draft.detector_sets,
+          "tools" => selected_tools(draft)
+        })
+      else
+        source
+      end
+
+    if draft.schema_version == 5 do
+      knowledge =
+        Map.new(draft.knowledge, fn {key, value} ->
+          {key,
+           if(key in ~w(enabled memory_write_enabled), do: value in [true, "true"], else: value)}
+        end)
+
+      Map.merge(source, %{"knowledge" => knowledge, "ner_model_set" => draft.ner_model_set})
     else
       source
     end

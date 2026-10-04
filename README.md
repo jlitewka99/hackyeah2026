@@ -1088,3 +1088,65 @@ bash docker/smoke ai-control:step9
 
 See `docs/acceptance/step9.md` for actual results, including the joint step 8
 acceptance and remaining semantic integration with step 10. Tool counter integration remains steps 12/15.
+
+## Knowledge, RAG and explicit memory (step 18)
+
+Knowledge requires an explicitly activated schema v5 policy. Upgrade a draft, enable
+`knowledge.enabled`, choose allowed source kinds/trust levels and, for memory writes,
+set `knowledge.memory_write_enabled`. Both switches default to false. Existing v1–v4
+policies and their checksums retain their existing behavior. v5 chooses
+`ner_model_set` (`pl-nkjp.v1` or `pl-nkjp.v2`); v2 reuses the pinned Stanza weights
+and entity mapping and extends contextual Polish address rules.
+
+The Knowledge workspace has Documents and Memory tabs, checked-text search,
+agent filtering, detail and separate creation/edit forms. It accepts pasted text
+and UTF-8 `.txt`/`.md` uploads. Sharing explicitly grants read access to selected
+agents in the same organization. The owner retains management; an authenticated
+agent can create, update or delete only its own memory and cannot elevate trust.
+Users need `knowledge.read` / `knowledge.manage` and corresponding agent assignments.
+Management requires owner access and sharing additionally requires recipient access.
+
+Session JSON CRUD uses `/organizations/:organization_id/knowledge/resources[/:id]`
+with CSRF protection. API-key endpoints are:
+
+- `POST /v1/knowledge/search`: `{"query":"support","sources":["document","memory"],"top_k":5}`.
+- `GET /v1/memory` and `GET /v1/memory/:id`: checked memory, including explicitly shared entries.
+- `POST /v1/memory`: `{"title":"Response preference","content":"Prefer concise answers."}`.
+- `PATCH /v1/memory/:id`: changed text plus integer `revision` from the last read.
+- `DELETE /v1/memory/:id`: JSON body `{"revision":1}`. Deletion removes indexed text too.
+
+Session creation additionally requires `kind` and `owner_agent_id`; optional
+`shared_agent_ids`, `trust_level` and `source_reference` are checked server-side.
+Organization and creator identity never come from request data. CRUD responses use
+`{"data":...}` and `Cache-Control: no-store`; metadata lists return 50 entries per
+page (`?page=1`). Search returns complete checked resources, five by default and
+at most ten, ordered by lexical rank then UUID after access filtering.
+
+Chat Completions accepts optional gateway-only context:
+
+```json
+{"model":"qwen3.5:4b","messages":[{"role":"user","content":"What are the support hours?"}],"context":{"query":"support","sources":["document","memory"],"top_k":5}}
+```
+
+RAG requires a final user message. The gateway consumes `context` and inserts an
+explicit retrieved-data user message immediately before that final message. Query,
+sources and the assembled prompt pass the retained policy snapshot. The model
+receives no `context` extension. Exact token counting and reservations include the
+final redacted RAG prompt; ACL, identity and revisions are rechecked before dispatch
+and before returning output. Memory is never saved automatically from conversations.
+
+Limits are UTF-8 bytes: document 64 KiB, memory 16 KiB, query 2 KiB and retrieved
+context 128 KiB. Overflow fails without truncation. Fixed errors use 400/413 for
+invalid/oversized input, 403 for denial or unavailable resources, 409 for a stale
+revision, 429 for limits and 503 for required guard/audit unavailability.
+
+PostgreSQL `simple` full-text search uses `websearch_to_tsquery`, `ts_rank` and a GIN
+index ([PostgreSQL controls](https://www.postgresql.org/docs/current/textsearch-controls.html)).
+It has no embeddings, semantic matching or Polish stemming. PDF and URL fetching
+are unsupported. `untrusted` and `internal` describe provenance/access; both are
+scanned. Redaction cannot guarantee complete PII detection and does not encrypt
+storage, backups or logs. Audit/Events retain only validated source UUIDs, revisions,
+kinds, trust and policy, never titles, content, provenance strings or search queries.
+
+Run `mix ecto.migrate` before enabling Knowledge. See
+[Step 18 acceptance](docs/acceptance/step18.md) for results and remaining acceptance.

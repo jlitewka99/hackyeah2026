@@ -8,9 +8,25 @@ defmodule AiControlWeb.GatewayBody do
 
   def init(opts), do: opts
 
-  def call(%{method: "POST", request_path: path} = conn, _)
-      when path in ["/v1/chat/completions", "/v1/tool_calls", "/v1/runs"] or
-             (is_binary(path) and binary_part(path, 0, min(byte_size(path), 9)) == "/v1/runs/") do
+  def call(%{method: method, request_path: path} = conn, _)
+      when method in ["POST", "PATCH", "DELETE"] do
+    if path in [
+         "/v1/chat/completions",
+         "/v1/tool_calls",
+         "/v1/knowledge/search",
+         "/v1/memory",
+         "/v1/runs"
+       ] or
+         String.starts_with?(path, "/v1/memory/") or String.starts_with?(path, "/v1/runs/") do
+      authenticate(conn)
+    else
+      conn
+    end
+  end
+
+  def call(conn, _), do: conn
+
+  defp authenticate(conn) do
     conn = ApiKeyAuth.call(conn, [])
 
     if conn.halted do
@@ -22,8 +38,6 @@ defmodule AiControlWeb.GatewayBody do
       end
     end
   end
-
-  def call(conn, _), do: conn
 
   defp parse(conn) do
     with [type] <- get_req_header(conn, "content-type"),
@@ -59,37 +73,57 @@ defmodule AiControlWeb.GatewayBody do
     end
   end
 
-  defp input_limit(%{request_path: "/v1/tool_calls"}), do: 65_536
   defp input_limit(%{request_path: "/v1/runs" <> _}), do: 4096
+  defp input_limit(%{request_path: "/v1/tool_calls"}), do: 65_536
+  defp input_limit(%{request_path: "/v1/knowledge/search"}), do: 4096
+  defp input_limit(%{request_path: "/v1/memory" <> _}), do: 65_536
   defp input_limit(_), do: Config.get(:input_bytes)
+
+  defp knowledge_operation(%{request_path: "/v1/knowledge/search"}), do: "knowledge.search"
+  defp knowledge_operation(%{method: "POST"}), do: "knowledge.created"
+  defp knowledge_operation(%{method: "PATCH"}), do: "knowledge.updated"
+  defp knowledge_operation(%{method: "DELETE"}), do: "knowledge.deleted"
 
   defp reject(conn, code, retry \\ nil) do
     result =
-      if conn.request_path == "/v1/tool_calls" do
-        Audit.record_tool(
-          conn.assigns.api_principal,
-          conn.assigns.request_id,
-          "tool.rejected",
-          Atom.to_string(code),
-          0,
-          nil,
-          nil
-        )
-      else
-        Audit.record_gateway(
-          conn.assigns.api_principal,
-          conn.assigns.request_id,
-          Atom.to_string(code),
-          0,
-          nil,
-          :input,
-          nil,
-          %{
-            operation:
-              if(String.starts_with?(conn.request_path, "/v1/runs"), do: "runs", else: "chat"),
-            timings: %{}
-          }
-        )
+      cond do
+        String.starts_with?(conn.request_path, "/v1/memory") or
+            conn.request_path == "/v1/knowledge/search" ->
+          Audit.record_knowledge(
+            conn.assigns.api_principal,
+            conn.assigns.request_id,
+            knowledge_operation(conn),
+            Atom.to_string(code),
+            nil,
+            []
+          )
+
+        conn.request_path == "/v1/tool_calls" ->
+          Audit.record_tool(
+            conn.assigns.api_principal,
+            conn.assigns.request_id,
+            "tool.rejected",
+            Atom.to_string(code),
+            0,
+            nil,
+            nil
+          )
+
+        true ->
+          Audit.record_gateway(
+            conn.assigns.api_principal,
+            conn.assigns.request_id,
+            Atom.to_string(code),
+            0,
+            nil,
+            :input,
+            nil,
+            %{
+              operation:
+                if(String.starts_with?(conn.request_path, "/v1/runs"), do: "runs", else: "chat"),
+              timings: %{}
+            }
+          )
       end
 
     code = if match?({:ok, _}, result), do: code, else: :audit_unavailable

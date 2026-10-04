@@ -11,6 +11,8 @@ defmodule AiControl.Guards.Ner do
   def assess(fields, _context, snapshot, config) do
     started = System.monotonic_time()
     selected = snapshot.settings["guards"]["ner"]["entities"]
+    model_set = Map.get(snapshot.settings, "ner_model_set", "pl-nkjp.v1")
+    revision = if model_set == "pl-nkjp.v2", do: "v2", else: "v1"
 
     payload = %{
       fields:
@@ -19,11 +21,14 @@ defmodule AiControl.Guards.Ner do
         |> Enum.map(fn {text, index} -> %{field_index: index, text: text} end)
     }
 
-    with {:ok, %{"model_set" => "pl-nkjp.v1", "detections" => items} = response}
+    payload =
+      if model_set == "pl-nkjp.v1", do: payload, else: Map.put(payload, :model_set, model_set)
+
+    with {:ok, %{"model_set" => ^model_set, "detections" => items} = response}
          when is_list(items) and map_size(response) == 2 <-
            request(:post, "/analyze", payload, config),
          true <- length(items) <= 20_000,
-         true <- Enum.all?(items, &valid_item?(&1, fields)) do
+         true <- Enum.all?(items, &valid_item?(&1, fields, revision)) do
       findings =
         items
         |> Enum.filter(&(&1["type"] in selected))
@@ -31,7 +36,7 @@ defmodule AiControl.Guards.Ner do
           Finding.new(
             "ner",
             "pii",
-            "ner.#{item["type"]}.v1",
+            "ner.#{item["type"]}.#{revision}",
             item["field_index"],
             item["start_byte"],
             item["end_byte"],
@@ -54,13 +59,16 @@ defmodule AiControl.Guards.Ner do
 
   @impl true
   def ready?(config) do
+    model_set = config[:ner_model_set] || "pl-nkjp.v1"
+    path = if model_set == "pl-nkjp.v1", do: "/ready", else: "/ready?model_set=#{model_set}"
+
     case request(
            :get,
-           "/ready",
+           path,
            nil,
            Keyword.put(config, :guard_timeout, config[:readiness_timeout])
          ) do
-      {:ok, %{"status" => "ready", "model_set" => "pl-nkjp.v1"}} -> true
+      {:ok, %{"status" => "ready", "model_set" => ^model_set}} -> true
       _ -> false
     end
   end
@@ -74,14 +82,15 @@ defmodule AiControl.Guards.Ner do
            "score" => score,
            "detector_id" => id
          } = item,
-         fields
+         fields,
+         revision
        ) do
-    map_size(item) == 6 && type in Configuration.ner_entities() && id == "ner.#{type}.v1" &&
+    map_size(item) == 6 && type in Configuration.ner_entities() && id == "ner.#{type}.#{revision}" &&
       Validation.score?(score) &&
       Content.locations_valid?(fields, [%{field_index: index, start_byte: first, end_byte: last}])
   end
 
-  defp valid_item?(_, _), do: false
+  defp valid_item?(_, _, _), do: false
 
   defp request(method, path, payload, config) do
     options = [

@@ -2,6 +2,8 @@
 
 Policy schema v5 requires a verified run and participant for every Chat Completions or tool operation, including calls through the Gateway and Tools domain APIs. Schema v1–v4 behavior and historical policy checksums remain unchanged. Upgrade a draft in Policies, review its changes, save, then activate it deliberately. The upgrade preserves explicit existing tool limits.
 
+V5 also preserves the existing opt-in Knowledge controls and pinned NER rule set. Filling missing workflow defaults in a v5 draft keeps those choices and explicit tool limits. Previously persisted Knowledge-only v5 settings lack the new finite fields and fail snapshot validation after this release; their records/checksums are not rewritten. Gateway requests fail closed until an administrator publishes and activates a new combined v5 version. If the old v5 is active, the existing Policies page also cannot load that snapshot: use the authorized Policies domain API during a maintenance window to upgrade the saved `version.configuration`, create a new version and activate it against the current set revision. Plan this rollout before deployment; v1–v4 need no such repair.
+
 The gateway controls execution; the client chooses and sequences actions. This feature does not add MCP, Granite, Oban, automatic orchestration, distributed execution or crash resumption. After integrating current main, existing buffered SSE and MCP content operations use the same workflow protection.
 
 ## Policy contract

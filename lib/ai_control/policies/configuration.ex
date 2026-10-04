@@ -34,24 +34,31 @@ defmodule AiControl.Policies.Configuration do
     ]
 
   def default(version \\ 1)
-
-  def default(5),
-    do:
-      default(4)
-      |> Map.put("schema_version", 5)
-      |> put_in(["budgets", "workflow"], ConfigurationV5.defaults())
-
+  def default(5), do: upgrade(default(4), 5)
   def default(4), do: default(3) |> Map.put("schema_version", 4)
   def default(3), do: ConfigurationV2.default(2) |> Map.put("schema_version", 3)
   def default(version), do: ConfigurationV2.default(version)
   def upgrade(source, version \\ 3)
 
   def upgrade(source, 5) do
-    source = upgrade(source, 4) |> Map.put("schema_version", 5)
+    source =
+      if(source["schema_version"] in [4, 5], do: source, else: upgrade(source, 4))
+      |> Map.put("schema_version", 5)
+
     prior = get_in(source, ["budgets", "workflow"]) || %{}
-    limits = Map.merge(ConfigurationV5.defaults(), Map.reject(prior, fn {_, v} -> is_nil(v) end))
+
+    limits =
+      Map.merge(
+        ConfigurationV5.workflow_defaults(),
+        Map.reject(prior, fn {_, v} -> is_nil(v) end)
+      )
+
     budgets = Map.get(source, "budgets", %{})
-    Map.put(source, "budgets", Map.put(budgets, "workflow", limits))
+
+    source
+    |> Map.put("budgets", Map.put(budgets, "workflow", limits))
+    |> Map.put_new("knowledge", ConfigurationV5.defaults())
+    |> Map.put_new("ner_model_set", "pl-nkjp.v2")
   end
 
   def upgrade(source, 4), do: upgrade(source, 3) |> Map.put("schema_version", 4)

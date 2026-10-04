@@ -6,6 +6,7 @@ defmodule AiControl.Audit do
   alias AiControl.Budgets.Usage
   alias AiControl.Gateway.Measurements
   alias AiControl.Gateway.StreamEvidence
+  alias AiControl.Knowledge.Evidence
   alias AiControl.Organizations
   alias AiControl.Organizations.{Access, Grants}
   alias AiControl.Policies.Configuration
@@ -30,11 +31,42 @@ defmodule AiControl.Audit do
 
   @workflow_codes ~w(workflow_context_required workflow_terminal workflow_conflict workflow_limit_exceeded workflow_unavailable)
   @gateway_codes @workflow_codes ++
-                   ~w(completed stream_ready stream_cancelled stream_delivery_timeout stream_unavailable invalid_request input_too_large forbidden agent_not_allowed model_not_allowed policy_unavailable rate_limited capacity_exceeded guard_unavailable policy_blocked redaction_unavailable audit_unavailable upstream_timeout upstream_unavailable upstream_rejected upstream_invalid_response response_too_large model_unavailable model_digest_mismatch request_budget_exceeded token_budget_exceeded budget_unavailable budget_conflict tokenizer_unavailable)
+                   ~w(completed stream_ready stream_cancelled stream_delivery_timeout stream_unavailable invalid_request input_too_large forbidden agent_not_allowed model_not_allowed policy_unavailable rate_limited capacity_exceeded guard_unavailable policy_blocked redaction_unavailable audit_unavailable upstream_timeout upstream_unavailable upstream_rejected upstream_invalid_response response_too_large model_unavailable model_digest_mismatch request_budget_exceeded token_budget_exceeded budget_unavailable budget_conflict tokenizer_unavailable knowledge_disabled knowledge_write_disabled knowledge_conflict)
   def gateway_codes, do: @gateway_codes
 
   @tool_codes @workflow_codes ++
                 ~w(completed dispatching invalid_request input_too_large forbidden agent_not_allowed tool_not_allowed invalid_tool_request invalid_tool_arguments tool_request_too_large tool_resource_not_allowed tool_resource_not_found tool_redirect_blocked tool_upstream_unavailable tool_invalid_result tool_unavailable tool_timeout tool_cancelled tool_interrupted tool_execution_exists idempotency_conflict tool_budget_exceeded budget_unavailable policy_unavailable guard_unavailable policy_blocked redaction_unavailable audit_unavailable capacity_exceeded rate_limited)
+
+  def record_knowledge(identity, request_id, operation, code, policy, resources) do
+    with true <-
+           operation in ~w(knowledge.list knowledge.read knowledge.search knowledge.created knowledge.updated knowledge.deleted knowledge.context),
+         true <-
+           code in (@gateway_codes ++
+                      ~w(knowledge_disabled knowledge_write_disabled knowledge_conflict)),
+         true <- Validation.uuid?(request_id) and Evidence.valid?(resources),
+         true <- is_nil(policy) or Snapshot.valid?(policy),
+         {:ok, attrs} <- gateway_identity(identity) do
+      persist(
+        struct!(
+          Event,
+          Map.merge(attrs, %{
+            request_id: request_id,
+            kind: :gateway,
+            event_type: operation,
+            target_id: request_id,
+            stage: :input,
+            reason_codes: [code],
+            occurred_at: DateTime.utc_now(),
+            policy_version: if(policy, do: policy.version),
+            policy_checksum: if(policy, do: policy.checksum),
+            data: %{knowledge: %{operation: operation, resources: resources}}
+          })
+        )
+      )
+    else
+      _ -> {:error, :invalid_audit_data}
+    end
+  end
 
   def record_tool(identity, request_id, type, code, duration, policy, evidence) do
     with true <-

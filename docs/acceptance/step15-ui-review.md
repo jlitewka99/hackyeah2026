@@ -39,3 +39,7 @@ The same reviewer scored both listed fixes:
 2. **Resolved** — confirmation and stopped captures show visible focus on the intended targets. Source transfers focus on request, restores Stop workflow on cancellation and focuses the announced terminal status after commitment.
 
 Remaining: clear for this fix batch; no regression from the batch was visible. **Ship covers the two scored fixes, not whole-surface approval.** It does not certify backend, security, performance or real-model qualification. The separate documenter report preserves the existing system and records historical drift.
+
+## Current-main policy compatibility recheck: ship
+
+The same reviewer performed a bounded recheck after Step 18 integration, inspecting the combined policy source and all four replaced desktop/mobile/light/dark policy captures. Knowledge/NER controls coexist with the six finite workflow limits, including the visible synthetic 1800-second override. Source and the focused LiveView test establish that “Apply workflow defaults” preserves Knowledge, NER and explicit tool limits in an incomplete v5 draft; populated-policy screenshots do not show that button state. Workflow list/detail/stop source and the prior scored fixes remain unchanged. This disposition covers policy integration only. No detector rerun or new defect hunt was performed.
