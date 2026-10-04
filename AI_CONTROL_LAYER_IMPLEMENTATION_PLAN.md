@@ -1025,13 +1025,50 @@ checkbox 13 zaznaczony, checkbox 11 pozostaje otwarty.
 
 ### Krok 15. Workflowy, runaway protection i wielu agentów
 
-- Dodać rejestr workflowów z celem, właścicielem, czasem startu i stanem.
-- Uruchamiać proces workflow pod nazwanym `DynamicSupervisor` i `Registry`.
-- Egzekwować maksymalny czas, liczbę wywołań, tokeny, głębokość delegacji i powtarzanie tej samej akcji.
-- Delegacja agent→agent zachowuje organizację oraz wspólny nadrzędny budżet; agent docelowy nadal podlega własnym uprawnieniom.
-- Przekroczenie limitu kończy workflow i zatrzymuje następne operacje.
+**Stan na 2026-10-04:** implementacja na `JL/step-15-workflows`; odbiór deterministyczny zakończony, kwalifikacja integracji z rzeczywistymi modelami nadal otwarta. Checkbox kroku pozostaje niezaznaczony, a PR jest draftem do czasu tej kwalifikacji. Nie dodano MCP, Granite ani Oban.
 
-**Gotowe, gdy:** pętla lub delegacja nie pozwala obejść budżetu.
+**Implementacja i migracja:**
+
+- `AiControl.Workflows` przechowuje root, uczestników i operacje. Cel ma 1–240 znaków Unicode po przycięciu; jest dostępny w panelu, ale nie trafia do audytu, serializacji receipts ani zwykłego `Inspect` rekordu. Stany to `running`, `completed`, `stopped`, `limit_exceeded`, `interrupted`.
+- Nazwane `Registry`, `DynamicSupervisor` i nadzorca zadań utrzymują jeden tymczasowy proces na `{organization_id, run_id}`. Deadline, monitorowanie lokalnych operacji i odzyskiwanie przy starcie blokują kontynuację po awarii bez ponawiania efektów downstream.
+- Migracja `20261004012533_create_workflow_runs.exs` dodaje `workflow_runs`, `workflow_participants`, `workflow_operations` oraz nullable powiązania run/participant w rezerwacjach, wykonaniach narzędzi i audycie. Została zastosowana w bazach dev/test i osobnej bazie odbioru UI. Rollback usuwa dane workflowów; nie testowano go i nie należy go wykonywać po przyjęciu runów wymagających zachowania dowodów.
+- Polityka v5 ma skończone domyślne limity: **300 sekund, 50 operacji, 10 000 tokenów, 25 dispatch narzędzi, głębokość 3, 3 identyczne akcje**. Upgrade obejmuje draft, zachowuje jawny dotychczasowy limit narzędzi i pokazuje skutki aktywacji. Ustawienia i checksumy v1–v4 pozostają zgodne z wcześniejszym kontraktem.
+- Po integracji kroku 18 v5 zachowuje również ustawienia Knowledge/NER i próg/providera Prompt Guard. `Apply workflow defaults` uzupełnia brakujące limity istniejącego draftu v5 bez zmiany tych ustawień; zapis i aktywacja pozostają osobnymi czynnościami.
+- Root i wszystkie delegacje dzielą trwały budżet, również po zmianie godziny; licznik narzędzi wykorzystuje istniejący `Budgets.Workflow`. Nadal obowiązują godzinowe limity organizacji i faktycznie działającego agenta. Transakcje blokują organizację jako pierwszą. Tokenizacja/rezerwacja działa również bez godzinowego limitu tokenów; rzeczywiste użycie rozlicza się także przy odrzuceniu odpowiedzi przez guard.
+- Przyjęte operacje LLM, narzędzi i delegacji liczą się przed guardami; idempotentne ponowienie nie zwiększa liczników. HMAC kanonicznej akcji działa dla całego root, bez podziału według agenta, kolejności kluczy JSON ani transportowych identyfikatorów tool calls. Czwarta identyczna akcja kończy run.
+- Delegacja wyznacza rodzica, organizację i głębokość po stronie serwera. Aktywny agent docelowy używa własnego klucza, dozwolonych modeli i grantów narzędzi; nie dostaje dodatkowych uprawnień. Tożsamość, uczestnictwo, polityka, stan i deadline są sprawdzane ponownie przed dispatch. Limity rozpoczętego run nie rosną po zmianie polityki; zaostrzenie dotyczy kolejnych operacji.
+
+**Kontrakty API i panelu:**
+
+- `POST/GET /v1/runs`, `GET /v1/runs/:id`, `POST /v1/runs/:id/delegations`, `/complete`, `/stop`. Tworzenie i delegacja wymagają UUID `Idempotency-Key`; zmienione dane pod tym samym kluczem zwracają `409`. Rodzic delegacji pochodzi z `x-run-participant-id`.
+- Chat i tool calls przyjmują `x-run-id` i `x-run-participant-id`. Aktywna v5 wymaga kontekstu również w domenach Gateway/Tools. Stałe błędy: `400` kontekst, `403` dostęp, `409` konflikt/terminalny run, `429` limit, `503` niedostępny stan/audyt. Body mutacji runów ma limit 4096 bajtów przed dekodowaniem; istniejące limitery i `no-store` obejmują nowe endpointy.
+- `/organizations/:id/runs` i szczegóły: filtry, paginacja, cel, stan, wspólne użycie/rezerwacje, czas, głębokość i rodzice, przyczyna zakończenia. Osobne moduły `.ex`/`.html.heex`, `Layouts.app`, formularze komponentowe, streamy, stabilne DOM ID i PubSub ograniczone do organizacji.
+- `workflows.read`/`workflows.manage`, przydział do właściciela i dodatkowe `events.read` chronią widoki. Organizator i superadmin mają pełny dostęp; nazwy/ID nieprzydzielonych uczestników i rodziców są ukryte również w historii i JSONL. Stop ma potwierdzenie w obrębie strony, `Stopping…`, informację po zatwierdzonym zapisie oraz przekazanie fokusu przy potwierdzeniu, anulowaniu i zakończeniu.
+- Synchroniczny audyt utworzenia, delegacji, stop, complete, limitów i przerwania oraz powiązanie receipts LLM/narzędzi z run. Serializer, filtr Events i JSONL nie zawierają promptów, argumentów, wyników ani celu. Telemetry używa ograniczonego katalogu stanów/przyczyn.
+- Gałąź połączono z aktualnym `origin/main` przez `dae70b3` (kroki 13/16/17/18). Istniejący buffered SSE wymaga kontekstu v5, zachowuje aktywną operację do końca dostarczenia/cleanup i rozlicza użycie w nadzorowanej sesji. Istniejące MCP `tools/call`/`resources/read` przekazują te same nagłówki do Tools; discovery i initialize nie wymagają run. Po rozpoczęciu SSE błąd terminalny korzysta z `event: error`; MCP zachowuje własne koperty błędów. Istniejące testy chat/SSE Knowledge przekazują wymagany kontekst workflow. Nie dodano nowych mechanizmów MCP ani stream guardów w tym kroku.
+- Zachowano Oban/runner/selektory sygnatur dostarczone przez main w kroku 16. Runner tworzy własne syntetyczne runy, przekazuje nagłówki v5 i zatrzymuje je po scenariuszu. Eksporty JSONL w tle filtrują workflowy według przydziałów przy manifestowaniu i odczycie; zapisane selektory agentów blokują wznowienie i pobranie po zmianie przydziałów. Starsze eksporty bez tej metadanej poprzedzają audyt workflowów i zachowują wcześniejszy kontrakt.
+
+**Odbiór:**
+
+- Końcowy `mix precommit` po integracji main: **690 passed, 15 excluded**, dodatkowo **5 testów JS**. Format, kompilacja i Credo bez błędów. 44 nowe testy obejmują domenę, współbieżność na PostgreSQL, księgowanie, API, polityki, LiveView, SSE, MCP i eksporty w tle; kontrolowany zegar, bariery i `start_supervised!`, bez synchronizacji przez sleep. Osobne **5 testów runnera** przeszło na wydzielonej bazie, w tym proces potomny i 15 kontrolowanych scenariuszy HTTP oraz anulowanie.
+- `mix assets.build`, `mix dialyzer` (0 błędów) i `mix security` przeszły. Sobelow zachował ostrzeżenia low confidence z main: zapytania Dashboard/manifestów eksportu, ścieżki plików benchmarku/feedów/importu oraz konfigurację origin endpointu. Nie wyciszano ich ani nie uznano za potwierdzone podatności; dependency audit nie zgłosił podatności.
+- Impeccable: Operate, `buildPath: code`, zachowany wygląd Events/Budgets. Detektor uruchomiono raz: 0 primary findings i 5 istniejących uwag typograficznych. Odbiór przeglądarkowy: desktop 1280px/mobile 390px, oba motywy, długie cele, pusty wynik, błąd filtra, inline stop i klawiatura. Izolowany syntetyczny run po stop zachował 140 użytych i 400 niepewnie zarezerwowanych tokenów; PubSub odświeżał widoki. Ograniczenia przydziałów, paginacja i błędy ładowania mają testy LiveView. Końcowy werdykt impeccable jest zapisany w [raporcie UI](docs/acceptance/step15-ui-review.md); zakres dokumentera w [raporcie dokumentacji](docs/acceptance/step15-design-documentation.md).
+- Po późniejszej integracji kroku 16 reviewer i dokumenter sprawdzili źródła wspólnej nawigacji i selektora sygnatur; przechwycone obrazy poprzedzają te elementy main. Szablony/style workflowów nie zmieniły się; nie zadeklarowano nowego odbioru wizualnego ani nie uruchamiano kolejnego detektora.
+- Uruchomiono istniejące integracje NER, modeli narzędzi, SSE i Knowledge: **2/7 passed**. Oba rzeczywiste testy v5 RAG przeszły na portach kroku 18; pięć testów na domyślnych portach nie przeszło readiness NER/Semantic albo otrzymało Ollama SSE `503`. Po przekierowaniu konfiguracji testowej do istniejących usług na `11438/8018/8028/8038`: **5/7 passed** — NER, modele narzędzi i SSE przeszły, ale oba powtórzone przypadki RAG zwróciły `guard_unavailable`. Nie uzyskano jednego przebiegu 7/7 ani odbioru pełnego cyklu run → narzędzie → delegacja → complete z rzeczywistym downstream. Kwalifikacja modeli kroku 11 i rollback migracji pozostają otwarte. Wyniki tej sesji nie unieważniają odbioru zapisanego przy innych krokach. To istotna luka odbioru, dlatego PR pozostaje draftem.
+
+**Zastrzeżenia:**
+
+- Zatrzymanie blokuje kolejne dispatch; nie cofa operacji już wysłanej do downstream. Anulowanie lokalnej pracy zależy od istniejących adapterów. Niepewna rezerwacja po dispatch pozostaje do audytowanego reconciliation.
+- Ochrona workflow jest wymuszana po aktywacji v5. Organizacje pozostające na v1–v4 zachowują wcześniejsze ograniczenia.
+- Zapisane wcześniej polityki v5 kroku 18 bez skończonych pól workflow nie przechodzą nowej walidacji snapshotu; rekordy/checksumy pozostają niezmienione. Do czasu świadomego opublikowania nowej wspólnej wersji v5 wywołania są blokowane. Aktywna stara v5 blokuje także ładowanie istniejącego panelu Policies; ten rollout wymaga autoryzowanego API domeny Policies w oknie utrzymaniowym. Zaplanować go przed wdrożeniem; szczegóły w `docs/workflows.md`.
+- Fingerprint wykrywa identyczne akcje; zmienne akcje ograniczają czas, liczba operacji i budżet tokenów.
+- Tokeny workflow obejmują wejście i wyjście docelowego LLM według istniejącego rozliczania. Koszt modeli guardów pozostaje osobnym pomiarem.
+- Zakres obejmuje jedną instancję aplikacji i obecny sandbox; nie obejmuje klastra, automatycznej orkiestracji klienta ani wznowienia po awarii.
+- Istniejące ograniczenia odbioru modeli kroku 11 oraz drift dokumentacji impeccable pozostają odnotowane i nie zostały naprawione przy okazji tej zmiany. Brak osobnej karty Operate QUALITY BAR ogranicza niezależną kwalifikację pułapu wizualnego; zwykłe rozszerzenie zachowuje obecny system.
+
+Szczegóły kontraktów: [docs/workflows.md](docs/workflows.md). Rzeczywiste wyniki i pozostały odbiór: [docs/acceptance/step15.md](docs/acceptance/step15.md).
+
+**Gotowe, gdy:** pętla lub delegacja nie pozwala obejść budżetu, a odbiór obejmuje również dostępne rzeczywiste integracje; checkbox zaznaczyć po zamknięciu powyższej luki kwalifikacji.
 
 ### Krok 16. Oban, raporty i testy w panelu
 

@@ -2,7 +2,7 @@ defmodule AiControl.Audit.Export do
   @moduledoc "Bounded-memory export. Completion confirms all authorized event batches."
   import Ecto.Query
 
-  alias AiControl.Audit.{Filters, Serializer}
+  alias AiControl.Audit.{Filters, Serializer, WorkflowVisibility}
   alias AiControl.Organizations.Access
   alias AiControl.Repo
 
@@ -24,7 +24,7 @@ defmodule AiControl.Audit.Export do
 
   defp stream(scope, filters, initial, send_batch) do
     %{rows: [["read committed"]]} = Repo.query!("SHOW transaction_isolation", [], log: false)
-    query = Filters.query(scope.organization.id, filters)
+    query = Filters.query(scope.organization.id, filters) |> WorkflowVisibility.query(scope)
     query = order_by(query, [e], asc: e.occurred_at, asc: e.id)
 
     {state, count} =
@@ -47,7 +47,9 @@ defmodule AiControl.Audit.Export do
   end
 
   defp send_checked(scope, state, lines, send_batch) do
-    with {:ok, _} <- authorize(scope), {:ok, state} <- send_batch.(state, lines) do
+    with {:ok, current} <- authorize(scope),
+         true <- current.grants == scope.grants,
+         {:ok, state} <- send_batch.(state, lines) do
       state
     else
       _ -> Repo.rollback(:export_interrupted)

@@ -2,8 +2,9 @@ defmodule AiControl.Gateway.Stream do
   @moduledoc "Supervised SSE lifetime. The session owns accounting even when its caller or worker dies."
   use GenServer, restart: :temporary
 
-  alias AiControl.{Audit, Budgets, Gateway}
+  alias AiControl.{Audit, Budgets, Gateway, Workflows}
   alias AiControl.Gateway.{Config, Measurements, StreamEvidence}
+  alias AiControl.Workflows.Runtime
 
   def start(identity, params, opts) do
     args = {self(), identity, params, Keyword.put_new(opts, :request_id, Ecto.UUID.generate())}
@@ -29,6 +30,8 @@ defmodule AiControl.Gateway.Stream do
       owner_ref: Process.monitor(owner),
       identity: identity,
       policy: nil,
+      workflow: nil,
+      workflow_timer: nil,
       params: params,
       opts: Keyword.put(opts, :measurements, measurements),
       receipt: nil,
@@ -52,8 +55,8 @@ defmodule AiControl.Gateway.Stream do
 
     opts =
       Keyword.merge(state.opts,
-        stream_context: fn identity, policy ->
-          GenServer.call(session, {:context, identity, policy})
+        stream_context: fn identity, policy, workflow ->
+          GenServer.call(session, {:context, identity, policy, workflow})
         end,
         stream_admit: fn identity, model, policy ->
           GenServer.call(session, {:admit, identity, model, policy}, :infinity)
@@ -65,12 +68,28 @@ defmodule AiControl.Gateway.Stream do
     {:noreply, %{state | task: task, from: from, timer: timer}}
   end
 
-  def handle_call({:context, identity, policy}, _, state),
-    do: {:reply, :ok, %{state | identity: identity, policy: policy}}
+  def handle_call({:context, identity, policy, workflow}, _, state) do
+    result = if workflow, do: Runtime.track_stream(workflow, self(), state.owner), else: :ok
+
+    timer =
+      if workflow,
+        do: Process.send_after(self(), :workflow_deadline, Workflows.remaining(workflow))
+
+    {:reply, result,
+     %{state | identity: identity, policy: policy, workflow: workflow, workflow_timer: timer}}
+  end
 
   def handle_call({:admit, identity, model, policy}, _, state) do
     result =
-      Budgets.admit(identity, state.opts[:agent_id], model, policy, state.opts[:request_id])
+      Budgets.admit(
+        identity,
+        state.opts[:agent_id],
+        model,
+        policy,
+        state.opts[:request_id],
+        DateTime.utc_now(),
+        state.workflow
+      )
 
     state =
       case result do
@@ -169,11 +188,21 @@ defmodule AiControl.Gateway.Stream do
 
   def handle_info({:timeout, _}, state), do: {:noreply, state}
 
+  def handle_info(:workflow_deadline, state) do
+    Workflows.expire(state.workflow.organization_id, state.workflow.run_id)
+    failure(stop_worker(state), Workflows.terminal_result(state.workflow))
+  end
+
+  def handle_info(:workflow_terminated, state),
+    do: failure(stop_worker(state), Workflows.terminal_result(state.workflow))
+
   @impl true
   def terminate(reason, state) do
     if state.timer, do: Process.cancel_timer(state.timer)
+    if state.workflow_timer, do: Process.cancel_timer(state.workflow_timer)
     state = stop_worker(state)
     _ = cleanup(state)
+    finish_workflow(state.workflow)
     if reason != :normal, do: audit(state, "stream_cancelled", "cancelled")
     Agent.stop(state.opts[:measurements])
   end
@@ -280,6 +309,15 @@ defmodule AiControl.Gateway.Stream do
 
   defp cleanup(%{receipt: nil}), do: :ok
   defp cleanup(state), do: Budgets.abandon(state.receipt)
+
+  defp finish_workflow(nil), do: :ok
+
+  defp finish_workflow(context) do
+    Workflows.finish(context)
+
+    if Runtime.present?(context.organization_id, context.run_id),
+      do: Runtime.untrack(context, self())
+  end
 
   defp worker(callback) do
     Task.Supervisor.async_nolink(AiControl.Gateway.Tasks, fn ->

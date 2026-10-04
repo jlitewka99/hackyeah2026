@@ -13,7 +13,7 @@ defmodule AiControl.Tools.ToolRequest do
     :arguments,
     :policy
   ]
-  defstruct @enforce_keys
+  defstruct @enforce_keys ++ [:run_context]
 
   def new(%Principal{} = identity, params, policy)
       when is_map(params) and not is_struct(params) do

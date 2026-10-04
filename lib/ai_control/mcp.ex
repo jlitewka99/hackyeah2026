@@ -229,7 +229,7 @@ defmodule AiControl.MCP do
   defp execution_opts(opts, session, id),
     do:
       Keyword.put(
-        Keyword.take(opts, [:request_id, :ingress_checked?]),
+        Keyword.take(opts, [:request_id, :ingress_checked?, :run_context]),
         :idempotency_key,
         idempotency_key(session, id)
       )

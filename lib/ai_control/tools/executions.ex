@@ -47,6 +47,8 @@ defmodule AiControl.Tools.Executions do
           api_key_id: request.api_key_id,
           request_id: request.request_id,
           workflow_id: workflow,
+          run_id: if(request.run_context, do: request.run_context.run_id),
+          participant_id: if(request.run_context, do: request.run_context.participant_id),
           idempotency_key: key,
           tool: request.tool,
           fingerprint_digest: fingerprint.digest,
@@ -73,7 +75,8 @@ defmodule AiControl.Tools.Executions do
              nil,
              request.policy,
              receipt.workflow_id,
-             receipt.id
+             receipt.id,
+             request.run_context
            ) do
       current = locked(receipt)
       if current.status != "pending", do: Repo.rollback(:tool_cancelled)
@@ -92,6 +95,7 @@ defmodule AiControl.Tools.Executions do
       updated
     else
       false -> Repo.rollback(:forbidden)
+      {:error, code} when code in [:workflow_limit_exceeded, :workflow_terminal] -> {:error, code}
       {:error, code} -> Repo.rollback(code)
     end
   end
@@ -133,6 +137,19 @@ defmodule AiControl.Tools.Executions do
       tool: receipt.tool,
       charged: receipt.charged
     }
+
+  def recover_request(org, request_id) do
+    transaction(fn ->
+      lock_org(org)
+
+      case Repo.get_by(Execution, [organization_id: org, request_id: request_id], log: false) do
+        nil -> :ok
+        receipt -> recover!(receipt)
+      end
+
+      :ok
+    end)
+  end
 
   def recover do
     transaction(fn ->
@@ -203,11 +220,18 @@ defmodule AiControl.Tools.Executions do
 
   defp fingerprint(request) do
     payload =
-      canonical(%{
-        "tool" => request.tool,
-        "arguments" => request.arguments,
-        "agent" => request.agent_id
-      })
+      canonical(
+        Map.reject(
+          %{
+            "tool" => request.tool,
+            "arguments" => request.arguments,
+            "agent" => request.agent_id,
+            "run" => if(request.run_context, do: request.run_context.run_id),
+            "participant" => if(request.run_context, do: request.run_context.participant_id)
+          },
+          fn {key, value} -> key in ~w(run participant) && is_nil(value) end
+        )
+      )
 
     Fingerprint.content(
       request.organization_id,
@@ -252,11 +276,14 @@ defmodule AiControl.Tools.Executions do
     result = Repo.transaction(fun, log: false)
 
     case result do
-      {:ok, %Execution{organization_id: id}} -> Audit.notify(id)
+      {:ok, %Execution{organization_id: id}} -> if !Repo.in_transaction?(), do: Audit.notify(id)
       _ -> :ok
     end
 
-    result
+    case result do
+      {:ok, {:error, _} = error} -> error
+      _ -> result
+    end
   rescue
     _ -> {:error, :tool_unavailable}
   catch

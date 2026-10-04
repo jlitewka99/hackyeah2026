@@ -13,6 +13,8 @@ defmodule AiControl.Audit.Event do
     :agent_id,
     :api_key_id,
     :request_id,
+    :run_id,
+    :participant_id,
     :kind,
     :event_type,
     :target_id,
@@ -37,6 +39,8 @@ defmodule AiControl.Audit.Event do
     field :agent_id, :binary_id
     field :api_key_id, :binary_id
     field :request_id, :binary_id
+    field :run_id, :binary_id
+    field :participant_id, :binary_id
     field :kind, Ecto.Enum, values: [:decision, :administrative, :gateway]
     field :event_type, :string
     field :target_id, :binary_id

@@ -1,0 +1,149 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} active_page="runs">
+  <div class="page-content" id="organization-run">
+    <.link
+      id="run-back"
+      navigate={~p"/organizations/#{@current_scope.organization.id}/runs"}
+      class="text-link"
+    >All workflows</.link>
+    <p :if={@report_error} id="run-error" role="alert" class="report-error">{@report_error}</p>
+    <%= if @run do %>
+      <div class="policy-heading mt-6">
+        <div class="min-w-0">
+          <h1>Workflow</h1>
+          <p class="page-description workflow-goal" id="run-goal">{@run.goal}</p>
+          <p class="resource-identifier muted">{@run.id}</p>
+        </div>
+        <button
+          :if={@manage? && @run.status == "running" && !@confirm_stop?}
+          id="run-stop"
+          class="button-secondary"
+          phx-click="request_stop"
+        ><.icon name="hero-stop" class="size-4" /> Stop workflow</button>
+      </div>
+      <div id="run-status" class="workflow-status-region" aria-live="polite" tabindex="-1">
+        <span class={[
+          "workflow-state",
+          @run.status in ["limit_exceeded", "interrupted"] && "workflow-state-danger"
+        ]}>{AiControlWeb.WorkflowHTML.status(@run.status)}</span>
+        <span :if={@run.status == "running"} id="run-remaining" class="muted tabular-nums">{@remaining} seconds remaining</span>
+        <p :if={@run.reason} id="run-reason">{AiControlWeb.WorkflowHTML.reason(@run.reason)}</p>
+      </div>
+      <div
+        :if={@confirm_stop? && @run.status == "running" && @manage?}
+        id="run-stop-confirmation"
+        class="workflow-stop-confirmation"
+        role="group"
+        aria-labelledby="run-stop-heading"
+      >
+        <h2 id="run-stop-heading">Stop this workflow and all delegates?</h2>
+        <p class="muted mt-2">
+          New operations will be blocked. An operation already sent downstream cannot be undone, and its usage remains charged.
+        </p>
+        <div class="row-actions mt-4">
+          <button
+            id="run-stop-confirm"
+            class="button-primary"
+            phx-click="stop"
+            phx-disable-with="Stopping…"
+          >Stop workflow</button>
+          <button id="run-stop-cancel" class="button-secondary" phx-click="cancel_stop">Keep running</button>
+        </div>
+      </div>
+      <section class="list-section" aria-labelledby="run-usage-heading">
+        <h2 id="run-usage-heading">Shared root limits</h2>
+        <p class="muted mt-2">
+          Every participant consumes this same budget. Delegation does not reset it.
+        </p>
+        <dl class="report-summary">
+          <div id="run-calls">
+            <dt>Operations</dt><dd>{@usage.calls} / {@usage.limits["max_calls"]}</dd>
+          </div>
+          <div id="run-tokens">
+            <dt>Used tokens</dt><dd>{@usage.tokens} / {@usage.limits["max_tokens"]}</dd>
+          </div>
+          <div id="run-reserved">
+            <dt>Reserved tokens</dt><dd>{@usage.reserved_tokens}</dd>
+          </div>
+          <div id="run-tool-calls">
+            <dt>Started tool calls</dt><dd>
+              {@usage.tool_calls} / {@usage.limits["tool_calls"]}
+            </dd>
+          </div>
+          <div id="run-depth">
+            <dt>Maximum delegation depth</dt><dd>{@usage.limits["max_delegation_depth"]}</dd>
+          </div>
+          <div id="run-repetitions">
+            <dt>Identical action limit</dt><dd>{@usage.limits["max_repeated_actions"]}</dd>
+          </div>
+        </dl>
+        <p class="muted text-sm">
+          Token usage covers the target LLM's input and generated output, including blocked responses. Uncertain executions retain their reservation.
+        </p>
+        <p class="muted text-sm mt-2">
+          Started {AiControlWeb.ReportingHTML.time(@run.started_at)} · Deadline {AiControlWeb.ReportingHTML.time(
+            @run.deadline
+          )}
+        </p>
+      </section>
+      <section class="list-section" aria-labelledby="run-participants-heading">
+        <h2 id="run-participants-heading">Participants</h2>
+        <p class="muted mt-2">
+          Agents use their own keys and permissions. Only assigned agents appear here; root depth is zero.
+        </p>
+        <div id="run-participant-list" phx-update="stream">
+          <p id="run-participants-empty" class="hidden only:block muted py-6">
+            No participants are available to your access.
+          </p>
+          <div :for={{id, participant} <- @streams.participants} id={id} class="resource-row">
+            <div class="min-w-0">
+              <p>{participant.name}</p><p class="resource-identifier muted">{participant.id}</p>
+            </div>
+            <div class="workflow-row-state text-sm">
+              <span class="tabular-nums">Depth {participant.depth}</span>
+              <span class="muted">{if participant.depth == 0,
+                do: "Root owner",
+                else:
+                  if(participant.parent_visible?,
+                    do: "Parent #{String.slice(participant.parent_id, 0, 8)}",
+                    else: "Restricted parent"
+                  )}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="list-section" aria-labelledby="run-events-heading">
+        <h2 id="run-events-heading">Recorded decisions</h2>
+        <%= if @events? do %>
+          <p class="muted mt-2">
+            Latest 50 audit entries. Evidence contains no interaction content.
+          </p>
+          <.link
+            id="run-events-link"
+            navigate={
+              ~p"/organizations/#{@current_scope.organization.id}/events?#{%{run_id: @run.id, range: "custom", from: DateTime.to_iso8601(DateTime.add(@run.started_at, -1)), to: DateTime.to_iso8601(DateTime.add(DateTime.utc_now(), 1))}}"
+            }
+            class="text-link"
+          >Open workflow events</.link>
+          <p :if={@events_error} id="run-events-error" role="alert" class="report-error">
+            {@events_error}
+          </p>
+          <p :if={@events_empty? && !@events_error} id="run-events-empty" class="muted py-6">
+            No decisions have been recorded for this workflow.
+          </p>
+          <div id="run-event-list" phx-update="stream" class="report-list mt-4">
+            <AiControlWeb.ReportingHTML.event_row
+              :for={{id, event} <- @streams.events}
+              id={id}
+              event={event}
+              organization_id={@current_scope.organization.id}
+            />
+          </div>
+        <% else %>
+          <p id="run-events-restricted" class="muted mt-2">
+            Event history requires Events: read access.
+          </p>
+        <% end %>
+      </section>
+    <% end %>
+  </div>
+</Layouts.app>

@@ -1,0 +1,73 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} active_page="runs">
+  <div class="page-content" id="organization-runs">
+    <h1>Workflows</h1>
+    <p class="page-description">
+      Follow client-driven executions and the limits shared by their agents.
+    </p>
+    <.form for={@form} id="run-filters" phx-submit="filter" class="workflow-filters">
+      <.input
+        field={@form[:status]}
+        type="select"
+        label="Status"
+        options={[
+          {"All statuses", ""}
+          | Enum.map(AiControl.Workflows.statuses(), &{AiControlWeb.WorkflowHTML.status(&1), &1})
+        ]}
+      />
+      <.input
+        field={@form[:agent_id]}
+        type="text"
+        label="Owner agent UUID"
+        placeholder="All assigned owners"
+      />
+      <button id="runs-filter-submit" class="button-secondary" phx-disable-with="Filtering…">Filter workflows</button>
+    </.form>
+    <p :if={@report_error} id="runs-error" role="alert" class="report-error">{@report_error}</p>
+    <div :if={@runs_empty? && !@report_error} id="runs-empty" class="py-8">
+      <p class="font-medium">No workflows match these filters.</p>
+      <p class="muted mt-2">
+        Activate policy v5 and create a run through the API, or broaden the filters.
+      </p>
+    </div>
+    <div id="workflow-run-list" phx-update="stream" class="report-list">
+      <div :for={{id, run} <- @streams.runs} id={id} class="resource-row workflow-row">
+        <div class="min-w-0">
+          <.link
+            navigate={~p"/organizations/#{@current_scope.organization.id}/runs/#{run.id}"}
+            class="text-link workflow-goal"
+          >{run.goal}</.link>
+          <p class="resource-identifier muted">{run.id}</p>
+          <p class="muted text-sm mt-1">
+            Started {AiControlWeb.ReportingHTML.time(run.started_at)}
+          </p>
+        </div>
+        <div class="workflow-row-state">
+          <span class={[
+            "workflow-state",
+            run.status in ["limit_exceeded", "interrupted"] && "workflow-state-danger"
+          ]}>{AiControlWeb.WorkflowHTML.status(run.status)}</span>
+          <span class="muted tabular-nums text-sm">{run.calls} / {run.limits["max_calls"]} operations</span>
+          <span class="muted tabular-nums text-sm">{run.tokens} used · {run.reserved_tokens} reserved tokens</span>
+        </div>
+      </div>
+    </div>
+    <nav class="report-links" aria-label="Workflow pages">
+      <.link
+        :if={@filters["cursor"]}
+        id="runs-first"
+        patch={
+          ~p"/organizations/#{@current_scope.organization.id}/runs?#{Map.delete(@filters, "cursor")}"
+        }
+        class="button-secondary"
+      >Newest workflows</.link>
+      <.link
+        :if={@next_cursor}
+        id="runs-next"
+        patch={
+          ~p"/organizations/#{@current_scope.organization.id}/runs?#{Map.put(@filters, "cursor", @next_cursor)}"
+        }
+        class="button-secondary"
+      >Older workflows <.icon name="hero-arrow-right" class="size-4" /></.link>
+    </nav>
+  </div>
+</Layouts.app>

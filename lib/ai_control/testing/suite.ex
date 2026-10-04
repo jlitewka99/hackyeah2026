@@ -2,7 +2,7 @@ defmodule AiControl.Testing.Suite do
   @moduledoc "Synthetic HTTP scenarios exercise the real gateway, durable budgets and sandbox."
   import Ecto.Query
 
-  alias AiControl.{Accounts, Agents, ApiKeys, Organizations, Policies, Repo}
+  alias AiControl.{Accounts, Agents, ApiKeys, Organizations, Policies, Repo, Workflows}
   alias AiControl.Accounts.Scope
   alias AiControl.Audit.Event
   alias AiControl.Benchmarks.Semantic
@@ -128,16 +128,22 @@ defmodule AiControl.Testing.Suite do
     try do
       overrides = overrides(id)
       context = fixture(id, overrides)
-      configure(id, context, config)
-      response = execute(id, context, origin)
-      passed? = response.status == expected_status(id) && verify(id, context, response)
-      %{status: if(passed?, do: "passed", else: "failed"), evidence: evidence(context, response)}
+      scenario_result(id, origin, context, config)
     rescue
       _ -> %{status: "error", evidence: %{}}
     after
       Application.put_env(:ai_control, Config, config)
       State.reset()
     end
+  end
+
+  defp scenario_result(id, origin, context, config) do
+    configure(id, context, config)
+    response = execute(id, context, origin)
+    passed? = response.status == expected_status(id) && verify(id, context, response)
+    %{status: if(passed?, do: "passed", else: "failed"), evidence: evidence(context, response)}
+  after
+    Workflows.transition(context.scope, context.run_id, "stop")
   end
 
   defp fixture(id, overrides) do
@@ -180,7 +186,24 @@ defmodule AiControl.Testing.Suite do
         Supervisor.child_spec({Sandbox, opts}, id: org.id)
       )
 
-    %{scope: scope, agent: agent, token: token, source: source, version: version}
+    {:ok, principal} = ApiKeys.authenticate(token)
+
+    {:ok, {run, participant}} =
+      Workflows.create(
+        principal,
+        %{"goal" => "Synthetic gateway acceptance scenario"},
+        Ecto.UUID.generate()
+      )
+
+    %{
+      scope: scope,
+      agent: agent,
+      token: token,
+      source: source,
+      version: version,
+      run_id: run.id,
+      participant_id: participant.id
+    }
   end
 
   defp source(overrides) do
@@ -294,7 +317,11 @@ defmodule AiControl.Testing.Suite do
       redirect: false,
       receive_timeout: 180_000,
       request_timeout: 180_000,
-      headers: [{"idempotency-key", Ecto.UUID.generate()}]
+      headers: [
+        {"idempotency-key", Ecto.UUID.generate()},
+        {"x-run-id", context.run_id},
+        {"x-run-participant-id", context.participant_id}
+      ]
     )
   end
 

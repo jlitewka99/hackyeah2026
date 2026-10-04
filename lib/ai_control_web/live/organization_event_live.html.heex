@@ -11,6 +11,12 @@
       <div>
         <dt>Request ID</dt><dd class="resource-identifier">{@event.request_id}</dd>
       </div>
+      <div :if={@event.run_id} id="event-run-reference">
+        <dt>Workflow ID</dt><dd class="resource-identifier">{@event.run_id}</dd>
+      </div>
+      <div :if={@event.participant_id} id="event-participant-reference">
+        <dt>Participant ID</dt><dd class="resource-identifier">{@event.participant_id}</dd>
+      </div>
       <div>
         <dt>Stage</dt><dd>{@event.stage}</dd>
       </div>

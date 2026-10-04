@@ -23,6 +23,7 @@ defmodule AiControl.Application do
       {DNSCluster, query: Application.get_env(:ai_control, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: AiControl.PubSub},
       AiControl.Tools.Supervisor,
+      AiControl.Workflows.Supervisor,
       {Oban, Application.fetch_env!(:ai_control, Oban)},
       AiControl.MCP.Sessions,
       # Start a worker by calling: AiControl.Worker.start_link(arg)

@@ -2,7 +2,7 @@ defmodule AiControl.Gateway do
   @moduledoc "Verified identity → one policy → audited input → pinned backend → audited output."
   alias AiControl.Accounts.Scope
   alias AiControl.ApiKeys.Principal
-  alias AiControl.{Audit, Budgets, Policies}
+  alias AiControl.{Audit, Budgets, Policies, Workflows}
   alias AiControl.Budgets.Usage
   alias AiControl.Gateway.{Config, Limiter, Models, Request, Response, Slots, Stages, ToolSchemas}
   alias AiControl.Gateway.Measurements
@@ -13,14 +13,35 @@ defmodule AiControl.Gateway do
       with :ok <- input_size(params),
            {:ok, params} <- Request.validate(params),
            :ok <- non_streaming(params),
-           {:ok, policy, current} <- Policies.snapshot_for_models(current, opts[:agent_id]) do
-        {result, stage} = process_chat(current, params, policy, request_id, opts)
-        {result, policy, stage}
+           {:ok, policy, current} <- Policies.snapshot_for_models(current, opts[:agent_id]),
+           {:ok, context} <- Workflows.resolve(current, policy, opts[:run_context]),
+           {:ok, context} <- Workflows.admit(context, policy, "chat", params, request_id) do
+        workflow_chat(context, current, params, policy, request_id, opts)
       else
         error -> {error, nil, :input}
       end
     end)
   end
+
+  defp workflow_chat(context, current, params, policy, request_id, opts) do
+    outcome =
+      Workflows.run(context, fn ->
+        process_chat(
+          current,
+          params,
+          policy,
+          request_id,
+          Keyword.put(opts, :run_context, context)
+        )
+      end)
+
+    workflow_outcome(outcome, policy)
+  end
+
+  defp workflow_outcome({result, stage}, policy) when stage in [:input, :output],
+    do: {result, policy, stage}
+
+  defp workflow_outcome(error, policy), do: {error, policy, :input}
 
   def start_stream(identity, params, opts \\ []),
     do: AiControl.Gateway.Stream.start(identity, params, opts)
@@ -32,9 +53,12 @@ defmodule AiControl.Gateway do
          :ok <- input_size(params),
          {:ok, params} <- Request.validate(params),
          true <- params["stream"],
-         {:ok, policy, current} <- Policies.snapshot_for_models(current, opts[:agent_id]) do
-      opts[:stream_context].(current, policy)
-      prepare_stream_request(current, params, policy, opts)
+         {:ok, policy, current} <- Policies.snapshot_for_models(current, opts[:agent_id]),
+         {:ok, context} <- Workflows.resolve(current, policy, opts[:run_context]),
+         {:ok, context} <-
+           Workflows.admit(context, policy, "chat", params, opts[:request_id]),
+         :ok <- opts[:stream_context].(current, policy, context) do
+      prepare_stream_request(current, params, policy, Keyword.put(opts, :run_context, context))
     else
       false -> {:error, :invalid_request}
       error -> error
@@ -122,6 +146,7 @@ defmodule AiControl.Gateway do
          :ok <- response_size(safe),
          :ok <-
            authorize_again(prepared.identity, prepared.policy, opts[:agent_id], params["model"]),
+         :ok <- Workflows.check(opts[:run_context]),
          do: {:ok, safe}
   end
 
@@ -157,7 +182,15 @@ defmodule AiControl.Gateway do
            measure(
              :budget_admission,
              fn ->
-               Budgets.admit(current, opts[:agent_id], params["model"], policy, request_id)
+               Budgets.admit(
+                 current,
+                 opts[:agent_id],
+                 params["model"],
+                 policy,
+                 request_id,
+                 DateTime.utc_now(),
+                 opts[:run_context]
+               )
              end,
              opts
            ) do
@@ -372,7 +405,7 @@ defmodule AiControl.Gateway do
   end
 
   defp prepare_budget(params, receipt, policy, provider, config) do
-    if Budgets.hard_limit?(policy) do
+    if Budgets.hard_limit?(policy) || receipt.run_id do
       params = Map.put_new(params, "max_tokens", config[:default_max_tokens])
       tokenizer = config[:tokenizer]
 
@@ -444,7 +477,7 @@ defmodule AiControl.Gateway do
       end
 
     SecurityContext.new(
-      Map.merge(attrs, %{
+      Map.merge(Map.merge(attrs, Workflows.audit_reference(identity, request_id)), %{
         request_id: request_id,
         stage: stage,
         policy_version: policy.version,

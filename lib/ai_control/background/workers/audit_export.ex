@@ -4,7 +4,7 @@ defmodule AiControl.Background.Workers.AuditExport do
 
   import Ecto.Query
 
-  alias AiControl.Audit.{Event, Filters, Serializer}
+  alias AiControl.Audit.{Event, Filters, Serializer, WorkflowVisibility}
   alias AiControl.{Background, Repo}
   alias AiControl.Background.{ExportEvent, Run}
 
@@ -36,12 +36,12 @@ defmodule AiControl.Background.Workers.AuditExport do
   defp freeze_manifest(run) do
     locked = Repo.one!(from(r in Run, where: r.id == ^run.id, lock: "FOR UPDATE"), log: false)
 
-    with {:ok, _, _} <- Background.authorized_run(locked) do
+    with {:ok, _, scope} <- Background.authorized_run(locked) do
       if locked.manifest_ready do
         {:ok, locked}
       else
         {:ok, filters} = Filters.parse(locked.spec["filters"])
-        query = Filters.query(locked.organization_id, filters)
+        query = Filters.query(locked.organization_id, filters) |> WorkflowVisibility.query(scope)
 
         {sql, params} =
           Repo.to_sql(:all, from(e in query, select: %{id: e.id, occurred_at: e.occurred_at}))
@@ -55,25 +55,28 @@ defmodule AiControl.Background.Workers.AuditExport do
             log: false
           )
 
-        Background.update(locked, total: count, manifest_ready: true)
+        Background.update(locked,
+          total: count,
+          manifest_ready: true,
+          spec: Map.put(locked.spec, "workflow_agents", scope.grants.agents)
+        )
       end
     end
   end
 
   defp batches(run) do
-    with {:ok, run, _} <- Background.authorized_run(run) do
+    with {:ok, run, scope} <- Background.authorized_run(run) do
       events =
-        Repo.all(
-          from(m in ExportEvent,
-            join: e in Event,
-            on: e.id == m.event_id,
-            where: m.run_id == ^run.id and m.position > ^run.cursor,
-            order_by: m.position,
-            limit: 500,
-            select: {m.position, e}
-          ),
-          log: false
+        from(e in Event,
+          join: m in ExportEvent,
+          on: m.event_id == e.id,
+          where: m.run_id == ^run.id and m.position > ^run.cursor,
+          order_by: m.position,
+          limit: 500,
+          select: {m.position, e}
         )
+        |> WorkflowVisibility.query(scope)
+        |> Repo.all(log: false)
 
       case events do
         [] ->
