@@ -122,7 +122,7 @@ Checkboxy oznaczają potwierdzone zakończenie kroku, a nie samą obecność kod
 - [ ] Krok 14 — Głęboka analiza semantyczna
 - [ ] Krok 15 — Workflowy, runaway protection i wielu agentów
 - [ ] Krok 16 — Oban, raporty i testy w panelu
-- [ ] Krok 17 — Streaming
+- [x] Krok 17 — Streaming
 - [ ] Krok 18 — RAG, pamięć i rozszerzone PII
 - [ ] Krok 19 — Zatwierdzanie działań przez człowieka
 - [ ] Krok 20 — Przygotowanie kompletnego demo
@@ -1030,14 +1030,14 @@ modeli/NER pozostają wyłączone. Granica 12B pozostaje bez zmian.
 
 **Rzeczywisty pomiar Gen:** świeża inferencja na tych samych 40 parach i tym samym mapowaniu `Unsafe`: 40/40, zero błędów, recall 100%, false positives 0% (także na części testowej). Cold verify/load 8,233 s, warm p50/p95 2,300/13,476 s, peak RSS 2,562 GiB. Oba pomiary: Apple M4, 10 rdzeni, 16 GiB RAM, CPU FP32 i 2 wątki. Gen klasyfikuje po pełnej odpowiedzi; Stream zachowuje każdy przyrostowy sygnał `Unsafe`, stąd większe false positives. [Wyniki Gen](docs/acceptance/step17-gen/summary.json) i [per case](docs/acceptance/step17-gen/cases.jsonl). Czasy na obciążonym hostcie nie rozstrzygają przewagi wydajności w produkcji.
 
-**Zastrzeżenia i otwarty odbiór:**
+**Zastrzeżenia:**
 
 - Pełne buforowanie nie przyspiesza pierwszego tokenu treści. Heartbeat utrzymuje połączenie i nie świadczy o akceptacji odpowiedzi.
 - Po otwarciu HTTP 200 błędy mają postać `event: error` ze stałym kodem/komunikatem/request ID i bez `[DONE]`. Zatwierdzone dane przyjęte przez adapter gniazda nie dowodzą odbioru przez aplikację klienta. Liczniki wysłanych danych pomijają heartbeat i końcowy marker.
 - Bez końcowego usage po dispatch pozostaje niepewne rozliczenie; nie rekonstruujemy go z fragmentów treści. Awaria samego magazynu audytu nie daje gwarancji zapisu zdarzenia anulowania; brak wymaganego audytu blokuje ujawnienie treści.
 - Qwen Stream jest eksperymentem klasyfikacji przyrostowej, nie nowym produkcyjnym guardem ani zwykłym modelem Ollama Chat Completions. Mały syntetyczny zbiór, różne tokenizery/sposoby klasyfikacji Stream i Gen, tokeny szablonu oraz obciążenie lokalnego hosta ograniczają uogólnienie wyników. Recall z tych 40 par nie gwarantuje bezpieczeństwa wcześniejszego ujawniania tokenów.
 - Początkowy brak miejsca (`ENOSPC`) podczas pobierania modeli rozwiązano przez usunięcie naszych częściowych wag oraz ponowne użycie checksum-verified wag Gen z istniejącego worktree. Pomiar obu modeli został ukończony bez atrap i bez usuwania cudzych plików. Presja pamięci/dysku pozostaje ograniczeniem porównania czasów.
-- **Otwarty odbiór:** wymagane kontrole CI są jeszcze oczekiwane. Krok 17 pozostaje niezaznaczony; PR jest draft do czasu ich ukończenia.
+- **Odbiór ukończony:** Quality, Tests, Dialyzer, Security i rzeczywisty odbiór kontenera z NER/Qwen/tokenizerem przeszły dla implementacji `8334324` w [Linux CI](https://github.com/jlitewka99/hackyeah2026/actions/runs/37169554868). Rzeczywiste SSE oraz porównanie obu modeli zostały zapisane; checkbox kroku 17 jest zaznaczony. Opcjonalny job gated Prompt Guard nie należy do tego zakresu i został pominięty zgodnie z konfiguracją workflow.
 
 **Gotowe, gdy:** split-secret w treści i argumentach narzędzi nie wycieka, testy cyklu życia i rozliczenia przechodzą, rzeczywisty odbiór SSE oraz porównanie Stream–Gen są zapisane, a wymagane kontrole CI przechodzą.
 

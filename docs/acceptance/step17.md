@@ -1,8 +1,9 @@
 # Step 17 — buffered SSE acceptance
 
-Status: API implementation and real Stream–Gen comparison accepted locally;
-full Step 17 acceptance awaits the required hosted CI checks.
-The roadmap checkbox remains open and the pull request is a draft.
+Status: buffered SSE implementation accepted after local tests, real Ollama
+acceptance, fresh Stream–Gen comparison and all five required hosted CI jobs.
+The Step 17 roadmap checkbox is complete. Early content release remains outside
+the accepted scope.
 
 ## Public behavior
 
@@ -53,7 +54,7 @@ manifest-verified Ollama 0.35.1 and qwen3.5:4b digest
 | Real pinned Ollama SSE | 1 passed separately with `--include live_models` |
 | Real Stream model | 40/40 cases completed, zero errors |
 | Real Gen model | Fresh 40/40 cases completed, zero errors |
-| Hosted required CI | Pending pull request checks; not claimed as passed locally |
+| Hosted required CI | All five required jobs passed on Linux for implementation `8334324` |
 
 Parser tests cover every byte split (including UTF-8 and CRLF), multiple frames,
 fragmented tool JSON, invalid/noncontiguous indexes, invalid/duplicate/missing
@@ -132,14 +133,20 @@ establish production throughput or a performance advantage. The 40 short
 synthetic pairs do not establish long-context or general Polish safety recall.
 No results activate policies or allow early content disclosure.
 
-## Outstanding acceptance
+## Environment recovery and hosted CI
 
 Initial downloads failed with `ENOSPC`; task-owned partial weights were removed,
 and Stream weights were removed after verified loading to complete its full
 measurement. Existing Gen weights in another worktree passed every pinned
 checksum and were reused read-only for fresh inference, with no copying or
 removal of other tasks' files. This resolved model preparation, although host
-memory/disk pressure remains a measurement caveat. Wait for the required PR CI
-checks before checking Step 17.
-Container acceptance on Linux remains the existing hosted CI job; it has not
-been replaced by the macOS checks or a simulated benchmark.
+memory/disk pressure remains a measurement caveat.
+
+[Linux CI run 37169554868](https://github.com/jlitewka99/hackyeah2026/actions/runs/37169554868)
+passed Quality, Tests, Dialyzer, Security and the Phoenix/NER/Qwen/tokenizer
+container job for implementation `8334324`. The container job passed real model
+transport, pinned offline tokenization, Python contracts, release tasks, process
+failure handling and SIGTERM. The optional gated Prompt Guard job was skipped
+as configured and is outside Step 17. Container evidence supplements the actual
+macOS Ollama/SSE and model comparison; neither is represented by a simulated
+benchmark.
