@@ -4,8 +4,8 @@
   "python": "3.11.17",
   "cpu_threads": 2,
   "samples": 40,
-  "load_ms": 7766.0,
-  "p50_ms": 1238.7,
-  "p95_ms": 1853.4,
-  "peak_rss_bytes": 1046142976
+  "load_ms": 7284.5,
+  "p50_ms": 1038.0,
+  "p95_ms": 1348.4,
+  "peak_rss_bytes": 1047187456
 }

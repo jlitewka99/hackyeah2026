@@ -845,7 +845,8 @@ Zakres techniczny obejmuje:
   lecz nie przypisuje to wyników nieuruchomionemu odbiorowi.
 
 **Aktualizacja rzeczywistego odbioru — 2026-10-04:** na bazie bieżącego `main`
-(`dae70b3`, ze scalonymi rozszerzeniami 13/15/16/17/18) pobrano przypięte artefakty
+(`dae70b3`, ze scalonymi rozszerzeniami 13/16/17/18, następnie połączono `e93e35a`
+z workflowami i uzupełnieniem Tests) pobrano przypięte artefakty
 Prompt Guard i zweryfikowano wszystkie rozmiary/checksumy oraz LICENSE/USE_POLICY/NOTICE.
 Token podano przez ukryte stdin i BuildKit secret, użyto wyłącznie podczas
 pobierania; nie zapisano go w repozytorium, cache po pobraniu usunięto. Runtime działa offline na
@@ -860,10 +861,18 @@ Na połączonym `main` pełny ExUnit: 646 passed/15 excluded; Python: NER 5 z
 rzeczywistymi wagami bez skip, tokenizer 4, Qwen 8, Prompt Guard 9 przechodzą.
 Pierwszy live odbiór usług: 10/10; ponowny kompletny runner: 9/10, Qwen nie
 kończy długiego tekstu w deadline. Runner prawidłowo zwraca 1; wcześniejszy
-przebieg nie zamyka tej niestabilnej bramki. Rzeczywiste demo hot activation
+przebieg nie zamyka tej niestabilnej bramki. Końcowy runner na `a488519`, ze
+świeżymi procesami wszystkich pięciu usług, bez równoległego build/smoke,
+przechodzi: 690 passed/16 opt-in excluded, Python 5/4/8/9 bez skip i realne
+integracje 11/11 (127,9 s), exit 0. Zachowano także wcześniejszy błąd.
+Rzeczywiste demo hot activation
 na commicie `4f27d3c`: 2/2 testy; zapis draftu nie zmienia checksumu/wyniku,
 aktywacja zmienia chat i narzędzia bez restartu, Dashboard pokazuje 3 allow/2 block,
 JSONL ma completion footer i zamknięte evidence bez treści/obcej organizacji.
+Po późniejszym połączeniu workflowów (`a488519`, baza `e93e35a`): `mix precommit`
+690 passed/16 excluded i 5 JS; assets, Dialyzer (0 błędów) i security przechodzą.
+Kod klasyfikatorów, manifesty, dataset i kwalifikacja nie zmieniły się przy tym
+połączeniu; zamrożony eksperyment pozostaje zapisany na wcześniejszej bazie.
 
 **Zastrzeżenia i status MVP:** dostęp i wagi Prompt Guard są już potwierdzone;
 lokalne porównanie zakwalifikowało Prompt Guard z progiem **.50**: kalibracja
@@ -920,22 +929,37 @@ wyniki i ograniczenia: [raport 11B](docs/acceptance/step11b.md).
 
 #### 11B.3 — Pełny odbiór rzeczywistych usług i kontenera
 
-- [ ] Uruchomić `run_security_tests.sh --live-models` z rzeczywistymi Prompt Guard,
+- [x] Uruchomić `run_security_tests.sh --live-models` z rzeczywistymi Prompt Guard,
   Qwen, NER, tokenizerem i lokalnym LLM; żadnych pominięć brakujących usług.
-- [ ] Potwierdzić standardowy kontener oraz gated build z Prompt Guard, offline
+- [x] Potwierdzić standardowy kontener oraz gated build z Prompt Guard, offline
   runtime, loopback, awarie pięciu procesów i shutdown. Odbiór standardowego
   czteroprocesowego obrazu nie zastępuje gated sprawdzenia.
 - [x] Potwierdzić wspólną matrycę chat → narzędzia → dashboard → JSONL i demo
   zmiany polityki bez restartu. Zapisać commit, środowisko i wyniki; zaznaczyć
   checkbox 11 dopiero po spełnieniu 11B.1–11B.3 oraz pozostałych kryteriów MVP.
 
-**Status:** otwarte; ostatni kompletny live runner ma 9/10 testów usług i jeden
-błąd długiego skanu Qwen. Rzeczywista matryca i demo hot activation przechodzą.
+**Status:** trzy podpunkty wykonano lokalnie. Końcowy kompletny live runner
+przechodzi 11/11, wszystkie kontrakty Python i baseline ExUnit, exit 0;
+świeże procesy, bez równoległego build/smoke. Wcześniejszy błąd długiego skanu
+Qwen (9/10, exit 1) pozostaje zapisany. Checkbox 11 nadal otwarty do sprawdzenia
+wydajności na bezczynnym hoście, wyjaśnienia niestabilności Qwen przy obciążeniu
+w tle i końcowych kontroli PR; follow-up PR pozostaje draftem. Realne wyniki:
+`docs/acceptance/step11b-live-models/live-services.json`.
+Rzeczywista matryca i demo hot activation przechodzą.
 Na prośbę operatora uruchomiono OrbStack; Docker 29.4.0/arm64/8 GiB jest dostępny.
-Pierwszy gated build/smoke na bazie `dae70b3` przechodzi: rzeczywiste modele,
-15 przypadków runnera, awarie pięciu procesów i SIGTERM. Naprawiono brak GNU
-`timeout` w macOS przez ograniczony polling stanu kontenera. Odbiór po odświeżeniu
-main oraz standardowego obrazu pozostaje do wykonania. Repozytorium nie ma sekretu `HF_TOKEN`
+Build i smoke obu obrazów na `a488519` (baza `e93e35a`) przechodzą: rzeczywiste
+guardy, po 15 przypadków runnera, odpowiednio pięć/cztery awarie procesów i SIGTERM.
+Porty modeli pozostają prywatne, użytkownik ma UID 10001; runtime i historia obrazu
+nie zawierają tokenu HF. `/ready` obrazu samodzielnego zwraca oczekiwane 503,
+bo nie skonfigurowano w nim zewnętrznego Ollama; pełny test pięciu usług jest osobny.
+Naprawiono brak GNU `timeout` przez ograniczony polling stanu oraz nadano każdemu
+smoke osobne nazwy kontenerów/sieci i port loopback, aby sprzątanie było ograniczone
+do własnego przebiegu. Podczas wcześniejszego unpack zabrakło miejsca: początkowe
+8,4 GiB nie wystarczyło na cache i obrazy. Po usunięciu własnego tymczasowego Pythona
+i dodatkowej kopii Qwen silnik odzyskano, oba buildy zakończyły się kodem 0;
+Qwen odtworzono i zweryfikowano z obrazu, Python z lockfile'ów. Prompt Guard i
+raporty zachowano. Dane: `docs/acceptance/step11b-live-models/container.json`.
+Repozytorium nie ma sekretu `HF_TOKEN`
 dla gated CI. Standardowe CI PR #18 potwierdziło Tests, Quality,
 Dialyzer, Security i czteroprocesowy kontener (wszystkie success); gated job był
 skipped. To niezależna bramka od implementacji 13/15/16/17/18.

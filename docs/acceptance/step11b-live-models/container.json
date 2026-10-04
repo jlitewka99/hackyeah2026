@@ -1,0 +1,41 @@
+{
+  "source_commit": "a4885194b3237ef51eab02933ec03be006766780",
+  "checks": {
+    "gated": {
+      "image": "ai-control:step11b-live-acceptance",
+      "image_id": "sha256:c5b9b1343158806d0ca53d67a6b8e92d59c153ff582e576f648b935bca2e9e27",
+      "smoke_exit_code": 0,
+      "supervised_children": 5,
+      "child_failures_verified": 5,
+      "runtime_and_history_secret_absent": true,
+      "standalone_app_ready_status": 503,
+      "external_ollama_configured": false
+    },
+    "ungated": {
+      "image": "ai-control:step11b-ungated",
+      "image_id": "sha256:369017c6b3c78181dc9edd25643d4e671349033b0210e53daed1c89af0c97e17",
+      "smoke_exit_code": 0,
+      "supervised_children": 4,
+      "child_failures_verified": 4,
+      "runtime_and_history_secret_absent": true,
+      "standalone_app_ready_status": 503,
+      "external_ollama_configured": false
+    }
+  },
+  "earlier_export_failure": "Disk exhausted during unpack; own temporary Python environment and public Qwen copy removed, engine recovered, builds rerun",
+  "docker": {
+    "ServerVersion": "29.4.0",
+    "Architecture": "aarch64",
+    "NCPU": 10,
+    "MemTotal": 8393289728
+  },
+  "smoke_script_sha256": "622c14b807656f99d97490a28e0ab987460b56ef84bc79f1d3d22f962529d2a3",
+  "build_exit_codes": {
+    "gated": 0,
+    "ungated": 0
+  },
+  "conditions": {
+    "exclusive_machine": false,
+    "host_python_runtime_restoration_during_ungated_smoke": true
+  }
+}

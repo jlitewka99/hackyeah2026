@@ -1,0 +1,51 @@
+{
+  "source_commit": "a4885194b3237ef51eab02933ec03be006766780",
+  "recorded_at_utc": "2026-10-04T05:59:25.714224+00:00",
+  "command": "./run_security_tests.sh --live-models",
+  "exit_code": 0,
+  "failed_groups": 0,
+  "baseline_exunit": {
+    "passed": 690,
+    "excluded_opt_in_tests": 16
+  },
+  "python_contracts": {
+    "ner": 5,
+    "tokenizer": 4,
+    "semantic": 8,
+    "prompt_guard": 9,
+    "skipped": 0
+  },
+  "core_live_integration": {
+    "passed": 11,
+    "failed": 0,
+    "skipped": 0,
+    "seed": 815314,
+    "duration_seconds": 127.9
+  },
+  "services": [
+    "ner",
+    "tokenizer",
+    "qwen",
+    "prompt_guard",
+    "ollama"
+  ],
+  "conditions": {
+    "fresh_owned_service_processes": true,
+    "offline_classifier_runtime": true,
+    "cpu_guard_dtype": "float32",
+    "cpu_guard_threads": 2,
+    "concurrent_image_build": false,
+    "concurrent_container_smoke": false,
+    "exclusive_machine": false,
+    "local_ollama_model": "qwen3.5:4b"
+  },
+  "earlier_failure_retained": {
+    "live_passed": 9,
+    "live_total": 10,
+    "runner_exit_code": 1,
+    "failed_boundary": "Qwen overlapping long-tail scan returned guard_unavailable"
+  },
+  "scope": "Core MVP integration; separate streaming, Knowledge and Tests Live acceptance gates remain independent",
+  "log_sha256": "cd4d49686178f06f36f655b93e3d6df8df97164fd1b74f987e36979191a04913",
+  "service_cleanup": "Only the five processes started for this run were stopped"
+}

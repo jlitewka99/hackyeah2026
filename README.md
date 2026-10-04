@@ -745,8 +745,10 @@ See [operator setup, license and BuildKit secret](docs/prompt-guard.md), the
 [measured injection example](docs/prompt-guard-example.yaml) and
 [Step 11B acceptance/gates](docs/acceptance/step11b.md). The real comparison has
 qualified Prompt Guard at cutoff .50 (FPR 0%, mean direct/indirect recall 50%).
-Step 11 and full MVP acceptance remain open because the complete live-service
-rerun still exposes a Qwen long-input timeout.
+The final complete live-service runner passes 11/11 and both container smoke
+runs pass. Step 11 and full MVP acceptance remain open for idle-hardware capacity
+validation and the Qwen long-input timeout observed in an earlier loaded run;
+see the recorded successful and failed attempts in the acceptance report.
 
 `PROMPT_GUARD_BASE_URL` defaults to `http://127.0.0.1:8004`. The optional image
 build starts a fifth offline supervised process; a required unavailable provider

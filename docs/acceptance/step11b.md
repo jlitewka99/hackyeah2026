@@ -6,7 +6,8 @@ CI documentation follow-up; no implementation changes). Recorded on 2026-10-04.
 **The complete MVP is not accepted.**
 Implementation [PR #18](https://github.com/jlitewka99/hackyeah2026/pull/18) is merged.
 The follow-up on `JL/step-11b-live-acceptance` starts from current `main` at
-`dae70b3`, including the parallel MCP, workflow, Tests, streaming and Knowledge work.
+`dae70b3`, including the parallel MCP, Tests, streaming and Knowledge work, then
+integrates workflow and Tests follow-ups from `main` at `e93e35a` (`a488519`).
 Approved pinned Prompt Guard artifacts are now downloaded and verified; offline
 readiness and the real Polish integration test pass. Model qualification and
 complete service/container acceptance are recorded below. OrbStack was started
@@ -89,11 +90,15 @@ or nonbinary heads. No artifact hash or revision changed.
 | --- | --- |
 | Prompt Guard Python | 9 contracts pass, including actual offline AutoConfig resolution without gated weights |
 | NER Python | 5 tests pass with `NER_LIVE=1` and verified Polish weights; no skip |
-| Current-main ExUnit security suite | 646 tests pass; 15 opt-in tests excluded before the additional live demo |
+| Before the latest workflow integration | 646 tests pass; 15 opt-in tests excluded before the additional live demo |
+| Current-main `mix precommit` (`a488519`) | 690 passed, 16 excluded; 5 JavaScript tests pass; format, strict compilation, lockfile and Credo pass |
+| Current-main assets, Dialyzer and security | Pass; zero Dialyzer errors and no dependency vulnerabilities |
 | Initial real-service integration | 10/10 pass; the aggregate script initially fails because its fresh Python environment lacked the new NER dependency, subsequently installed from the lockfile |
 | Complete security rerun | All four Python groups pass (NER 5, tokenizer 4, Qwen 8, Prompt Guard 9); live integration is 9/10, with Qwen's overlapping long-tail scan returning `guard_unavailable`; aggregate exits 1 |
 | Real Prompt Guard and hot configuration demo | 2/2 pass with actual Prompt Guard, Qwen moderation, NER, tokenizer and pinned Ollama; no model/backend fixtures |
-| Gated container on base `dae70b3` | Build and smoke pass on Docker 29.4.0/arm64/8 GiB: actual guards, 15 release runner cases, five child failures and SIGTERM. Refreshed-main verification follows; the repository has no `HF_TOKEN` CI secret |
+| Final complete security run on current `main` (`a488519`) | Exit 0, zero failed groups: baseline 690 passed/16 opt-in excluded, Python 5/4/8/9 without skips, core real-service integration 11/11 in 127.9 seconds |
+| Gated container on current `main` (`a488519`) | Build and smoke exit 0: actual guards, 15 release runner cases, five child failures and SIGTERM |
+| Default ungated container on current `main` | Build and smoke exit 0: real NER/Qwen/tokenizer, 15 release runner cases, four child failures and SIGTERM; no gated download needed |
 
 The headless demo saves a new cutoff without activating it and proves the current
 checksum and tool outcome stay unchanged. Explicit activation then changes the
@@ -105,18 +110,43 @@ appears. Cutoffs 1 and 0 deliberately exercise activation and inclusive boundari
 they are not calibrated recommendations. The browser review above still uses
 synthetic fixtures and makes no real-model screenshot claim.
 
-The two service-suite runs expose Qwen long-input latency instability. Preserve
-the failed latest rerun; a previous passing run does not close that acceptance
-gate. The whole guard deadline remains at most 30 seconds, with no retries or
-fallback. Qualification measurements run separately with fresh service processes;
-local macOS background activity is not isolated, so timings do not establish
-production throughput or dedicated-host latency.
+Earlier service-suite runs expose Qwen long-input latency instability. The final
+[complete run](step11b-live-models/live-services.json) passes with fresh owned
+processes for all five services and no concurrent image build or container smoke.
+It includes the hot-activation demo and completes without missing-service skips.
+The driver stops only its own model processes afterwards. Preserve the earlier
+9/10 failure alongside this successful 11/11 result; reliability under background
+load remains unresolved. The whole guard deadline remains at most 30 seconds,
+with no retries or fallback. Qualification measurements run separately with fresh
+service processes; local macOS background activity is not isolated, so timings
+do not establish production throughput or dedicated-host latency. The core runner
+does not close the separate streaming, Knowledge or Tests Live acceptance gates.
 The gated Docker build uses a temporary Hub cache and discards it after pinned
 verification (`d8232bc`), retaining only the verified model copy in that layer.
 The initial smoke reached real classification and the release runner, then failed
 because macOS lacks GNU `timeout`. Bounded Docker-state polling replaces that
 dependency; the complete gated smoke then exits zero and reports five child
 failures. Runtime environment and image history contain no Hugging Face token.
+The final integration uses current `main` at `e93e35a`. Its classifier services,
+model manifests, dataset and qualification code are unchanged by that merge;
+the earlier frozen experiment remains separate from the later integration checks.
+During the refreshed build, disk exhaustion disconnected Docker at image unpack:
+8.4 GiB of initial free space was insufficient for the model/build cache. Only
+the generated Python environment and additional public Qwen copy were removed.
+Prompt Guard artifacts and measured reports were retained; Qwen was later restored
+and hash-verified from the offline image, and Python recreated from both lockfiles.
+Both recovered builds and smoke runs exit zero. Allow disk headroom for temporary copies,
+compressed layers and unpacked images; the observed failure is not a model error.
+Smoke runs now use distinct network/container names and an assigned loopback
+application port, so cleanup targets only that run's objects. Container NER timings
+are local non-isolated smoke measurements, separate from provider qualification;
+Python runtime restoration overlaps the ungated smoke.
+The [container record](step11b-live-models/container.json) includes image identities
+and the tested smoke-script checksum; per-run NER measurements are parsed from
+each private log. UID 10001 and unpublished model ports are verified. Standalone
+application `/ready` remains 503 because external Ollama is unconfigured in these
+images; real five-service integration is a separate check. No repository HF secret
+or gated CI dispatch was created by this run.
 
 Reproduction uses the unchanged sidecar lockfiles and model manifests:
 
@@ -168,10 +198,10 @@ real-model/MVP gate passed. The source requirement strengths remain those in
 | 01 | Authenticated `/v1/chat/completions` and `/v1/tool_calls`; gateway/controller tests; real Ollama integration passed in the live attempt |
 | 02 | Versioned org/global policy and immutable snapshots; policy concurrency/global tests and provider activation test |
 | 03 | Provider, controls, sensitivity, models, budgets; configuration tests, Policies LiveView and budget suites |
-| 04 | Profiles, score thresholds and label mappings; Prompt Guard config/threshold/UI tests; example policy; real model quality still blocked |
+| 04 | Profiles, score thresholds and label mappings; Prompt Guard config/threshold/UI tests; actual local qualification and measured example; mean held-out recall remains 50% |
 | 05 | Deterministic → NER → semantic pipeline; guard/pipeline tests and real Prompt Guard/Qwen follow-up, with Qwen long-input errors explicitly retained |
 | 06 | PII, secrets, signatures, authentication and access; deterministic guards, identity and resource suites |
-| 07 | Qwen/Prompt Guard enforcement adapters plus Qwen response moderation; actual hot-activation demo and local Prompt Guard qualification; stable complete live acceptance remains open |
+| 07 | Qwen/Prompt Guard enforcement adapters plus Qwen response moderation; actual hot-activation demo and local Prompt Guard qualification; final core live runner 11/11, earlier Qwen timeout retained |
 | 08 | Block/redact decisions and fresh projected fields; engine, gateway and tool executor tests |
 | 09 | Input plus every output field/decoded argument; output content/filtering and tool executor tests |
 | 10 | Request/token/tool budgets; zero/null limits, concurrency, redacted tokenization and blocked-output accounting tests |
@@ -184,7 +214,7 @@ real-model/MVP gate passed. The source requirement strengths remain those in
 | 17 | Overview, Events, Policies, Budgets, Agents and Signatures; reporting LiveView tests and browser captures |
 | 18 | PubSub reporting, terminal counts, current-hour budgets; Dashboard/publication/reporting tests |
 | 19 | Closed tenant-scoped JSONL with completion footer, paginated streaming and revocation; serializer/audit/export tests |
-| 20 | Full suite and nonzero aggregate security runner; Python/ExUnit contracts; full real-weight/container acceptance still open |
+| 20 | Full suite and nonzero aggregate security runner; Python/ExUnit contracts; final real-weight runner and both containers pass locally, broader capacity/reliability acceptance remains open |
 | 21 | Safe allow, deterministic redact/block, semantic block and output withholding; gateway/tool/guard suites and manual demo below |
 | 22 | Runnable script plus budget/exploit tests, dependency and operation instructions; judges need approved model access for the real-model gate |
 
@@ -254,11 +284,12 @@ measurements, independent of the offline contract fixtures. Polish is outside
 the languages listed in Meta's published evaluations; local held-out measurement
 is necessary. Maximum window score is not a probability of a malicious request.
 
-To close Step 11: confirm a stable complete `--live-models` run, finish default
-and gated Docker smoke including fifth-process failures/shutdown, repeat capacity
-measurements on idle hardware, and confirm final PR checks. Verified artifacts,
-the local qualifying injection winner and the headless hot-activation demo are
-recorded above; they do not resolve the remaining service reliability gate.
+The three access, comparison and real-service/container subtasks have now been
+executed locally. Step 11 remains open for capacity/latency validation on idle
+hardware, resolution of the observed Qwen long-input instability under background
+load, and final PR checks. The latest complete live runner passes; that success
+does not erase the earlier failed run. The follow-up PR remains a draft while
+those broader acceptance concerns are open.
 If the measured models do not qualify, leave MVP acceptance open. Do not lower
 the gate, treat errors as false negatives/detections, retune from held-out results,
 or change existing active policies automatically.

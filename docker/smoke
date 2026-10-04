@@ -2,23 +2,24 @@
 # Linux acceptance: real models, release transport, isolation and all child failures.
 set -euo pipefail
 image=${1:-ai-control:step7}
-network=ai-control-step7-ci
-container=ai-control-step7-ci
+network="ai-control-smoke-$(date +%s)-$$"
+container="$network-app"
+postgres="$network-postgres"
 cleanup() {
-  docker rm -f "$container" ai-control-step7-postgres >/dev/null 2>&1 || true
+  docker rm -f "$container" "$postgres" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 docker network create "$network" >/dev/null
-docker run -d --name ai-control-step7-postgres --network "$network" \
+docker run -d --name "$postgres" --network "$network" --network-alias ai-control-step7-postgres \
   -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=ai_control_ci \
   postgres:17 >/dev/null
 for _ in $(seq 1 60); do
-  if docker exec ai-control-step7-postgres pg_isready -U postgres >/dev/null 2>&1; then break; fi
+  if docker exec "$postgres" pg_isready -U postgres >/dev/null 2>&1; then break; fi
   sleep 1
 done
 start_app() {
-  docker run -d --name "$container" --network "$network" -p 127.0.0.1:4017:4000 \
+  docker run -d --name "$container" --network "$network" -p 127.0.0.1::4000 \
     -e DATABASE_URL=ecto://postgres:postgres@ai-control-step7-postgres/ai_control_ci \
     -e SECRET_KEY_BASE=synthetic-ci-secret-key-base-do-not-use-in-production-01234567890123456789 \
     -e AUDIT_FINGERPRINT_KEY=c3ludGhldGljLWNpLWZpbmdlcnByaW50LWtleS0zMi1ieXRlcw== \
@@ -46,9 +47,11 @@ wait_for_exit() {
   return 1
 }
 start_app
+address=$(docker port "$container" 4000/tcp)
+[[ "$address" == 127.0.0.1:* ]]
 [[ $(docker exec "$container" id -u) == 10001 ]]
-[[ $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4017/health) == 200 ]]
-[[ $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4017/ready) == 503 ]]
+[[ $(curl -s -o /dev/null -w '%{http_code}' "http://$address/health") == 200 ]]
+[[ $(curl -s -o /dev/null -w '%{http_code}' "http://$address/ready") == 503 ]]
 [[ $(docker port "$container" 8001/tcp 2>/dev/null || true) == '' ]]
 [[ $(docker port "$container" 8002/tcp 2>/dev/null || true) == '' ]]
 [[ $(docker port "$container" 8003/tcp 2>/dev/null || true) == '' ]]
@@ -103,7 +106,7 @@ docker run --rm --entrypoint /opt/semantic/bin/python -e PYTHONPATH=/app/prompt_
   -v "$PWD/tests/prompt_guard:/app/tests/prompt_guard:ro" "$image" -m unittest discover -s /app/tests/prompt_guard
 docker exec -e AI_CONTROL_ORGANIZER_EMAIL=ci@example.test -e AI_CONTROL_ORGANIZER_PASSWORD=synthetic-ci-password \
   "$container" /app/bin/ai_control eval 'AiControl.Release.bootstrap_organizer()'
-docker exec ai-control-step7-postgres createdb -U postgres ai_control_runner_ci
+docker exec "$postgres" createdb -U postgres ai_control_runner_ci
 docker exec "$container" /app/bin/ai_control rpc '
   Oban.pause_queue(queue: :tests)
   Application.put_env(:ai_control, AiControl.Testing.ProcessExecutor,
