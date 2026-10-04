@@ -19,15 +19,17 @@ defmodule AiControl.Policies.Draft do
     field :rules, :map, default: %{}
     field :guards, :map, default: %{}
     field :budgets, :map, default: %{}
+    field :review, :map, default: %{}
     field :knowledge, :map, default: %{}
     field :ner_model_set, :string, default: "pl-nkjp.v2"
   end
 
-  @fields ~w(schema_version detector_sets tools tool_selection profile allowed_models allowed_agents agent_models rules guards budgets knowledge ner_model_set)a
+  @fields ~w(schema_version detector_sets tools tool_selection profile allowed_models allowed_agents agent_models rules guards budgets knowledge ner_model_set review)a
 
   def from_source(source) do
     %__MODULE__{
       schema_version: source["schema_version"],
+      review: Map.get(source, "review", %{}),
       knowledge: Map.get(source, "knowledge", %{}),
       ner_model_set: Map.get(source, "ner_model_set", "pl-nkjp.v2"),
       detector_sets: Map.get(source, "detector_sets", %{}),
@@ -97,7 +99,7 @@ defmodule AiControl.Policies.Draft do
     }
 
     source =
-      if draft.schema_version in [2, 3, 4, 5] do
+      if draft.schema_version in [2, 3, 4, 5, 6] do
         Map.merge(source, %{
           "detector_sets" => draft.detector_sets,
           "tools" => selected_tools(draft)
@@ -106,7 +108,12 @@ defmodule AiControl.Policies.Draft do
         source
       end
 
-    if draft.schema_version == 5 do
+    source =
+      if draft.schema_version == 6,
+        do: Map.put(source, "review", normalize_review(draft.review)),
+        else: source
+
+    if draft.schema_version in [5, 6] do
       knowledge =
         Map.new(draft.knowledge, fn {key, value} ->
           {key,
@@ -117,6 +124,18 @@ defmodule AiControl.Policies.Draft do
     else
       source
     end
+  end
+
+  defp normalize_review(review) do
+    review
+    |> Map.update("enabled", false, &(&1 in [true, "true"]))
+    |> Map.new(fn {key, value} ->
+      {key,
+       if(key in ~w(llm_models delegation_agents) and is_binary(value),
+         do: lines(value),
+         else: value
+       )}
+    end)
   end
 
   defp selected_tools(%{tool_selection: nil, tools: tools}), do: normalize_tools(tools)

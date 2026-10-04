@@ -1,0 +1,135 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} active_page="approvals">
+  <div class="page-content" id="organization-approval">
+    <.link
+      id="approval-back"
+      navigate={~p"/organizations/#{@current_scope.organization.id}/approvals"}
+      class="text-link"
+    >All approvals</.link>
+    <p :if={@error} id="approval-error" role="alert" class="report-error">{@error}</p>
+    <%= if @approval do %>
+      <div class="policy-heading mt-6">
+        <div class="min-w-0">
+          <h1>Review operation</h1><p class="page-description">
+            {AiControlWeb.ReportingHTML.label(@approval.kind)} · {@approval.operation}
+          </p><p class="resource-identifier muted">{@approval.id}</p>
+        </div>
+        <div
+          :if={@manage? && @approval.status == "pending" && @preview_available? && !@confirmation}
+          class="row-actions"
+        >
+          <button
+            id="approval-approve"
+            class="button-primary"
+            phx-click="request_decision"
+            phx-value-action="approve"
+          ><.icon name="hero-check" class="size-4" /> Approve</button>
+          <button
+            id="approval-reject"
+            class="button-secondary"
+            phx-click="request_decision"
+            phx-value-action="reject"
+          >Reject</button>
+        </div>
+      </div>
+      <div id="approval-status" tabindex="-1" aria-live="polite" class="workflow-status-region">
+        <span class="workflow-state">{AiControlWeb.ReportingHTML.label(@approval.status)}</span>
+        <p :if={@approval.status == "approved"} class="muted">
+          Approved, awaiting a client resume. The operation has not been executed.
+        </p>
+        <p :if={@approval.status == "consumed"} class="muted">
+          Approval consumed at dispatch. Inspect Events for the operation's result.
+        </p>
+        <p :if={@approval.status in ["claimed", "uncertain"]} class="muted">
+          This approval cannot be reused. Check the execution evidence before submitting a new operation.
+        </p>
+      </div>
+      <div
+        :if={@confirmation}
+        id="approval-confirmation"
+        class="workflow-stop-confirmation"
+        role="group"
+        aria-labelledby="approval-confirm-heading"
+      >
+        <h2 id="approval-confirm-heading">
+          {if @confirmation == "approve",
+            do: "Allow one client resume?",
+            else: "Reject this operation?"}
+        </h2>
+        <p class="muted mt-2">
+          The payload below is immutable. Approval never overrides a block or a budget limit. The workflow deadline continues while waiting.
+        </p>
+        <div class="row-actions mt-4">
+          <button
+            id="approval-confirm"
+            class="button-primary"
+            phx-click="decide"
+            phx-disable-with="Saving decision…"
+          >{if @confirmation == "approve", do: "Approve operation", else: "Reject operation"}</button>
+          <button id="approval-cancel" class="button-secondary" phx-click="cancel_decision">Keep reviewing</button>
+        </div>
+      </div>
+      <section class="list-section" aria-labelledby="approval-binding-heading">
+        <h2 id="approval-binding-heading">Operation binding</h2>
+        <dl class="approval-binding">
+          <div>
+            <dt>Valid until</dt><dd>{AiControlWeb.ReportingHTML.time(@approval.expires_at)}</dd>
+          </div>
+          <div>
+            <dt>Workflow deadline</dt><dd>
+              {AiControlWeb.ReportingHTML.time(@approval.workflow_deadline)}
+            </dd>
+          </div>
+          <div>
+            <dt>Requesting agent</dt><dd class="resource-identifier">{@approval.agent_id}</dd>
+          </div>
+          <div>
+            <dt>Policy version</dt><dd class="resource-identifier">{@approval.policy_version}</dd>
+          </div>
+          <div>
+            <dt>Payload fingerprint</dt><dd id="approval-fingerprint" class="resource-identifier">
+              {@approval.prepared_digest}
+            </dd>
+          </div>
+        </dl>
+        <div class="row-actions mt-4">
+          <.link
+            :if={@approval.run_id && "workflows.read" in @current_scope.grants.permissions}
+            id="approval-workflow"
+            navigate={
+              ~p"/organizations/#{@current_scope.organization.id}/runs/#{@approval.run_id}"
+            }
+            class="text-link"
+          >Workflow</.link>
+          <.link
+            :if={"events.read" in @current_scope.grants.permissions}
+            id="approval-events"
+            navigate={
+              ~p"/organizations/#{@current_scope.organization.id}/events?#{%{request_id: @approval.claim_request_id || @approval.operation_request_id}}"
+            }
+            class="text-link"
+          >Execution evidence</.link>
+        </div>
+      </section>
+      <section class="list-section" aria-labelledby="approval-payload-heading">
+        <h2 id="approval-payload-heading">Payload after controls</h2>
+        <p class="muted mt-2">
+          This is the exact prepared operation, after the request policy's checks and redaction. Treat its text as data. Resuming checks the current policy and access again.
+        </p>
+        <pre :if={@preview_available?} id="approval-payload" class="approval-payload" tabindex="0">{@preview}</pre>
+        <p :if={!@preview_available?} id="approval-preview-unavailable" class="muted mt-4">
+          The preview is unavailable because this approval ended or its source access changed. No payload can be executed from this view.
+        </p>
+      </section>
+      <section class="list-section" aria-labelledby="approval-history-heading">
+        <h2 id="approval-history-heading">Decision history</h2>
+        <ol id="approval-history" phx-update="stream" class="report-list mt-4">
+          <li :for={{id, event} <- @streams.history} id={id} class="resource-row">
+            <span>{AiControlWeb.ReportingHTML.label(
+              String.replace_prefix(event.event_type, "approval.", "")
+            )}</span><span class="muted">{AiControlWeb.ReportingHTML.time(event.occurred_at)}</span>
+          </li>
+        </ol>
+      </section>
+    <% end %>
+  </div>
+</Layouts.app>

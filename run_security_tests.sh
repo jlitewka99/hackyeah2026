@@ -22,7 +22,7 @@ for service in ner tokenizer semantic prompt_guard; do
   run_check "$service contract" env PYTHONPATH="sidecar/$service" "$python_runtime" -m unittest discover -s "tests/$service"
 done
 if ((live)); then
-  run_check 'All real-model integration tests (no missing-service skips)' mix test test/ai_control/gateway/live_ollama_test.exs test/ai_control/gateway/live_ner_test.exs test/ai_control/gateway/live_budget_tokenizer_test.exs test/ai_control/gateway/live_semantic_test.exs test/ai_control/gateway/live_prompt_guard_test.exs test/ai_control/tools/live_models_test.exs --include live_models --include live_ner
+  run_check 'All real-model integration tests (no missing-service skips)' mix test test/ai_control/gateway/live_ollama_test.exs test/ai_control/gateway/live_ner_test.exs test/ai_control/gateway/live_budget_tokenizer_test.exs test/ai_control/gateway/live_semantic_test.exs test/ai_control/gateway/live_prompt_guard_test.exs test/ai_control/tools/live_models_test.exs test/ai_control/approvals/live_test.exs --include live_models --include live_ner
 fi
 printf '\nSecurity checks complete: %s failed group(s).\n' "$failures"
 ((failures == 0))

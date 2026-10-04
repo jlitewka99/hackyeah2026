@@ -19,6 +19,10 @@ defmodule AiControlWeb.PolicyHTML do
     settings
   end
 
+  def review_lines(nil), do: ""
+  def review_lines(value) when is_binary(value), do: value
+  def review_lines(value), do: Enum.join(value, "\n")
+
   def schema_version(form), do: Ecto.Changeset.get_field(form.source, :schema_version)
   def guard_catalog(form), do: Configuration.guards(schema_version(form))
   def entity_types, do: Configuration.ner_entities()
@@ -29,7 +33,7 @@ defmodule AiControlWeb.PolicyHTML do
   def workflow_budget_fields(form), do: Configuration.budget_fields(schema_version(form))
 
   def upgrade_available?(form) do
-    schema_version(form) < 5 ||
+    schema_version(form) < 6 ||
       Enum.any?(Configuration.budget_fields(5)["workflow"], fn field ->
         nested(form, :budgets, "workflow", field, nil) in [nil, ""]
       end)
@@ -63,7 +67,7 @@ defmodule AiControlWeb.PolicyHTML do
 
   def label_rule?(form, category),
     do:
-      schema_version(form) in [3, 4, 5] &&
+      schema_version(form) in [3, 4, 5, 6] &&
         (category == "content_safety" ||
            (category == "prompt_injection" && injection_provider(form) == "qwen"))
 
@@ -97,13 +101,13 @@ defmodule AiControlWeb.PolicyHTML do
 
   def label_rule_settings?(settings, category),
     do:
-      settings["schema_version"] in [3, 4, 5] &&
+      settings["schema_version"] in [3, 4, 5, 6] &&
         (category == "content_safety" ||
            (category == "prompt_injection" &&
               get_in(settings, ["guards", "semantic", "provider"]) != "prompt_guard"))
 
   def rule_actions(form, category) do
-    if category in ~w(prompt_injection content_safety) && schema_version(form) in [3, 4, 5],
+    if category in ~w(prompt_injection content_safety) && schema_version(form) in [3, 4, 5, 6],
       do: [{"Allow", "allow"}, {"Block", "block"}],
       else: [{"Allow", "allow"}, {"Redact", "redact"}, {"Block", "block"}]
   end

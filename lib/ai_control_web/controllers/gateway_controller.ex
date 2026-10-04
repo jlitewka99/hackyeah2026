@@ -2,24 +2,26 @@ defmodule AiControlWeb.GatewayController do
   use AiControlWeb, :controller
 
   alias AiControl.Gateway
-  alias AiControlWeb.{GatewayError, RunContext}
+  alias AiControlWeb.{ApprovalContext, GatewayError, RunContext}
 
   def chat(conn, _params) do
-    case RunContext.parse(conn) do
-      {:ok, context} ->
-        chat_with_context(conn, context)
+    case {RunContext.parse(conn), ApprovalContext.parse(conn)} do
+      {{:ok, context}, {:ok, approval_opts}} ->
+        chat_with_context(conn, context, approval_opts)
 
-      {:error, _} ->
+      _ ->
         RunContext.reject(conn, "chat")
     end
   end
 
-  defp chat_with_context(conn, context) do
-    opts = [
-      request_id: conn.assigns.request_id,
-      run_context: context,
-      ingress_checked?: conn.assigns[:gateway_ingress_checked] == true
-    ]
+  defp chat_with_context(conn, context, approval_opts) do
+    opts =
+      approval_opts ++
+        [
+          request_id: conn.assigns.request_id,
+          run_context: context,
+          ingress_checked?: conn.assigns[:gateway_ingress_checked] == true
+        ]
 
     if conn.body_params["stream"] == true do
       case Gateway.start_stream(conn.assigns.api_principal, conn.body_params, opts) do

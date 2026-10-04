@@ -21,6 +21,23 @@ defmodule AiControlWeb.GatewayError do
     )
   end
 
+  def respond(conn, {:error, {:approval_required, evidence}}) when is_map(evidence) do
+    conn
+    |> put_resp_header("cache-control", "no-store")
+    |> put_resp_content_type("application/json")
+    |> send_resp(
+      409,
+      Jason.encode!(%{
+        error:
+          Map.merge(evidence, %{
+            code: "approval_required",
+            message: "Human approval is required before this operation can run.",
+            request_id: conn.assigns[:request_id]
+          })
+      })
+    )
+  end
+
   def respond(conn, {:error, {code, retry_after}}) do
     conn
     |> put_resp_header("retry-after", Integer.to_string(retry_after))
@@ -62,6 +79,13 @@ defmodule AiControlWeb.GatewayError do
   defp classify(:workflow_unavailable), do: {503, "Workflow state is temporarily unavailable."}
 
   defp classify(:invalid_request), do: {400, "Unsupported or invalid request."}
+  defp classify(:approval_rejected), do: {403, "Human approval was rejected."}
+  defp classify(:approval_expired), do: {409, "Human approval expired. Submit a new operation."}
+  defp classify(:approval_used), do: {409, "Human approval has already been claimed or used."}
+
+  defp classify(:approval_conflict),
+    do: {409, "The approved operation changed or is no longer available. Submit a new operation."}
+
   defp classify(:knowledge_conflict), do: {409, "The resource changed. Refresh and try again."}
 
   defp classify(code) when code in [:knowledge_disabled, :knowledge_write_disabled],

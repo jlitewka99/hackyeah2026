@@ -3,18 +3,20 @@ defmodule AiControlWeb.MCPController do
 
   alias AiControl.MCP
   alias AiControl.MCP.RPC
-  alias AiControlWeb.{MCPTransport, RunContext}
+  alias AiControlWeb.{ApprovalContext, MCPTransport, RunContext}
 
   def create(conn, _) do
-    case RunContext.parse(conn) do
-      {:ok, context} -> create_with_context(conn, context)
-      {:error, code} -> MCPTransport.respond(conn, 400, RPC.transport(code))
+    case {RunContext.parse(conn), ApprovalContext.parse(conn)} do
+      {{:ok, context}, {:ok, opts}} -> create_with_context(conn, context, opts)
+      {{:error, code}, _} -> MCPTransport.respond(conn, 400, RPC.transport(code))
+      {_, {:error, code}} -> MCPTransport.respond(conn, 400, RPC.transport(code))
     end
   end
 
-  defp create_with_context(conn, context) do
+  defp create_with_context(conn, context, opts) do
     {:reply, status, body, headers} =
       MCP.handle(conn.assigns.api_principal, conn.body_params, conn.assigns.mcp_session,
+        approval_id: opts[:approval_id],
         request_id: conn.assigns.request_id,
         run_context: context,
         ingress_checked?: true

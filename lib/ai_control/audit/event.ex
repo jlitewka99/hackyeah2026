@@ -45,7 +45,7 @@ defmodule AiControl.Audit.Event do
     field :event_type, :string
     field :target_id, :binary_id
     field :stage, Ecto.Enum, values: [:input, :output, :administrative]
-    field :action, Ecto.Enum, values: [:allow, :redact, :block]
+    field :action, Ecto.Enum, values: [:allow, :redact, :block, :review]
     field :policy_version, :string
     field :policy_checksum, :string
     field :rule_ids, {:array, :string}, default: []
