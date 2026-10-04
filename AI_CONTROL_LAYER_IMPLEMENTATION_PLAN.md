@@ -122,7 +122,7 @@ Checkboxy oznaczają potwierdzone zakończenie kroku, a nie samą obecność kod
 - [x] Krok 12 — Tool firewall i ograniczenia zasobów
 - [x] Krok 13 — MCP gateway
 - [ ] Krok 14 — Głęboka analiza semantyczna
-- [ ] Krok 15 — Workflowy, runaway protection i wielu agentów
+- [x] Krok 15 — Workflowy, runaway protection i wielu agentów
 - [ ] Krok 16 — Oban, raporty i testy w panelu
 - [x] Krok 17 — Streaming
 - [x] Krok 18 — RAG, pamięć i rozszerzone PII
@@ -1175,7 +1175,7 @@ checkbox 13 zaznaczony, checkbox 11 pozostaje otwarty.
 
 ### Krok 15. Workflowy, runaway protection i wielu agentów
 
-**Stan na 2026-10-04:** implementacja na `JL/step-15-workflows`; odbiór deterministyczny zakończony, kwalifikacja integracji z rzeczywistymi modelami nadal otwarta. Checkbox kroku pozostaje niezaznaczony, a PR jest draftem do czasu tej kwalifikacji. Nie dodano MCP, Granite ani Oban.
+**Stan na 2026-10-04:** implementacja [PR #25](https://github.com/jlitewka99/hackyeah2026/pull/25) została scalona. Ponowny odbiór na aktualnym `main` (`6f00150`, po PR #26) zaliczył wszystkie siedem wcześniejszych integracji oraz pełny cykl workflow z rzeczywistymi modelami. Luka kwalifikacji kroku 15 została zamknięta; checkbox zaznaczony. Uzupełnienie testu i dowodów na `JL/step-15-live-acceptance`. Nie dodano MCP, Granite ani Oban.
 
 **Implementacja i migracja:**
 
@@ -1204,7 +1204,15 @@ checkbox 13 zaznaczony, checkbox 11 pozostaje otwarty.
 - `mix assets.build`, `mix dialyzer` (0 błędów) i `mix security` przeszły. Sobelow zachował ostrzeżenia low confidence z main: zapytania Dashboard/manifestów eksportu, ścieżki plików benchmarku/feedów/importu oraz konfigurację origin endpointu. Nie wyciszano ich ani nie uznano za potwierdzone podatności; dependency audit nie zgłosił podatności.
 - Impeccable: Operate, `buildPath: code`, zachowany wygląd Events/Budgets. Detektor uruchomiono raz: 0 primary findings i 5 istniejących uwag typograficznych. Odbiór przeglądarkowy: desktop 1280px/mobile 390px, oba motywy, długie cele, pusty wynik, błąd filtra, inline stop i klawiatura. Izolowany syntetyczny run po stop zachował 140 użytych i 400 niepewnie zarezerwowanych tokenów; PubSub odświeżał widoki. Ograniczenia przydziałów, paginacja i błędy ładowania mają testy LiveView. Końcowy werdykt impeccable jest zapisany w [raporcie UI](docs/acceptance/step15-ui-review.md); zakres dokumentera w [raporcie dokumentacji](docs/acceptance/step15-design-documentation.md).
 - Po późniejszej integracji kroku 16 reviewer i dokumenter sprawdzili źródła wspólnej nawigacji i selektora sygnatur; przechwycone obrazy poprzedzają te elementy main. Szablony/style workflowów nie zmieniły się; nie zadeklarowano nowego odbioru wizualnego ani nie uruchamiano kolejnego detektora.
-- Uruchomiono istniejące integracje NER, modeli narzędzi, SSE i Knowledge: **2/7 passed**. Oba rzeczywiste testy v5 RAG przeszły na portach kroku 18; pięć testów na domyślnych portach nie przeszło readiness NER/Semantic albo otrzymało Ollama SSE `503`. Po przekierowaniu konfiguracji testowej do istniejących usług na `11438/8018/8028/8038`: **5/7 passed** — NER, modele narzędzi i SSE przeszły, ale oba powtórzone przypadki RAG zwróciły `guard_unavailable`. Nie uzyskano jednego przebiegu 7/7 ani odbioru pełnego cyklu run → narzędzie → delegacja → complete z rzeczywistym downstream. Kwalifikacja modeli kroku 11 i rollback migracji pozostają otwarte. Wyniki tej sesji nie unieważniają odbioru zapisanego przy innych krokach. To istotna luka odbioru, dlatego PR pozostaje draftem.
+- Historyczne próby istniejących integracji NER, modeli narzędzi, SSE i Knowledge: **2/7 passed**, następnie **5/7 passed**. Pierwsza próba nie miała usług na domyślnych portach; druga używała portów `11438/8018/8028/8038`, ale oba powtórzone przypadki RAG zwróciły `guard_unavailable`. Wtedy brakowało wspólnego udanego przebiegu i pełnego workflow z rzeczywistym downstream; PR początkowo pozostawiono jako draft. Poniższy odbiór zamyka tę konkretną lukę, zachowując wcześniejsze wyniki.
+
+**Ponowny odbiór na aktualnym main — 2026-10-04:**
+
+- Na `6f00150` ten sam zestaw NER/narzędzia/SSE/Knowledge przeszedł **7/7 w jednym przebiegu** (124,8 s, seed `666512`), w tym oba testy RAG. Użyto gotowych rzeczywistych usług na `11438/8018/8028/8038` oraz oddzielnej bazy `ai_control_teststep15live`. Usług nie modyfikowano ani nie zatrzymywano. Nie zwiększono timeoutów, nie dodano retry i nie wyłączono wymaganych guardów.
+- Nowy opt-in `test/ai_control/workflows/live_workflow_test.exs` przeszedł **1/1** na końcowym kodzie (46,9 s, seed `289581`; pierwsza próba również przeszła). Prawdziwy HTTP przechodzi przez create/idempotent retry → LLM → sandbox `file.read` → delegacja → LLM/narzędzie z własnym kluczem agenta → complete. Rzeczywiste Ollama, dokładny tokenizer, NER v2, Qwen injection/moderation i guardy deterministyczne; wszystkie transporty mock są wyłączone. Bez godzinowego limitu tokenów dwa receipts są rozliczone, root sumuje rzeczywiste usage obu agentów, rezerwacje wynoszą 0, a wspólny licznik narzędzi 2. Brak kontekstu, podmiana uczestnika, odziedziczenie grantu, complete przez dziecko i kontynuacja po zakończeniu są odrzucane.
+- [CI aktualnego main 37181696853](https://github.com/jlitewka99/hackyeah2026/actions/runs/37181696853) zakończył się sukcesem: Quality, Tests, Dialyzer, Security oraz kontener z rzeczywistymi NER/Qwen/tokenizerem i runnerem release. Poprzedni job PR #26 nie pobrał tokenizera z powodu HTTP `503` upstream; ten historyczny błąd zachowano. Opcjonalny gated Prompt Guard CI został pominięty zgodnie z konfiguracją; jego lokalny odbiór zapisano osobno w 11B.
+- Końcowe kontrole uzupełnienia: `mix precommit` **690 passed, 17 excluded** (opt-in live/runner), **5 JS**; assets, Dialyzer (0 błędów/skipów), security i `git diff --check` zaliczone. Sobelow zachowuje istniejące uwagi low confidence, dependency audit bez podatności. Nowy test live wykonano osobno powyżej. Nie dodano migracji ani nie powtarzano odbioru UI; historyczny rollback migracji pozostaje niewykonany.
+- Szczegóły, komendy odtworzenia i końcowe kontrole uzupełnienia: [odbiór kroku 15](docs/acceptance/step15.md). Odbiór dotyczy funkcji workflow w opisanym środowisku; nie zamyka jakości modeli ani odporności pod obciążeniem z kroku 11.
 
 **Zastrzeżenia:**
 
@@ -1218,7 +1226,7 @@ checkbox 13 zaznaczony, checkbox 11 pozostaje otwarty.
 
 Szczegóły kontraktów: [docs/workflows.md](docs/workflows.md). Rzeczywiste wyniki i pozostały odbiór: [docs/acceptance/step15.md](docs/acceptance/step15.md).
 
-**Gotowe, gdy:** pętla lub delegacja nie pozwala obejść budżetu, a odbiór obejmuje również dostępne rzeczywiste integracje; checkbox zaznaczyć po zamknięciu powyższej luki kwalifikacji.
+**Gotowe, gdy:** pętla lub delegacja nie pozwala obejść budżetu, a odbiór obejmuje również dostępne rzeczywiste integracje. Kryterium spełnione przez testy granic/współbieżności oraz powyższy rzeczywisty odbiór; ograniczenia eksploatacyjne pozostają jawne.
 
 ### Krok 16. Oban, raporty i testy w panelu
 
