@@ -2,6 +2,7 @@ defmodule AiControl.Audit.Serializer do
   @moduledoc "Explicit projection shared by rendered audit details and JSONL. Never serialize arbitrary data."
   alias AiControl.Audit.Event
   alias AiControl.Gateway.Measurements
+  alias AiControl.Gateway.StreamEvidence
   alias AiControl.Security.{SemanticEvidence, Validation}
   alias AiControl.Tools.Catalog
 
@@ -14,6 +15,7 @@ defmodule AiControl.Audit.Serializer do
     %{}
     |> put("operation", if(data["operation"] in ~w(chat models), do: data["operation"]))
     |> put("timings", if(Measurements.valid?(data["timings"]), do: data["timings"]))
+    |> put("stream", if(StreamEvidence.valid?(data["stream"]), do: data["stream"]))
     |> put(
       "tool_execution",
       project(data["tool_execution"], ~w(execution_id workflow_id execution_status tool charged))

@@ -1,12 +1,12 @@
 defmodule AiControl.Gateway.Request do
   @moduledoc "Explicit text-only Chat Completions subset. Identity is a separate argument."
-  @keys ~w(model messages tools tool_choice stream temperature top_p max_tokens seed stop n)
+  @keys ~w(model messages tools tool_choice stream stream_options temperature top_p max_tokens seed stop n)
   @message_keys ~w(role content name tool_calls tool_call_id)
 
   def validate(params) do
     if object?(params, @keys) && text?(params["model"]) && messages?(params["messages"]) &&
          optional?(params, "tools", &tools?/1) && choices?(params) && options?(params) do
-      {:ok, Map.put(params, "stream", false)}
+      {:ok, Map.put_new(params, "stream", false)}
     else
       {:error, :invalid_request}
     end
@@ -94,13 +94,21 @@ defmodule AiControl.Gateway.Request do
   end
 
   defp options?(params) do
-    Map.get(params, "stream", false) == false && Map.get(params, "n", 1) == 1 &&
+    is_boolean(Map.get(params, "stream", false)) && stream_options?(params) &&
+      Map.get(params, "n", 1) == 1 &&
       optional?(params, "temperature", &range?(&1, 0, 2)) &&
       optional?(params, "top_p", &range?(&1, 0, 1)) &&
       optional?(params, "max_tokens", &integer_range?(&1, 1..32_768)) &&
       optional?(params, "seed", &seed?/1) &&
       optional?(params, "stop", &stops?/1)
   end
+
+  defp stream_options?(%{"stream_options" => options} = params),
+    do:
+      params["stream"] == true && object?(options, ["include_usage"]) &&
+        optional?(options, "include_usage", &is_boolean/1)
+
+  defp stream_options?(_), do: true
 
   defp range?(value, first, last), do: is_number(value) && value >= first && value <= last
   defp integer_range?(value, range), do: is_integer(value) && value in range
