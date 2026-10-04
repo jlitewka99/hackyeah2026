@@ -2,7 +2,7 @@
 
 Policy schema v5 requires a verified run and participant for every Chat Completions or tool operation, including calls through the Gateway and Tools domain APIs. Schema v1–v4 behavior and historical policy checksums remain unchanged. Upgrade a draft in Policies, review its changes, save, then activate it deliberately. The upgrade preserves explicit existing tool limits.
 
-The gateway controls execution; the client chooses and sequences actions. This feature does not add MCP, Granite, Oban, automatic orchestration, distributed execution or crash resumption.
+The gateway controls execution; the client chooses and sequences actions. This feature does not add MCP, Granite, Oban, automatic orchestration, distributed execution or crash resumption. After integrating current main, existing buffered SSE and MCP content operations use the same workflow protection.
 
 ## Policy contract
 
@@ -19,7 +19,7 @@ All `budgets.workflow` limits are finite integers. Defaults are independent of t
 
 Zero denies operations/reservations/delegation for the corresponding limit. Run caps cannot increase after creation. Subsequent v5 policy tightening applies to further operations; the deadline is always derived from the original start. Organization and actual executing agent hourly request/token limits still apply. Changing the UTC hour never replenishes a root's budget.
 
-Operations admitted before guard evaluation count even if later denied. Tool dispatches count only when their dispatch marker is committed. Idempotent repeats do not add operations or dispatches. The HMAC covers canonical action material across all participants: map order, JSON tool argument order and transport tool-call IDs do not distinguish otherwise identical actions. Changing meaningful action content is bounded by lifetime, operation and token limits.
+Operations admitted before guard evaluation count even if later denied. Tool dispatches count only when their dispatch marker is committed. Idempotent repeats do not add operations or dispatches. The HMAC covers canonical action material across all participants: map order, JSON tool argument order, transport tool-call IDs and streaming delivery options do not distinguish otherwise identical actions. Changing meaningful action content is bounded by lifetime, operation and token limits.
 
 ## Public API
 
@@ -62,6 +62,10 @@ x-run-participant-id: <participant-uuid>
 ```
 
 Delegated agents use their own keys, allowed models and sandbox resource grants. A parent cannot execute as its child. The target must be active, policy-allowed and in the same organization; delegation grants no resource or model permissions. Participant ancestry and identity are rechecked before dispatch, along with state, deadline and current tightened limits.
+
+The same run headers apply to `stream: true` Chat Completions. The supervised SSE session remains an active operation until delivery/cleanup finishes; it owns usage checkpoints and receives workflow cancellation without being killed during settlement. Before streaming headers, errors use HTTP status codes. After SSE starts, terminal errors use the existing content-free `event: error` frame and suppress further response release. Stop/deadline/runtime loss preserve settled or uncertain usage.
+
+Existing `/mcp` `tools/call` and `resources/read` forward these headers to the Tools domain. Discovery and initialization need no run. Missing v5 context returns the existing MCP error envelope, and retries retain MCP's session/request-id idempotency. Delegates still require their own keys/sessions; an MCP session cannot grant participant access.
 
 | Status | Fixed error meaning |
 | --- | --- |

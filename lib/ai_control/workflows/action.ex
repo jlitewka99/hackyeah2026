@@ -2,7 +2,10 @@ defmodule AiControl.Workflows.Action do
   @moduledoc "Canonical action material for HMAC; transport call IDs do not distinguish actions."
 
   def canonical("chat", %{"messages" => messages} = payload) when is_list(messages) do
-    payload |> Map.put("messages", Enum.map(messages, &message/1)) |> canonical_value()
+    payload
+    |> Map.drop(["stream", "stream_options"])
+    |> Map.put("messages", Enum.map(messages, &message/1))
+    |> canonical_value()
   end
 
   def canonical(_, payload), do: canonical_value(payload)

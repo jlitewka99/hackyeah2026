@@ -46,6 +46,7 @@ defmodule AiControlWeb.Endpoint do
 
   plug AiControlWeb.GatewayIngress
   plug AiControlWeb.GatewayBody
+  plug AiControlWeb.MCPTransport
 
   plug Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],

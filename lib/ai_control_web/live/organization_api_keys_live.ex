@@ -2,6 +2,7 @@ defmodule AiControlWeb.OrganizationApiKeysLive do
   use AiControlWeb, :live_view
 
   alias AiControl.{Agents, ApiKeys}
+  alias AiControl.MCP.Config, as: MCPConfig
   alias AiControl.Organizations.Access
   alias AiControlWeb.OrganizationUI
 
@@ -18,6 +19,7 @@ defmodule AiControlWeb.OrganizationApiKeysLive do
        revealed_key: nil,
        secret: nil
      )
+     |> assign(:mcp_endpoint, MCPConfig.endpoint())
      |> refresh()}
   end
 

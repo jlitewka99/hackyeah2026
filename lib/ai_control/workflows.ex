@@ -681,7 +681,8 @@ defmodule AiControl.Workflows do
     end
   end
 
-  defp terminal_result(ctx) do
+  @doc false
+  def terminal_result(ctx) do
     case Repo.get(Run, ctx.run_id, log: false) do
       %Run{status: "limit_exceeded"} -> {:error, :workflow_limit_exceeded}
       _ -> {:error, :workflow_terminal}

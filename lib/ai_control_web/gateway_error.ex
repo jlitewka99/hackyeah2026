@@ -45,6 +45,11 @@ defmodule AiControlWeb.GatewayError do
     )
   end
 
+  def payload(code, request_id) do
+    {_, message} = classify(code)
+    %{error: %{code: Atom.to_string(code), message: message, request_id: request_id}}
+  end
+
   defp classify(:workflow_context_required),
     do: {400, "A workflow run and participant are required."}
 

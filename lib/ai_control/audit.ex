@@ -5,6 +5,7 @@ defmodule AiControl.Audit do
   alias AiControl.Audit.{Event, Filters, WorkflowVisibility}
   alias AiControl.Budgets.Usage
   alias AiControl.Gateway.Measurements
+  alias AiControl.Gateway.StreamEvidence
   alias AiControl.Organizations
   alias AiControl.Organizations.{Access, Grants}
   alias AiControl.Policies.Configuration
@@ -29,7 +30,7 @@ defmodule AiControl.Audit do
 
   @workflow_codes ~w(workflow_context_required workflow_terminal workflow_conflict workflow_limit_exceeded workflow_unavailable)
   @gateway_codes @workflow_codes ++
-                   ~w(completed invalid_request input_too_large forbidden agent_not_allowed model_not_allowed policy_unavailable rate_limited capacity_exceeded guard_unavailable policy_blocked redaction_unavailable audit_unavailable upstream_timeout upstream_unavailable upstream_rejected upstream_invalid_response response_too_large model_unavailable model_digest_mismatch request_budget_exceeded token_budget_exceeded budget_unavailable budget_conflict tokenizer_unavailable)
+                   ~w(completed stream_ready stream_cancelled stream_delivery_timeout stream_unavailable invalid_request input_too_large forbidden agent_not_allowed model_not_allowed policy_unavailable rate_limited capacity_exceeded guard_unavailable policy_blocked redaction_unavailable audit_unavailable upstream_timeout upstream_unavailable upstream_rejected upstream_invalid_response response_too_large model_unavailable model_digest_mismatch request_budget_exceeded token_budget_exceeded budget_unavailable budget_conflict tokenizer_unavailable)
   def gateway_codes, do: @gateway_codes
 
   @tool_codes @workflow_codes ++
@@ -163,6 +164,9 @@ defmodule AiControl.Audit do
 
   defp observation?(nil), do: true
 
+  defp observation?(%{operation: "chat", timings: timings, stream: stream} = value),
+    do: map_size(value) == 3 && Measurements.valid?(timings) && StreamEvidence.valid?(stream)
+
   defp observation?(%{operation: operation, timings: timings} = value),
     do: map_size(value) == 2 && operation in ~w(chat models runs) && Measurements.valid?(timings)
 
@@ -232,9 +236,11 @@ defmodule AiControl.Audit do
   end
 
   defp gateway_event_type("completed"), do: "gateway.completed"
+  defp gateway_event_type("stream_ready"), do: "gateway.stream_ready"
+  defp gateway_event_type("stream_cancelled"), do: "gateway.cancelled"
 
   defp gateway_event_type(code)
-       when code in ~w(policy_unavailable guard_unavailable audit_unavailable upstream_timeout upstream_unavailable upstream_rejected upstream_invalid_response response_too_large model_unavailable model_digest_mismatch),
+       when code in ~w(stream_delivery_timeout stream_unavailable policy_unavailable guard_unavailable audit_unavailable upstream_timeout upstream_unavailable upstream_rejected upstream_invalid_response response_too_large model_unavailable model_digest_mismatch),
        do: "gateway.failed"
 
   defp gateway_event_type(_), do: "gateway.rejected"

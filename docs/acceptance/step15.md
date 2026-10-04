@@ -1,18 +1,18 @@
 # Step 15 — workflow acceptance
 
-Checked on 2026-10-04 on `JL/step-15-workflows`, initially based on `main` at `4d4f0f6`. Implementation is available for review. The PR remains **draft** and the implementation-plan checkbox remains open because real-model integration qualification was unavailable. Passing deterministic checks does not close that qualification gap.
+Checked on 2026-10-04 on `JL/step-15-workflows`, initially based on `main` at `4d4f0f6`, then integrated with `origin/main` at `e072dd0` (Steps 13 and 17). Implementation is available for review. The PR remains **draft** and the implementation-plan checkbox remains open because real-model integration qualification was unavailable in this session. Passing deterministic checks does not close that qualification gap or contradict qualification previously recorded by other steps.
 
 ## Recorded checks
 
 | Check | Actual result |
 | --- | --- |
-| `mix precommit` | PASS: 557 ExUnit tests, 10 excluded; 3 JavaScript tests. Formatting, compilation and Credo passed. |
-| New workflow coverage | 31 tests across domain, accounting, PostgreSQL concurrency, v5 configuration, controllers and LiveView. |
+| `mix precommit` | PASS on final code: 628 ExUnit tests, 11 excluded; 5 JavaScript tests. Formatting, compilation and Credo passed. |
+| New workflow coverage | 39 tests across domain, accounting, PostgreSQL concurrency, v5 configuration, controllers, LiveView, buffered SSE and MCP compatibility. |
 | `mix assets.build` | PASS: Tailwind and esbuild bundles built. |
 | `mix dialyzer` | PASS: total errors 0, skipped 0. |
 | `mix security` | PASS exit status; dependency audit found no vulnerabilities. Sobelow still reports existing low-confidence dynamic SQL in Dashboard and temporary import-file reads in PolicyLive. |
 | Migration | Applied in dev/test and an isolated UI test database. Historical rows have nullable workflow references. Rollback was not executed. |
-| Real integration attempt | `mix test test/ai_control/gateway/live_ner_test.exs test/ai_control/tools/live_models_test.exs --include live_ner --include live_models`: 0/4 passed, failed readiness preconditions before model assertions. |
+| Real integration attempt | `mix test test/ai_control/gateway/live_ner_test.exs test/ai_control/tools/live_models_test.exs test/ai_control/gateway/live_stream_test.exs --include live_ner --include live_models`: 0/5 passed. NER/Semantic readiness failed; actual Ollama SSE returned 503. |
 | Local provider readiness | Ollama `11434`, NER `8001`, tokenizer `8002`, Semantic `8003`: unavailable. No actual-provider workflow qualification. |
 | Impeccable detector | Run once: zero primary findings; five existing typography advisories. No second detector run. |
 | Browser matrix | List/detail and policy v5: 1280px desktop, 390px mobile, light/dark. Valid full-page captures; long unbroken goals wrap without horizontal overflow. |
@@ -30,6 +30,7 @@ The final precommit log is `/private/tmp/step15-precommit-final.log`; asset, Dia
 - Stop during dispatch preparation produces no downstream effect and releases unsent reservation; stop after dispatch retains uncertain charge, never retries the effect, and audited reconciliation settles once.
 - Organization isolation, participant substitution, own-key delegation, revoked keys, synchronous audit failure, v1–v4 regression behavior, restricted participants/events/JSONL, filters and pagination are covered.
 - The API scenario creates a run, invokes LLM and tool, delegates, invokes with the child's own key, and completes. Provider/tokenizer responses are controlled fixtures; this is not actual-model proof.
+- Current-main compatibility: six SSE tests use controlled real HTTP sockets for missing context, accounting/completion, preparation stop, dispatched stop, exact controlled deadline and runtime loss. Two MCP tests cover forwarded headers, content/resource operations, retries, stop and participant substitution. Legacy streaming and MCP tests also passed after merging main.
 
 ## UI evidence and provenance
 

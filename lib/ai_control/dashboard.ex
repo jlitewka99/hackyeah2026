@@ -22,7 +22,7 @@ defmodule AiControl.Dashboard do
       {sql, params} = Repo.to_sql(:all, query)
 
       prefix =
-        "WITH events AS (#{sql}), terminal AS (SELECT DISTINCT ON (request_id) * FROM events WHERE kind = 'gateway' AND event_type <> 'tool.dispatching' AND event_type NOT LIKE 'workflow.%' ORDER BY request_id, occurred_at DESC, id DESC) "
+        "WITH events AS (#{sql}), terminal AS (SELECT DISTINCT ON (request_id) * FROM events WHERE kind = 'gateway' AND event_type NOT IN ('tool.dispatching', 'gateway.stream_ready') AND event_type NOT LIKE 'workflow.%' ORDER BY request_id, occurred_at DESC, id DESC) "
 
       outcomes =
         Repo.query!(

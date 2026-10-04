@@ -86,7 +86,7 @@ defmodule AiControl.Workflows.DomainTest do
     assert {:error, :workflow_terminal} = Workflows.resolve(c.principal, c.policy, c.reference)
   end
 
-  test "changing transport call IDs or JSON argument order cannot reset repetitions" do
+  test "transport IDs, stream flags and JSON argument order cannot reset repetitions" do
     c = workflow_fixture()
 
     for i <- 1..4 do
@@ -96,6 +96,7 @@ defmodule AiControl.Workflows.DomainTest do
       {:ok, payload} =
         Request.validate(%{
           "model" => "qwen3.5:4b",
+          "stream" => rem(i, 2) == 0,
           "messages" => [
             %{
               "role" => "assistant",

@@ -23,7 +23,11 @@ defmodule AiControl.Workflows.Runtime do
   end
 
   def track(ctx, worker, owner \\ self()),
-    do: GenServer.call(via(ctx.organization_id, ctx.run_id), {:track, ctx, worker, owner})
+    do: GenServer.call(via(ctx.organization_id, ctx.run_id), {:track, ctx, worker, owner, :kill})
+
+  def track_stream(ctx, session, owner),
+    do:
+      GenServer.call(via(ctx.organization_id, ctx.run_id), {:track, ctx, session, owner, :signal})
 
   def untrack(ctx, worker),
     do: GenServer.cast(via(ctx.organization_id, ctx.run_id), {:untrack, worker})
@@ -35,11 +39,11 @@ defmodule AiControl.Workflows.Runtime do
   end
 
   @impl true
-  def handle_call({:track, ctx, worker, owner}, _, state) do
+  def handle_call({:track, ctx, worker, owner, cancellation}, _, state) do
     if state.run.status == "running" do
       ref = Process.monitor(worker)
       owner_ref = Process.monitor(owner)
-      {:reply, :ok, put_in(state.workers[worker], {ctx, ref, owner_ref})}
+      {:reply, :ok, put_in(state.workers[worker], {ctx, ref, owner_ref, cancellation})}
     else
       {:reply, {:error, :workflow_terminal}, state}
     end
@@ -57,13 +61,13 @@ defmodule AiControl.Workflows.Runtime do
 
   def handle_info({:DOWN, ref, :process, _, _}, state) do
     worker =
-      Enum.find_value(state.workers, fn {pid, {_, worker_ref, owner_ref}} ->
+      Enum.find_value(state.workers, fn {pid, {_, worker_ref, owner_ref, _}} ->
         if ref in [worker_ref, owner_ref], do: pid
       end)
 
     if worker do
-      {ctx, _, _} = state.workers[worker]
-      Process.exit(worker, :kill)
+      {ctx, _, _, cancellation} = state.workers[worker]
+      cancel(worker, cancellation)
       Workflows.cleanup(ctx)
       Workflows.finish(ctx)
     end
@@ -79,10 +83,11 @@ defmodule AiControl.Workflows.Runtime do
         {:noreply, %{state | run: run, timer: timer(run)}}
 
       %Run{status: "limit_exceeded"} ->
+        for {worker, {_, _, _, :signal}} <- state.workers, do: cancel(worker, :signal)
         {:stop, :normal, state}
 
       _ ->
-        for {worker, _} <- state.workers, do: Process.exit(worker, :kill)
+        for {worker, {_, _, _, cancellation}} <- state.workers, do: cancel(worker, cancellation)
         {:stop, :normal, state}
     end
   rescue
@@ -102,10 +107,14 @@ defmodule AiControl.Workflows.Runtime do
       {nil, _} ->
         state
 
-      {{_, ref, owner_ref}, workers} ->
+      {{_, ref, owner_ref, _}, workers} ->
         Process.demonitor(ref, [:flush])
         Process.demonitor(owner_ref, [:flush])
         %{state | workers: workers}
     end
   end
+
+  # A streaming session owns usage checkpoints and must survive until its cleanup commits.
+  defp cancel(worker, :signal), do: send(worker, :workflow_terminated)
+  defp cancel(worker, :kill), do: Process.exit(worker, :kill)
 end

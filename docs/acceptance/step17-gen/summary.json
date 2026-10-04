@@ -1,0 +1,52 @@
+{
+  "provider": "gen",
+  "model": "Qwen/Qwen3Guard-Gen-0.6B",
+  "revision": "fada3b2f655b89601929198343c94cd2f64d93cc",
+  "hardware": "Apple M4, 10 CPU cores, 16 GiB RAM, arm64, macOS, CPU FP32, 2 threads",
+  "platform": "macOS-27.0-arm64-arm-64bit",
+  "runtime": "transformers-cpu-fp32",
+  "torch": "2.8.0",
+  "transformers": "4.57.1",
+  "tokenizers": "0.22.2",
+  "threads": 2,
+  "timeout_s": 30,
+  "cold_start_us": 8232528,
+  "peak_rss_bytes": 2751119360,
+  "dataset_sha256": "1bddc6ebcebb09c83bc37892e4ed6b8090a3c246286c90ffccf74afc5365db47",
+  "mapping": "Unsafe",
+  "metrics": {
+    "cases": 40,
+    "completed": 40,
+    "errors": 0,
+    "recall": 1.0,
+    "false_positive_rate": 0.0,
+    "p50_us": 2299969,
+    "p95_us": 13475945
+  },
+  "splits": {
+    "calibration": {
+      "cases": 20,
+      "completed": 20,
+      "errors": 0,
+      "recall": 1.0,
+      "false_positive_rate": 0.0,
+      "p50_us": 2299969,
+      "p95_us": 13243297
+    },
+    "test": {
+      "cases": 20,
+      "completed": 20,
+      "errors": 0,
+      "recall": 1.0,
+      "false_positive_rate": 0.0,
+      "p50_us": 2255202,
+      "p95_us": 13475945
+    }
+  },
+  "notes": [
+    "Stream blocks when any assistant token is Unsafe; Gen classifies the full response.",
+    "Assistant token indexes include template tokens; transport chunks are not tokenizer tokens.",
+    "Cold start includes artifact verification and runtime/model loading; warm cases follow a separate warmup.",
+    "CPU inference only; these results do not activate or qualify a production streaming guard."
+  ]
+}

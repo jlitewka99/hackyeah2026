@@ -4,9 +4,26 @@ defmodule AiControl.Tools do
   alias AiControl.{Policies, Workflows}
   alias AiControl.Policy.Snapshot
   alias AiControl.Security.Validation
-  alias AiControl.Tools.{Executor, ToolRequest}
+  alias AiControl.Tools.{Executor, Sandbox, ToolRequest}
 
   def execute(identity, params, opts \\ []), do: Executor.execute(identity, params, opts)
+
+  @doc "Discover metadata using a fresh policy snapshot, without exposing sandbox content."
+  def catalog(%Principal{} = identity) do
+    with {:ok, policy, current} <- Policies.snapshot_for_models(identity, nil),
+         [{server, _}] <- Registry.lookup(AiControl.Tools.Registry, current.organization_id),
+         {:ok, catalog} <- Sandbox.catalog(server, current, policy),
+         {:ok, _} <- Policies.refresh_identity(current) do
+      {:ok, catalog}
+    else
+      [] -> {:ok, %{tools: [], resources: [], policy_checksum: nil}}
+      error -> error
+    end
+  catch
+    :exit, _ -> {:error, :tool_unavailable}
+  end
+
+  def catalog(_), do: {:error, :forbidden}
 
   def prepare(identity, params, opts \\ [])
 

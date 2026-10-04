@@ -2,7 +2,7 @@ defmodule AiControl.Gateway.Measurements do
   @moduledoc "Bounded, content-free timings shared explicitly with request workers."
   alias AiControl.Policies.Configuration
 
-  @stages ~w(request input output budget_admission budget_reservation budget_settlement upstream)
+  @stages ~w(request input output budget_admission budget_reservation budget_settlement upstream stream_delivery)
   @keys @stages ++
           for(
             stage <- ~w(input output),

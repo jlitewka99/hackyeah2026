@@ -24,6 +24,7 @@ defmodule AiControl.Application do
       {Phoenix.PubSub, name: AiControl.PubSub},
       AiControl.Tools.Supervisor,
       AiControl.Workflows.Supervisor,
+      AiControl.MCP.Sessions,
       # Start a worker by calling: AiControl.Worker.start_link(arg)
       # {AiControl.Worker, arg},
       # Start to serve requests, typically the last entry
