@@ -2,9 +2,9 @@
 
 Implementation branch: `JL/step-18-rag-memory`, integrated with `origin/main`
 at `e072dd0` (the independently completed MCP and buffered-streaming steps).
-The implementation is reviewable;
-Step 18 remains open and the pull request remains draft until all required acceptance
-is complete.
+Step 18 acceptance is complete. [PR #21](https://github.com/jlitewka99/hackyeah2026/pull/21)
+is ready for review. The implementation passed local real-model RAG acceptance,
+UI review and all five required Linux CI jobs.
 
 ## Delivered behavior
 
@@ -72,12 +72,28 @@ test/ai_control/gateway/live_knowledge_test.exs --include live_models`. Its isol
 services listen on NER 8018, tokenizer 8028, Qwen guard 8038 and Ollama 11438;
 the pinned model files are required before running it.
 
-## Remaining required acceptance and limitations
+## Linux/container acceptance
 
-The local Docker daemon is unavailable. Linux release/container smoke and CI are
-unverified locally; CI now also runs v2 NER transport/redaction and preserves its
-benchmark. The separate open Step 11 MVP/Prompt Guard acceptance remains unchanged.
-Step 18 must not be checked off until required container/CI acceptance is complete.
+[CI 37175595254](https://github.com/jlitewka99/hackyeah2026/actions/runs/37175595254)
+on implementation commit `d48f41a` passed container, quality, tests, Dialyzer and
+security. Socket Security checks also passed. The local Docker daemon was unavailable;
+the required container acceptance ran successfully on Linux x86_64 instead.
+
+The release container passed migration/startup, real NER v1 and v2 transport,
+multiline UTF-8 redaction, pinned Qwen input/output enforcement, tokenizer checks,
+release/bootstrap tasks, four unexpected child exits and SIGTERM. NER tests passed
+5/5, tokenizer 4/4 and semantic contract tests 8/8.
+
+[Linux NER v2 benchmark](step18-linux-ner-benchmark.json): 12 fixtures, 60 samples;
+precision/recall 0.7778 (14 TP, 4 FP, 4 FN), 90/90 UTF-8 offset and detected-span
+redaction checks; p50 74.1 ms, p95 94.7 ms, cold load 6031.8 ms and peak RSS
+1,043,218,432 bytes. The workflow preserves the raw benchmark artifact. These are
+synthetic measurements with the same limitations as the local benchmark.
+
+## Limitations
+
+The separate open Step 11 MVP/Prompt Guard acceptance remains unchanged. Its gated
+container job is intentionally skipped on ordinary PR runs and is outside Step 18.
 
 Only UTF-8 text/TXT/MD; no PDF, embeddings, URL retrieval, automatic conversation
 memory, or steps 13–17/19. `simple` search is lexical with no Polish stemming or
