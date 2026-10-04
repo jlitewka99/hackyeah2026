@@ -14,6 +14,7 @@ defmodule AiControl.Audit.Serializer do
 
   def data(data) when is_map(data) do
     %{}
+    |> put("approval", approval(data["approval"]))
     |> put("knowledge", knowledge(data["knowledge"]))
     |> put("operation", if(data["operation"] in ~w(chat models runs), do: data["operation"]))
     |> put("timings", if(Measurements.valid?(data["timings"]), do: data["timings"]))
@@ -51,6 +52,15 @@ defmodule AiControl.Audit.Serializer do
   end
 
   def data(_), do: %{}
+
+  defp approval(value) when is_map(value) do
+    project(
+      value,
+      ~w(approval_id approval_status expires_at revision kind operation_request_id run_id participant_id)
+    )
+  end
+
+  defp approval(_), do: nil
 
   defp knowledge(%{"operation" => operation, "resources" => resources}) do
     if operation in ~w(knowledge.list knowledge.read knowledge.search knowledge.created knowledge.updated knowledge.deleted knowledge.context) and
@@ -110,14 +120,14 @@ defmodule AiControl.Audit.Serializer do
   defp safe_field?("permissions", value), do: Validation.codes?(value)
 
   defp safe_field?(key, value)
-       when key in ~w(field_index start_byte end_byte duration_us reserved_tokens prompt_tokens completion_tokens total_tokens pii_count secret_count exploit_count agent_count model_count),
+       when key in ~w(field_index start_byte end_byte duration_us reserved_tokens prompt_tokens completion_tokens total_tokens pii_count secret_count exploit_count agent_count model_count revision),
        do: Validation.duration?(value)
 
   defp safe_field?(key, value) when key in ~w(confidence threshold risk_score injection_score),
     do: Validation.score?(value)
 
   defp safe_field?(key, value)
-       when key in ~w(execution_id workflow_id reservation_id user_id previous_superadmin_id next_superadmin_id membership_id invitation_id policy_version_id),
+       when key in ~w(execution_id workflow_id reservation_id approval_id operation_request_id run_id participant_id user_id previous_superadmin_id next_superadmin_id membership_id invitation_id policy_version_id),
        do: Validation.uuid?(value)
 
   defp safe_field?(key, value) when key in ~w(grants_fingerprint policy_checksum),
@@ -138,6 +148,9 @@ defmodule AiControl.Audit.Serializer do
 
   defp safe_field?("currency", value),
     do: is_binary(value) && Regex.match?(~r/\A[A-Z]{3}\z/, value)
+
+  defp safe_field?("expires_at", value),
+    do: is_binary(value) and match?({:ok, _, 0}, DateTime.from_iso8601(value))
 
   defp safe_field?("window", value),
     do: is_binary(value) && match?({:ok, _, 0}, DateTime.from_iso8601(value))

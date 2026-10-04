@@ -2,7 +2,7 @@ defmodule AiControlWeb.ToolController do
   use AiControlWeb, :controller
 
   alias AiControl.Tools
-  alias AiControlWeb.{GatewayError, RunContext}
+  alias AiControlWeb.{ApprovalContext, GatewayError, RunContext}
 
   def create(conn, _params) do
     key =
@@ -11,9 +11,10 @@ defmodule AiControlWeb.ToolController do
         _ -> nil
       end
 
-    case RunContext.parse(conn) do
-      {:ok, context} ->
+    case {RunContext.parse(conn), ApprovalContext.parse(conn)} do
+      {{:ok, context}, {:ok, approval_opts}} ->
         case Tools.execute(conn.assigns.api_principal, conn.body_params,
+               approval_id: approval_opts[:approval_id],
                request_id: conn.assigns.request_id,
                idempotency_key: key,
                run_context: context,
@@ -23,7 +24,7 @@ defmodule AiControlWeb.ToolController do
           error -> GatewayError.respond(conn, error)
         end
 
-      {:error, _} ->
+      _ ->
         RunContext.reject(conn, "runs")
     end
   end

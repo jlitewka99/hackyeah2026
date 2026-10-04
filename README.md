@@ -43,6 +43,11 @@ export AUDIT_FINGERPRINT_KEY_ID=v1
 Generating a new key changes fingerprints. When rotating the key, also change
 `AUDIT_FINGERPRINT_KEY_ID`. Historical records retain their key IDs.
 
+Policy v6 adds explicit human review for tools, LLM and delegation. Configure a separate
+`APPROVAL_ENCRYPTION_KEY` before activation; approval permits one client resume and
+never pauses the workflow clock. See the [approval runbook](docs/approvals.md) for
+headers, grant rules, retention, migration and rollout details.
+
 Open [localhost:4000](http://localhost:4000). The server can also run inside IEx
 with `iex -S mix phx.server`.
 
@@ -845,6 +850,8 @@ Set these runtime variables using Coolify's secrets UI:
 | `SECRET_KEY_BASE` | A fresh secret generated with `mix phx.gen.secret` |
 | `AUDIT_FINGERPRINT_KEY` | At least 32 random bytes encoded as base64 |
 | `AUDIT_FINGERPRINT_KEY_ID` | Rotation ID, default `v1` |
+| `APPROVAL_ENCRYPTION_KEY` | Separate 32 random bytes encoded as base64; required for human review |
+| `APPROVAL_ENCRYPTION_KEY_ID` | Preview key rotation ID, default `v1` |
 | `PHX_HOST` | Public hostname without scheme |
 | `OLLAMA_BASE_URL` | Reachable external Ollama HTTP origin |
 | `GATEWAY_MODELS` | JSON map of model names to verified full SHA-256 digests |

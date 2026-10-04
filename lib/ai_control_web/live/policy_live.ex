@@ -80,7 +80,7 @@ defmodule AiControlWeb.PolicyLive do
   end
 
   def event("upgrade", _, socket) do
-    source = socket.assigns.form.source |> Draft.source() |> Configuration.upgrade(5)
+    source = socket.assigns.form.source |> Draft.source() |> Configuration.upgrade(6)
 
     {:noreply,
      assign(socket,

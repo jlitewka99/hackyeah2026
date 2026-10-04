@@ -203,6 +203,10 @@ defmodule AiControl.Gateway.Stream do
     state = stop_worker(state)
     _ = cleanup(state)
     finish_workflow(state.workflow)
+
+    if state.opts[:approval_id],
+      do: AiControl.Approvals.finish_attempt(state.identity, state.opts[:request_id])
+
     if reason != :normal, do: audit(state, "stream_cancelled", "cancelled")
     Agent.stop(state.opts[:measurements])
   end

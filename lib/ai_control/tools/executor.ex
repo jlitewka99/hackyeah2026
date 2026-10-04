@@ -1,13 +1,18 @@
 defmodule AiControl.Tools.Executor do
   @moduledoc "Public firewall orchestration; only filtered results leave this module."
-  alias AiControl.{Audit, Gateway, Repo, Tools, Workflows}
+  alias AiControl.{Approvals, Audit, Gateway, Policies, Repo, Tools, Workflows}
   alias AiControl.Gateway.{Limiter, Slots, Stages}
   alias AiControl.Tools.{Config, Content, Execution, Executions, Sandbox, ToolRequest}
 
   def execute(%AiControl.ApiKeys.Principal{} = identity, params, opts) do
     request_id = opts[:request_id] || Ecto.UUID.generate()
     started = System.monotonic_time()
-    perform(identity, params, opts, request_id, started)
+
+    try do
+      perform(identity, params, opts, request_id, started)
+    after
+      Approvals.finish_attempt(identity, request_id)
+    end
   end
 
   def execute(_, _, _), do: {:error, :forbidden}
@@ -15,18 +20,29 @@ defmodule AiControl.Tools.Executor do
   defp perform(identity, params, opts, request_id, started) do
     with :ok <- ingress(identity, opts),
          {:ok, key} <- Ecto.UUID.cast(opts[:idempotency_key]),
-         {:ok, prepared} <- Tools.prepare(identity, params, opts),
-         request = %{prepared | request_id: request_id},
+         {:ok, policy, current} <- Policies.snapshot_for_models(identity, nil),
+         {:ok, prepared} <- ToolRequest.new(current, params, policy),
+         {:ok, reference} <- Workflows.resolve(current, policy, opts[:run_context]),
+         prepared = %{prepared | run_context: reference},
+         {:ok, ticket} <-
+           Approvals.prepare(identity, "tool", params, prepared.policy, request_id, opts),
+         operation_id = if(ticket, do: ticket.operation_request_id, else: request_id),
+         request = %{prepared | request_id: operation_id, approval_ticket: ticket},
+         :ok <- Tools.authorize(request),
          {:ok, server} <- server(request.organization_id),
          {:ok, resources} <- Sandbox.preflight(server, request),
          {:ok, receipt} <- Executions.claim(request, resources.workflow_id, key),
          {:ok, context} <-
-           Workflows.admit(request.run_context, request.policy, "tool", params, request_id) do
+           Workflows.admit(request.run_context, request.policy, "tool", params, operation_id) do
       request = %{request | run_context: context}
 
       Workflows.run(context, fn ->
-        {result, stage} = process(request, server, resources, receipt)
-        finish(receipt, request, result, stage, started)
+        try do
+          {result, stage} = process(request, server, resources, receipt)
+          finish(receipt, request, result, stage, started)
+        after
+          Approvals.finish(ticket)
+        end
       end)
     else
       :error -> reject(identity, request_id, {:error, :invalid_request}, started)
@@ -53,7 +69,8 @@ defmodule AiControl.Tools.Executor do
            Stages.evaluate(input, identity, request.policy, request.request_id, :input, opts),
          updated = %{request | arguments: safe["arguments"]},
          :ok <- Tools.authorize(updated),
-         {:ok, _} <- Sandbox.preflight(server, updated) do
+         {:ok, _} <- Sandbox.preflight(server, updated),
+         :ok <- Approvals.gate(request.approval_ticket, identity, safe, request.policy, []) do
       owner = self()
       deadline = System.monotonic_time(:millisecond) + Config.timeout()
 
@@ -91,6 +108,9 @@ defmodule AiControl.Tools.Executor do
       )
     end
   end
+
+  defp finish(_receipt, _request, {:error, {:approval_required, _}} = result, _stage, _started),
+    do: result
 
   defp finish(receipt, request, result, stage, started) do
     current = Repo.get!(Execution, receipt.id, log: false)

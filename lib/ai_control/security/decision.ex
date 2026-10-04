@@ -15,14 +15,14 @@ defmodule AiControl.Security.Decision do
     :reason_codes,
     :redactions
   ]
-  @reasons ~w(policy.allow policy.redact policy.block required_guard_unavailable unmapped_detection redaction_unavailable)
+  @reasons ~w(policy.allow policy.redact policy.block policy.review required_guard_unavailable unmapped_detection redaction_unavailable)
   defstruct @fields
 
   @type t :: %__MODULE__{
           assessment_id: Ecto.UUID.t(),
           request_id: Ecto.UUID.t(),
           stage: :input | :output,
-          action: :allow | :redact | :block,
+          action: :allow | :redact | :block | :review,
           policy_version: String.t(),
           policy_checksum: String.t(),
           policy: Snapshot.t(),
@@ -35,7 +35,7 @@ defmodule AiControl.Security.Decision do
 
   def valid?(%__MODULE__{} = decision) do
     Validation.uuid?(decision.assessment_id) && Validation.uuid?(decision.request_id) &&
-      decision.stage in [:input, :output] && decision.action in [:allow, :redact, :block] &&
+      decision.stage in [:input, :output] && decision.action in [:allow, :redact, :block, :review] &&
       policy?(decision) &&
       Validation.codes?(decision.rule_ids) && reasons?(decision.reason_codes) &&
       redactions?(decision)
@@ -54,6 +54,8 @@ defmodule AiControl.Security.Decision do
   defp redactions?(%{action: :redact, redactions: [_ | _] = locations}),
     do: Enum.all?(locations, &Detection.redactable?(%Detection{location: &1}))
 
-  defp redactions?(%{action: action, redactions: []}) when action in [:allow, :block], do: true
+  defp redactions?(%{action: action, redactions: []}) when action in [:allow, :block, :review],
+    do: true
+
   defp redactions?(_), do: false
 end

@@ -26,7 +26,7 @@ defmodule AiControl.Workflows do
          goal = String.trim(goal),
          true <- String.valid?(goal) && length(String.codepoints(goal)) in 1..240,
          {:ok, policy, current} <- Policies.snapshot_for_models(identity, nil),
-         true <- policy.settings["schema_version"] == 5,
+         true <- policy.settings["schema_version"] in [5, 6],
          {:ok, fingerprint} <- fingerprint(current.organization_id, {"goal", goal}) do
       result =
         transaction(current.organization_id, fn ->
@@ -133,7 +133,7 @@ defmodule AiControl.Workflows do
   defp start_runtime(error), do: error
 
   def resolve(_identity, policy, nil) do
-    if policy.settings["schema_version"] == 5,
+    if policy.settings["schema_version"] in [5, 6],
       do: {:error, :workflow_context_required},
       else: {:ok, nil}
   end
@@ -209,6 +209,7 @@ defmodule AiControl.Workflows do
          existing.fingerprint_digest != fingerprint.digest || existing.kind != kind,
        do: Repo.rollback(:workflow_conflict)
 
+    if existing.status == "awaiting_review", do: update!(existing, status: "admitted")
     {:ok, %{ctx | operation_id: existing.id}}
   end
 
@@ -250,15 +251,31 @@ defmodule AiControl.Workflows do
     {:ok, %{ctx | operation_id: operation.id}}
   end
 
-  def delegate(%Principal{} = identity, run_id, parent_id, params, key) do
+  def delegate(identity, run_id, parent_id, params, key, opts \\ [])
+
+  def delegate(%Principal{} = identity, run_id, parent_id, params, key, opts) do
     with {:ok, key} <- Ecto.UUID.cast(key),
          true <- is_map(params) && Map.keys(params) == ["target_agent_id"],
          {:ok, target} <- Ecto.UUID.cast(params["target_agent_id"]),
          {:ok, policy, current} <- Policies.snapshot_for_models(identity, nil),
-         {:ok, ctx} <- resolve(current, policy, %{run_id: run_id, participant_id: parent_id}) do
-      transaction(current.organization_id, fn ->
-        delegate_locked(current, policy, ctx, target, key)
-      end)
+         {:ok, ctx} <- resolve(current, policy, %{run_id: run_id, participant_id: parent_id}),
+         request_id = opts[:request_id] || Ecto.UUID.generate(),
+         {:ok, ticket} <-
+           AiControl.Approvals.prepare(
+             current,
+             "delegation",
+             params,
+             policy,
+             request_id,
+             opts |> Keyword.put(:run_context, ctx) |> Keyword.put(:idempotency_key, key)
+           ) do
+      try do
+        transaction(current.organization_id, fn ->
+          delegate_locked(current, policy, ctx, target, key, ticket)
+        end)
+      after
+        AiControl.Approvals.finish(ticket)
+      end
     else
       :error -> {:error, :invalid_request}
       false -> {:error, :invalid_request}
@@ -266,9 +283,9 @@ defmodule AiControl.Workflows do
     end
   end
 
-  def delegate(_, _, _, _, _), do: {:error, :forbidden}
+  def delegate(_, _, _, _, _, _), do: {:error, :forbidden}
 
-  defp delegate_locked(current, policy, ctx, target, key) do
+  defp delegate_locked(current, policy, ctx, target, key, ticket) do
     run = locked!(current.organization_id, ctx.run_id)
     parent = member!(run, ctx.participant_id, current.agent_id)
 
@@ -277,19 +294,28 @@ defmodule AiControl.Workflows do
         log: false
       )
 
-    delegate_participant(existing, current, policy, ctx, run, parent, target, key)
+    delegate_participant(existing, current, policy, ctx, run, parent, {target, key, ticket})
   end
 
-  defp delegate_participant(%Participant{} = existing, _, _, _, _, _, target, _) do
+  defp delegate_participant(%Participant{} = existing, _, _, _, _, _, {target, _, _}) do
     if existing.agent_id != target, do: Repo.rollback(:workflow_conflict)
     {:ok, existing}
   end
 
-  defp delegate_participant(nil, current, policy, ctx, run, parent, target, key) do
+  defp delegate_participant(nil, current, policy, ctx, run, parent, {target, key, ticket}) do
     with {:ok, run} <- active!(run, policy),
          :ok <- delegation_access(run, parent, target, policy),
          {:ok, admitted} <-
-           admit(ctx, policy, "delegation", %{"target_agent_id" => target}, Ecto.UUID.generate()) do
+           admit(
+             ctx,
+             policy,
+             "delegation",
+             %{"target_agent_id" => target},
+             if(ticket, do: ticket.operation_request_id, else: Ecto.UUID.generate())
+           ),
+         :ok <-
+           AiControl.Approvals.gate(ticket, current, %{"target_agent_id" => target}, policy, []),
+         :ok <- AiControl.Approvals.consume!(ticket, current, policy) do
       participant =
         Repo.insert!(
           %Participant{
@@ -588,7 +614,8 @@ defmodule AiControl.Workflows do
   def finish(ctx) do
     transaction(ctx.organization_id, fn ->
       status = if uncertain?(ctx), do: "uncertain", else: "finished"
-      finish_operation!(ctx, status)
+      operation = Repo.get(Operation, ctx.operation_id, log: false)
+      if operation && operation.status != "awaiting_review", do: finish_operation!(ctx, status)
       {:ok, :ok}
     end)
   end
@@ -699,7 +726,7 @@ defmodule AiControl.Workflows do
   def cleanup(ctx) do
     operation = Repo.get(Operation, ctx.operation_id, log: false)
 
-    if operation do
+    if operation && operation.status != "awaiting_review" do
       receipt =
         Repo.get_by(
           Reservation,
@@ -808,7 +835,8 @@ defmodule AiControl.Workflows do
     end
   end
 
-  defp tighten!(run, %{settings: %{"schema_version" => 5}} = policy) do
+  defp tighten!(run, %{settings: %{"schema_version" => version}} = policy)
+       when version in [5, 6] do
     limits =
       Map.new(run.limits, fn {key, value} ->
         {key, min(value, policy.settings["budgets"]["workflow"][key])}
@@ -844,6 +872,7 @@ defmodule AiControl.Workflows do
 
     updated = update!(run, status: status, reason: reason, finished_at: now())
     audit!(identity, updated, nil, status, reason)
+    :ok = AiControl.Approvals.invalidate_run!(run.organization_id, run.id)
     updated
   end
 
@@ -987,7 +1016,7 @@ defmodule AiControl.Workflows do
       {:ok, outcome} ->
         # Only wake readers/processes after the outermost transaction has committed.
         if !Repo.in_transaction?() do
-          Audit.notify(org)
+          AiControl.Approvals.notify(org)
 
           Phoenix.PubSub.broadcast(
             AiControl.PubSub,

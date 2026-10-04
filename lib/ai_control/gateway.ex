@@ -2,7 +2,7 @@ defmodule AiControl.Gateway do
   @moduledoc "Verified identity → one policy → audited input → pinned backend → audited output."
   alias AiControl.Accounts.Scope
   alias AiControl.ApiKeys.Principal
-  alias AiControl.{Audit, Budgets, Policies, Workflows}
+  alias AiControl.{Approvals, Audit, Budgets, Policies, Workflows}
   alias AiControl.Budgets.Usage
   alias AiControl.Gateway.{Config, Limiter, Models, Request, Response, Slots, Stages, ToolSchemas}
   alias AiControl.Gateway.Measurements
@@ -15,13 +15,25 @@ defmodule AiControl.Gateway do
            :ok <- non_streaming(params),
            {:ok, policy, current} <- Policies.snapshot_for_models(current, opts[:agent_id]),
            {:ok, context} <- Workflows.resolve(current, policy, opts[:run_context]),
-           {:ok, context} <- Workflows.admit(context, policy, "chat", params, request_id) do
-        workflow_chat(context, current, params, policy, request_id, opts)
+           {:ok, ticket} <- Approvals.prepare(current, "chat", params, policy, request_id, opts),
+           operation_id = operation_request_id(ticket, request_id),
+           {:ok, context} <- Workflows.admit(context, policy, "chat", params, operation_id) do
+        workflow_chat(
+          context,
+          current,
+          params,
+          policy,
+          request_id,
+          Keyword.put(opts, :approval_ticket, ticket)
+        )
       else
         error -> {error, nil, :input}
       end
     end)
   end
+
+  defp operation_request_id(nil, request_id), do: request_id
+  defp operation_request_id(ticket, _), do: ticket.operation_request_id
 
   defp workflow_chat(context, current, params, policy, request_id, opts) do
     outcome =
@@ -55,10 +67,17 @@ defmodule AiControl.Gateway do
          true <- params["stream"],
          {:ok, policy, current} <- Policies.snapshot_for_models(current, opts[:agent_id]),
          {:ok, context} <- Workflows.resolve(current, policy, opts[:run_context]),
-         {:ok, context} <-
-           Workflows.admit(context, policy, "chat", params, opts[:request_id]),
+         {:ok, ticket} <-
+           Approvals.prepare(current, "chat", params, policy, opts[:request_id], opts),
+         operation_id = if(ticket, do: ticket.operation_request_id, else: opts[:request_id]),
+         {:ok, context} <- Workflows.admit(context, policy, "chat", params, operation_id),
          :ok <- opts[:stream_context].(current, policy, context) do
-      prepare_stream_request(current, params, policy, Keyword.put(opts, :run_context, context))
+      prepare_stream_request(
+        current,
+        params,
+        policy,
+        opts |> Keyword.put(:run_context, context) |> Keyword.put(:approval_ticket, ticket)
+      )
     else
       false -> {:error, :invalid_request}
       error -> error
@@ -89,6 +108,12 @@ defmodule AiControl.Gateway do
            {:ok, models} <- provider.models(config),
            {:ok, digest} <- Models.digest(safe["model"]),
            :ok <- pinned(models, safe["model"], digest),
+           safe = review_defaults(safe, opts),
+           :ok <-
+             Approvals.gate(opts[:approval_ticket], current, safe, policy,
+               knowledge_sources: sources,
+               model_digest: digest
+             ),
            {:ok, safe, receipt} <- prepare_budget(safe, receipt, policy, provider, config),
            :ok <- authorize_again(current, policy, opts[:agent_id], safe["model"]),
            :ok <- recheck_knowledge(current, policy, knowledge_sources: sources) do
@@ -159,7 +184,7 @@ defmodule AiControl.Gateway do
              prepared.params["model"]
            ),
          :ok <- recheck_knowledge(prepared.identity, prepared.policy, prepared.opts),
-         {:ok, _} <- Budgets.dispatch(prepared.receipt),
+         {:ok, _} <- Budgets.dispatch(prepared.receipt, prepared.opts[:approval_ticket]),
          {:ok, response} <- config[:provider].chat_stream(prepared.params, config),
          {:ok, usage} <- response_usage(response),
          :ok <- on_usage.(usage),
@@ -214,6 +239,13 @@ defmodule AiControl.Gateway do
          {:ok, safe} <- Stages.evaluate(augmented, current, policy, request_id, :input, opts),
          {:ok, safe} <- Request.validate(safe),
          {:ok, contract} <- ToolSchemas.prepare(safe),
+         safe = review_defaults(safe, opts),
+         {:ok, digest} <- Models.digest(safe["model"]),
+         :ok <-
+           Approvals.gate(opts[:approval_ticket], current, safe, policy,
+             knowledge_sources: sources,
+             model_digest: digest
+           ),
          :ok <- authorize_again(current, policy, opts[:agent_id], params["model"]) do
       opts = Keyword.put(opts, :knowledge_sources, sources)
 
@@ -226,6 +258,24 @@ defmodule AiControl.Gateway do
       end
     else
       error -> {error, :input}
+    end
+  end
+
+  defp review_defaults(params, opts) do
+    if opts[:approval_ticket] do
+      config = Config.get()
+      params = Map.put_new(params, "max_tokens", config[:default_max_tokens])
+
+      params =
+        if config[:provider] == AiControl.Gateway.Ollama && config[:ollama_reasoning_effort],
+          do: Map.put(params, "reasoning_effort", config[:ollama_reasoning_effort]),
+          else: params
+
+      if params["stream"],
+        do: Map.put(params, "stream_options", %{"include_usage" => true}),
+        else: params
+    else
+      params
     end
   end
 
@@ -273,6 +323,8 @@ defmodule AiControl.Gateway do
   end
 
   defp execute(identity, opts, callback) do
+    opts = Keyword.put_new(opts, :request_id, Ecto.UUID.generate())
+
     Measurements.run(fn pid ->
       execute_measured(identity, Keyword.put(opts, :measurements, pid), callback)
     end)
@@ -304,6 +356,8 @@ defmodule AiControl.Gateway do
     _ -> {:error, :policy_unavailable}
   catch
     :exit, _ -> {:error, :upstream_unavailable}
+  after
+    Approvals.finish_attempt(identity, opts[:request_id])
   end
 
   defp finish(identity, request_id, result, policy, started, stage, opts) do
@@ -389,7 +443,7 @@ defmodule AiControl.Gateway do
          {:ok, params, receipt} <- prepare_budget(params, receipt, policy, provider, config),
          :ok <- authorize_again(identity, policy, opts[:agent_id], params["model"]),
          :ok <- recheck_knowledge(identity, policy, opts),
-         {:ok, receipt} <- Budgets.dispatch(receipt),
+         {:ok, receipt} <- Budgets.dispatch(receipt, opts[:approval_ticket]),
          {:ok, response} <-
            measure(
              :upstream,

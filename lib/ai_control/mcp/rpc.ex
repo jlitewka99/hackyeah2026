@@ -49,6 +49,12 @@ defmodule AiControl.MCP.RPC do
     }
   end
 
+  def message(:approval_required), do: "Human approval is required before this operation can run."
+  def message(:approval_expired), do: "Human approval expired. Submit a new operation."
+  def message(:approval_used), do: "Human approval has already been claimed or used."
+  def message(:approval_conflict), do: "The approved operation changed or is no longer available."
+  def message(:approval_rejected), do: "Human approval was rejected."
+
   def message(:invalid_request), do: "Unsupported or invalid MCP request."
   def message(:parse_error), do: "Invalid JSON."
   def message(:invalid_params), do: "Unsupported or invalid MCP parameters."

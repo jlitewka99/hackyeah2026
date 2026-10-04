@@ -32,13 +32,7 @@ defmodule AiControl.Tools.Executions do
       )
 
     if existing do
-      code =
-        if existing.fingerprint_digest == fingerprint.digest &&
-             existing.fingerprint_key_id == fingerprint.key_id,
-           do: :tool_execution_exists,
-           else: :idempotency_conflict
-
-      Repo.rollback({code, %{execution_id: existing.id, execution_status: existing.status}})
+      existing_claim!(existing, request, fingerprint)
     else
       Repo.insert!(
         %Execution{
@@ -60,6 +54,37 @@ defmodule AiControl.Tools.Executions do
         log: false
       )
     end
+  end
+
+  defp existing_claim!(
+         %{status: "awaiting_review"} = existing,
+         %{approval_ticket: %{id: id}} = request,
+         fingerprint
+       )
+       when not is_nil(id) do
+    if existing.api_key_id != request.api_key_id or
+         existing.fingerprint_digest != fingerprint.digest,
+       do: Repo.rollback(:idempotency_conflict)
+
+    Repo.update!(
+      Ecto.Changeset.change(existing,
+        status: "pending",
+        policy_version: request.policy.version,
+        policy_checksum: request.policy.checksum,
+        policy_settings: request.policy.settings
+      ),
+      log: false
+    )
+  end
+
+  defp existing_claim!(existing, _request, fingerprint) do
+    code =
+      if existing.fingerprint_digest == fingerprint.digest &&
+           existing.fingerprint_key_id == fingerprint.key_id,
+         do: :tool_execution_exists,
+         else: :idempotency_conflict
+
+    Repo.rollback({code, %{execution_id: existing.id, execution_status: existing.status}})
   end
 
   def dispatch(receipt, request), do: transaction(fn -> dispatch!(receipt, request) end)
@@ -89,6 +114,13 @@ defmodule AiControl.Tools.Executions do
             dispatched_at: DateTime.utc_now()
           ),
           log: false
+        )
+
+      :ok =
+        AiControl.Approvals.consume!(
+          request.approval_ticket,
+          ToolRequest.principal(request),
+          request.policy
         )
 
       audit!(updated, request, "tool.dispatching", "dispatching", 0)
@@ -276,8 +308,11 @@ defmodule AiControl.Tools.Executions do
     result = Repo.transaction(fun, log: false)
 
     case result do
-      {:ok, %Execution{organization_id: id}} -> if !Repo.in_transaction?(), do: Audit.notify(id)
-      _ -> :ok
+      {:ok, %Execution{organization_id: id}} ->
+        if !Repo.in_transaction?(), do: AiControl.Approvals.notify(id)
+
+      _ ->
+        :ok
     end
 
     case result do

@@ -29,13 +29,45 @@ defmodule AiControl.Audit do
                   @policy_events
   @snapshot_fields ~w(status role permissions agent_count model_count grants_fingerprint grants_fingerprint_key_id user_id previous_superadmin_id next_superadmin_id membership_id invitation_id policy_version_id policy_checksum policy_profile policy_source)a
 
-  @workflow_codes ~w(workflow_context_required workflow_terminal workflow_conflict workflow_limit_exceeded workflow_unavailable)
+  @workflow_codes ~w(workflow_context_required workflow_terminal workflow_conflict workflow_limit_exceeded workflow_unavailable approval_required approval_rejected approval_expired approval_conflict approval_used approval_unavailable)
   @gateway_codes @workflow_codes ++
                    ~w(completed stream_ready stream_cancelled stream_delivery_timeout stream_unavailable invalid_request input_too_large forbidden agent_not_allowed model_not_allowed policy_unavailable rate_limited capacity_exceeded guard_unavailable policy_blocked redaction_unavailable audit_unavailable upstream_timeout upstream_unavailable upstream_rejected upstream_invalid_response response_too_large model_unavailable model_digest_mismatch request_budget_exceeded token_budget_exceeded budget_unavailable budget_conflict tokenizer_unavailable knowledge_disabled knowledge_write_disabled knowledge_conflict)
   def gateway_codes, do: @gateway_codes
 
+  def record_approval(identity, record, status) do
+    with true <- status in AiControl.Approvals.statuses(),
+         {:ok, attrs} <- gateway_identity(identity) do
+      pending? = status == "pending"
+
+      persist(
+        struct!(
+          Event,
+          Map.merge(attrs, %{
+            request_id: record.claim_request_id || record.operation_request_id,
+            run_id: record.run_id,
+            participant_id: record.participant_id,
+            kind: if(pending?, do: :decision, else: :gateway),
+            event_type: "approval." <> status,
+            target_id: record.id,
+            stage: :input,
+            action: if(pending?, do: :review),
+            policy_version: record.policy_version,
+            policy_checksum: record.policy_checksum,
+            reason_codes: [if(pending?, do: "policy.review", else: "approval." <> status)],
+            fingerprint_digest: record.prepared_digest,
+            fingerprint_key_id: record.fingerprint_key_id,
+            occurred_at: AiControl.Approvals.now(),
+            data: %{approval: AiControl.Approvals.evidence(record)}
+          })
+        )
+      )
+    else
+      _ -> {:error, :invalid_audit_data}
+    end
+  end
+
   @tool_codes @workflow_codes ++
-                ~w(completed dispatching invalid_request input_too_large forbidden agent_not_allowed tool_not_allowed invalid_tool_request invalid_tool_arguments tool_request_too_large tool_resource_not_allowed tool_resource_not_found tool_redirect_blocked tool_upstream_unavailable tool_invalid_result tool_unavailable tool_timeout tool_cancelled tool_interrupted tool_execution_exists idempotency_conflict tool_budget_exceeded budget_unavailable policy_unavailable guard_unavailable policy_blocked redaction_unavailable audit_unavailable capacity_exceeded rate_limited)
+                ~w(completed dispatching invalid_request input_too_large forbidden agent_not_allowed tool_not_allowed invalid_tool_request invalid_tool_arguments tool_request_too_large tool_resource_not_allowed tool_resource_not_found tool_redirect_blocked tool_upstream_unavailable tool_invalid_result tool_unavailable tool_timeout tool_cancelled tool_interrupted tool_execution_exists idempotency_conflict tool_budget_exceeded request_budget_exceeded budget_unavailable policy_unavailable guard_unavailable policy_blocked redaction_unavailable audit_unavailable capacity_exceeded rate_limited)
 
   def record_knowledge(identity, request_id, operation, code, policy, resources) do
     with true <-

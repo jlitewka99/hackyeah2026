@@ -141,6 +141,13 @@ defmodule AiControlWeb.Layouts do
         aria-current={@active_page == "events" && "page"}
       ><.icon name="hero-list-bullet" class="size-4 shrink-0" /> Events</.link>
       <.link
+        :if={@current_scope.organization && "approvals.read" in @current_scope.grants.permissions}
+        id={"#{@id}-approvals"}
+        navigate={~p"/organizations/#{@current_scope.organization.id}/approvals"}
+        class="nav-link"
+        aria-current={@active_page == "approvals" && "page"}
+      ><.icon name="hero-hand-raised" class="size-4 shrink-0" /> Approvals</.link>
+      <.link
         :if={@current_scope.organization && "workflows.read" in @current_scope.grants.permissions}
         id={"#{@id}-runs"}
         navigate={~p"/organizations/#{@current_scope.organization.id}/runs"}
