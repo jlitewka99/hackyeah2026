@@ -6,6 +6,7 @@ defmodule AiControl.Policies do
   alias AiControl.Agents.Agent
   alias AiControl.ApiKeys.{ApiKey, Principal}
   alias AiControl.{Audit, Repo}
+  alias AiControl.Guards.Feeds
   alias AiControl.Organizations.{Access, Organization, ResourceResolver}
   alias AiControl.Organizations.Grants
   alias AiControl.Policies.{Activation, Cache, Configuration, Set, Version, YAML}
@@ -263,17 +264,22 @@ defmodule AiControl.Policies do
   def topic(scope, :organization), do: "organizations:#{scope.organization.id}:policies"
 
   defp ownership(source, _scope, :global) do
-    if source["allowed_agents"] in [[], ["*"]] && map_size(source["agent_models"]) == 0,
-      do: :ok,
-      else: {:error, [{"allowed_agents", "global policies use a wildcard or an empty list"}]}
+    if source["allowed_agents"] in [[], ["*"]] && map_size(source["agent_models"]) == 0 &&
+         (get_in(source, ["detector_sets", "signatures"]) || "builtin.v1") == "builtin.v1",
+       do: :ok,
+       else: {:error, [{"allowed_agents", "global policies use a wildcard or an empty list"}]}
   end
 
   defp ownership(source, scope, :organization) do
     agents = (source["allowed_agents"] -- ["*"]) ++ Map.keys(source["agent_models"])
 
-    if Enum.all?(agents, &AiControl.Agents.owned?(scope.organization.id, &1)),
-      do: :ok,
-      else: {:error, [{"allowed_agents", "every agent must belong to this organization"}]}
+    if Enum.all?(agents, &AiControl.Agents.owned?(scope.organization.id, &1)) &&
+         Feeds.owned?(
+           scope.organization.id,
+           get_in(source, ["detector_sets", "signatures"]) || "builtin.v1"
+         ),
+       do: :ok,
+       else: {:error, [{"allowed_agents", "every agent must belong to this organization"}]}
   end
 
   defp policy_audit(scope, target, event, id, before, after_version) do

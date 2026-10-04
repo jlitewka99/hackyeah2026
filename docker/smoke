@@ -77,6 +77,23 @@ docker run --rm --entrypoint /opt/semantic/bin/python -e PYTHONPATH=/app/prompt_
   -v "$PWD/tests/prompt_guard:/app/tests/prompt_guard:ro" "$image" -m unittest discover -s /app/tests/prompt_guard
 docker exec -e AI_CONTROL_ORGANIZER_EMAIL=ci@example.test -e AI_CONTROL_ORGANIZER_PASSWORD=synthetic-ci-password \
   "$container" /app/bin/ai_control eval 'AiControl.Release.bootstrap_organizer()'
+docker exec ai-control-step7-postgres createdb -U postgres ai_control_runner_ci
+docker exec "$container" /app/bin/ai_control rpc '
+  Oban.pause_queue(queue: :tests)
+  Application.put_env(:ai_control, AiControl.Testing.ProcessExecutor,
+    database_url: "ecto://postgres:postgres@ai-control-step7-postgres/ai_control_runner_ci",
+    executable: "/app/bin/ai_control")
+  user = AiControl.Accounts.get_user_by_email("ci@example.test")
+  {:ok, organization} = AiControl.Organizations.create_organization(AiControl.Accounts.Scope.for_user(user), %{name: "Synthetic runner acceptance"})
+  {:ok, scope} = AiControl.Organizations.fetch_scope(AiControl.Accounts.Scope.for_user(user), organization.id)
+  {:ok, run} = AiControl.Background.enqueue(scope, "gateway_tests")
+  job = AiControl.Repo.get!(Oban.Job, run.job_id)
+  :ok = AiControl.Background.Workers.GatewayTests.perform(%{job | attempt: 1})
+  {:ok, result} = AiControl.Background.fetch(scope, run.id)
+  15 = result.result["passed"]
+  Oban.cancel_job(run.job_id)
+  Oban.resume_queue(queue: :tests)
+  IO.puts("Isolated release runner: 15 HTTP gateway, budget and sandbox cases passed")'
 docker exec -e AI_CONTROL_ORGANIZER_EMAIL=ci@example.test -e AI_CONTROL_ORGANIZER_PASSWORD=synthetic-ci-password \
   "$container" /app/bin/ai_control eval 'AiControl.Release.bootstrap_organizer()'
 children=(/app/ner /app/semantic /app/tokenizer beam.smp)

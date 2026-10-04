@@ -52,6 +52,7 @@ defmodule AiControl.MixProject do
   defp deps do
     [
       {:hammer, "~> 7.4"},
+      {:oban, "~> 2.24.1"},
       {:bcrypt_elixir, "~> 3.0"},
       {:phoenix, "~> 1.8.15"},
       {:phoenix_ecto, "~> 4.5"},

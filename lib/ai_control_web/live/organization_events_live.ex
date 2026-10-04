@@ -43,6 +43,28 @@ defmodule AiControlWeb.OrganizationEventsLive do
     end
   end
 
+  def handle_event("background_export", _, socket) do
+    case AiControl.Background.enqueue(socket.assigns.current_scope, "audit_export", %{
+           "filters" => Filters.params(socket.assigns.filters)
+         }) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Export queued. Follow its progress in Reports.")
+         |> push_navigate(
+           to: ~p"/organizations/#{socket.assigns.current_scope.organization.id}/reports"
+         )}
+
+      _ ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "The export could not be queued. Check availability and export access."
+         )}
+    end
+  end
+
   def handle_info({:organization_access_changed, _}, socket), do: {:noreply, refresh(socket)}
 
   defp refresh(%{assigns: %{filters: nil}} = socket), do: socket

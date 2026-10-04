@@ -50,6 +50,10 @@ defmodule AiControlWeb.Router do
     plug :require_permission, "signatures.read"
   end
 
+  pipeline :tests_read do
+    plug :require_permission, "tests.read"
+  end
+
   scope "/v1", AiControlWeb do
     pipe_through [:api, :agent_api]
     get "/auth", ApiAuthController, :show, log: false
@@ -112,6 +116,25 @@ defmodule AiControlWeb.Router do
       ] do
       live "/events", OrganizationEventsLive, :index
       live "/events/:event_id", OrganizationEventLive, :show
+      live "/reports", OrganizationReportsLive, :index
+    end
+  end
+
+  scope "/organizations/:organization_id", AiControlWeb do
+    pipe_through [:browser, :require_authenticated_user, :require_organization]
+    get "/background/:run_id/download", BackgroundDownloadController, :show, log: false
+  end
+
+  scope "/organizations/:organization_id", AiControlWeb do
+    pipe_through [:browser, :require_authenticated_user, :require_organization, :tests_read]
+
+    live_session :tests,
+      on_mount: [
+        {AiControlWeb.OrganizationAuth, :require_organization},
+        {AiControlWeb.WorkspaceNavigation, :default}
+      ] do
+      live "/tests", OrganizationTestsLive, :index
+      live "/tests/:run_id", OrganizationTestRunLive, :show
     end
   end
 

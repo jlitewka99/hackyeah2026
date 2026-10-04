@@ -3,6 +3,47 @@
     <h1>Signatures</h1><p class="page-description">
       Pinned, offline exploit patterns. A pattern match is evidence of a risky invocation, not proof of execution.
     </p><ReportingHTML.related_links scope={@current_scope} id="signature-report-links" />
+    <section class="list-section" aria-labelledby="signature-feed-heading">
+      <h2 id="signature-feed-heading">Local signature packages</h2>
+      <p class="muted mt-2">
+        Refresh verifies an operator-provided package and saves an immutable candidate. Choose the candidate in a v5 policy, then review and activate that version.
+      </p>
+      <p :if={@packages == []} id="signature-packages-empty" class="muted mt-4">
+        No packages are configured. Ask an operator to add a local feed package.
+      </p>
+      <.form
+        :if={@packages != [] && "signatures.manage" in @current_scope.grants.permissions}
+        for={@feed_form}
+        id="signature-refresh-form"
+        phx-submit="refresh_feed"
+        class="background-form mt-6"
+      >
+        <.input field={@feed_form[:package]} type="select" label="Package" options={@packages} />
+        <button id="signature-refresh" class="button-primary" phx-disable-with="Queuing…"><.icon
+          name="hero-arrow-path"
+          class="size-4"
+        /> Refresh signatures</button>
+      </.form>
+      <div id="signature-refresh-runs" phx-update="stream" class="mt-4">
+        <p id="signature-refresh-empty" class="hidden only:block muted py-4">No refreshes yet.</p><BackgroundHTML.row
+          :for={{id, run} <- @streams.runs}
+          id={id}
+          run={run}
+          scope={@current_scope}
+        />
+      </div>
+      <div id="signature-candidate-sets" phx-update="stream" class="mt-4">
+        <p id="signature-candidates-empty" class="hidden only:block muted py-4">
+          No imported candidates.
+        </p><article :for={{id, set} <- @streams.sets} id={id} class="background-row">
+          <div class="min-w-0">
+            <h3 class="font-medium">{set.version}</h3><p class="muted mt-1">{set.origin}</p><p class="resource-identifier mt-2 break-all">
+              {set.set_id}
+            </p>
+          </div><span class="status-tag">Imported</span>
+        </article>
+      </div>
+    </section>
     <%= if ReportingHTML.ok?(@report) do %>
       <% catalog = ReportingHTML.value(@report) %>
       <section class="list-section" aria-labelledby="signature-catalog-heading">

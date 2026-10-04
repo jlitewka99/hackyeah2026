@@ -1,0 +1,59 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} active_page="reports">
+  <div class="page-content" id="organization-reports">
+    <h1>Reports</h1>
+    <p class="page-description">
+      Generate audit exports and metrics in the background. Downloads contain metadata, never interaction content.
+    </p>
+    <section class="list-section" aria-labelledby="reports-generate-heading">
+      <h2 id="reports-generate-heading">Generate a report</h2>
+      <p class="muted mt-2">
+        The UTC range is fixed when you submit. Budget snapshots show the current hour and require budgets.read access.
+      </p>
+      <.form for={@form} id="reports-form" phx-submit="generate" class="background-form mt-6">
+        <.input
+          field={@form[:kind]}
+          type="select"
+          label="Report"
+          options={
+            [{"Metrics report", "metrics_report"}, {"Audit summary", "audit_enrichment"}] ++
+              if("events.export" in @current_scope.grants.permissions,
+                do: [{"Audit export (JSONL)", "audit_export"}],
+                else: []
+              )
+          }
+        />
+        <.input
+          field={@form[:range]}
+          type="select"
+          label="Time range"
+          options={[{"Last hour", "1h"}, {"Last 24 hours", "24h"}, {"Last 7 days", "7d"}]}
+        />
+        <.input
+          :if={"budgets.read" in @current_scope.grants.permissions}
+          field={@form[:include_budgets]}
+          type="checkbox"
+          label="Include budget snapshot in metrics"
+        />
+        <button id="reports-generate" class="button-primary" phx-disable-with="Queuing…"><.icon
+          name="hero-document-chart-bar"
+          class="size-4"
+        /> Generate report</button>
+      </.form>
+    </section>
+    <section class="list-section" aria-labelledby="reports-history-heading">
+      <h2 id="reports-history-heading">Report history</h2>
+      <p class="muted mt-2">Downloads expire after 7 days. History is kept for 30 days.</p>
+      <div id="report-runs" phx-update="stream" class="mt-4">
+        <p id="reports-empty" class="hidden only:block muted py-8">
+          No reports yet. Generate a report to save a snapshot of your audit evidence.
+        </p>
+        <BackgroundHTML.row
+          :for={{id, run} <- @streams.runs}
+          id={id}
+          run={run}
+          scope={@current_scope}
+        />
+      </div>
+    </section>
+  </div>
+</Layouts.app>

@@ -290,25 +290,35 @@
       <div class="policy-heading mb-6">
         <p id="policy-draft-schema" class="font-medium">Schema v{schema_version(@form)}</p>
         <button
-          :if={schema_version(@form) < 4}
+          :if={schema_version(@form) < 5}
           id="policy-upgrade"
           type="button"
           class="button-secondary"
           phx-click="upgrade"
           phx-disable-with="Upgrading…"
-        >Upgrade to v4</button>
+        >Upgrade to v5</button>
       </div>
-      <p :if={schema_version(@form) < 4} class="muted mb-6">
-        Upgrade this draft to choose an injection provider and configure response moderation. Saving and activation remain separate steps.
+      <p :if={schema_version(@form) < 5} class="muted mb-6">
+        Upgrade this draft to choose an injection provider, configure response moderation and select an imported signature set. Saving and activation remain separate steps.
       </p>
-      <section :if={schema_version(@form) in [2, 3, 4]} id="policy-detector-sets" class="mb-6">
+      <section :if={schema_version(@form) in [2, 3, 4, 5]} id="policy-detector-sets" class="mb-6">
         <h3 class="font-medium">Detector sets</h3>
         <p class="muted mt-2">
           Immutable sets keep detection reproducible.
         </p>
         <div :for={{guard, version} <- Enum.sort(@form[:detector_sets].value)} class="mt-2">
-          <span>{label(guard)} · {version}</span>
+          <span class="break-all">{label(guard)} · {version}</span>
           <.input
+            :if={guard == "signatures" && schema_version(@form) == 5}
+            name="policy[detector_sets][signatures]"
+            id="policy-signature-selector"
+            type="select"
+            label="Signature set"
+            value={version}
+            options={@signature_options}
+          />
+          <.input
+            :if={guard != "signatures" || schema_version(@form) != 5}
             name={"policy[detector_sets][#{guard}]"}
             id={"policy-set-#{guard}"}
             value={version}
@@ -380,7 +390,7 @@
           An unavailable required guard blocks the request. Select Profile default to remove an override.
         </p>
         <p
-          :if={schema_version(@form) in [2, 3, 4]}
+          :if={schema_version(@form) in [2, 3, 4, 5]}
           id="policy-phase-order"
           class="muted text-sm mt-2"
         >
@@ -420,7 +430,7 @@
             Output only. Disabled by default.
           </p>
           <div
-            :if={schema_version(@form) == 4 && guard == "semantic"}
+            :if={schema_version(@form) in [4, 5] && guard == "semantic"}
             class="md:col-start-2 md:col-span-2"
           >
             <.input
@@ -449,7 +459,7 @@
           </div>
           <div
             :if={
-              schema_version(@form) in [3, 4] &&
+              schema_version(@form) in [3, 4, 5] &&
                 (guard == "moderation" ||
                    (guard == "semantic" && injection_provider(@form) == "qwen"))
             }
@@ -584,7 +594,7 @@
         </div>
       </details>
       <details
-        :if={schema_version(@form) in [2, 3, 4]}
+        :if={schema_version(@form) in [2, 3, 4, 5]}
         class="policy-details"
         id="policy-tools"
         open={MapSet.member?(@open_sections, "tools")}

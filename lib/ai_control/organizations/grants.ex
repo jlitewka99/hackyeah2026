@@ -5,7 +5,7 @@ defmodule AiControl.Organizations.Grants do
   import Ecto.Changeset
 
   @primary_key false
-  @permissions ~w(ai.use agents.read agents.manage api_keys.read api_keys.manage policies.read policies.manage events.read events.export budgets.read budgets.manage signatures.read signatures.manage)
+  @permissions ~w(ai.use agents.read agents.manage api_keys.read api_keys.manage policies.read policies.manage events.read events.export budgets.read budgets.manage signatures.read signatures.manage tests.read tests.run)
   embedded_schema do
     field :permissions, {:array, :string}, default: []
     field :agents, {:array, :string}, default: []

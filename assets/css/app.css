@@ -243,3 +243,35 @@ h2 { font-size: 1.0625rem; line-height: 1.4; font-weight: 600; letter-spacing: -
 .mobile-navigation-menu nav { margin-top: 1rem; }
 
 @media (min-width: 1024px) { .overview-primary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 2rem; } }
+
+.background-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1.5rem;
+  padding: 1.25rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.background-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .75rem;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.background-form {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+.background-form > div { min-width: 12rem; flex: 1; }
+.background-form > button { margin-bottom: 1.5rem; }
+@media (max-width: 640px) {
+  .background-row { flex-direction: column; gap: .75rem; }
+  .background-actions { justify-content: flex-start; }
+  .background-form { flex-direction: column; align-items: stretch; }
+  .background-form > div { width: 100%; min-width: 0; }
+  .background-form > button { margin-bottom: 0; }
+}

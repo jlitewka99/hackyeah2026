@@ -211,3 +211,40 @@ if config_env() == :prod do
   #
   # See https://swoosh.hexdocs.pm/Swoosh.html#module-installation for details.
 end
+
+config :ai_control, AiControl.Testing.ProcessExecutor,
+  database_url: System.get_env("TEST_RUNNER_DATABASE_URL"),
+  executable: System.get_env("TEST_RUNNER_EXECUTABLE")
+
+config :ai_control, AiControl.Guards.Feeds,
+  packages:
+    (case Jason.decode(System.get_env("GUARD_FEED_PACKAGES", "{}")) do
+       {:ok, packages} when is_map(packages) -> packages
+       _ -> raise "GUARD_FEED_PACKAGES must be an operator-owned JSON object"
+     end)
+
+if System.get_env("AI_CONTROL_ISOLATED_RUNNER") == "1" do
+  runner_url = System.fetch_env!("TEST_RUNNER_DATABASE_URL")
+  runner_uri = URI.parse(runner_url)
+  runner_database = runner_uri.path |> to_string() |> String.trim_leading("/") |> URI.decode()
+
+  if !Regex.match?(~r/\A[a-zA-Z0-9_][a-zA-Z0-9_-]{0,62}\z/, runner_database) ||
+       runner_database == System.fetch_env!("AI_CONTROL_PRIMARY_DATABASE") ||
+       runner_uri.query not in [nil, "ssl=true", "ssl=false"],
+     do: raise("The test runner must use a separate database")
+
+  config :ai_control, AiControl.Repo,
+    url: runner_url,
+    pool: DBConnection.ConnectionPool,
+    pool_size: 10,
+    log: false
+
+  config :ai_control, AiControlWeb.Endpoint,
+    server: false,
+    watchers: [],
+    check_origin: false
+
+  config :ai_control, Oban, testing: :manual
+  config :ai_control, :dns_cluster_query, nil
+  config :logger, level: :error
+end

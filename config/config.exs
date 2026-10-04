@@ -91,6 +91,14 @@ config :ai_control, :http_log_options,
   log_protocol_errors: false,
   log_client_closures: false
 
+config :ai_control, Oban,
+  repo: AiControl.Repo,
+  engine: Oban.Engines.Basic,
+  queues: [reports: 2, tests: 1, maintenance: 1],
+  lifeline: [rescue_after: 10_800],
+  pruner: [max_age: 2_592_000],
+  cron: [crontab: [{"0 * * * *", AiControl.Background.Workers.Cleanup}]]
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

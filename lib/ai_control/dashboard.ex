@@ -6,6 +6,7 @@ defmodule AiControl.Dashboard do
   alias AiControl.Audit.Filters
   alias AiControl.{Budgets, Policies, Repo}
   alias AiControl.Budgets.{Bucket, Reservation}
+  alias AiControl.Guards.Feeds
   alias AiControl.Organizations.Access
 
   def overview(scope, filters) do
@@ -214,9 +215,9 @@ defmodule AiControl.Dashboard do
 
   def signatures(scope) do
     with {:ok, current} <- Access.authorize(scope, "signatures.read"),
-         {:ok, policy} <- Policies.summary(current, :signatures) do
-      catalog = AiControl.Guards.Registry.catalog()
-
+         {:ok, policy} <- Policies.summary(current, :signatures),
+         {:ok, catalog} <-
+           Feeds.catalog(current.organization.id, policy.set || "builtin.v1") do
       signatures =
         catalog.rules
         |> Enum.filter(fn {id, _} -> String.starts_with?(id, "exploit.") end)

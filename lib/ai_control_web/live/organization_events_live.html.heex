@@ -6,14 +6,23 @@
           Investigate actual decisions and usage. Audit evidence contains no interaction content.
         </p>
       </div>
-      <.link
-        :if={"events.export" in @current_scope.grants.permissions}
-        id="events-export"
-        href={
-          ~p"/organizations/#{@current_scope.organization.id}/events/export?#{ReportingHTML.filter_params(@filters)}"
-        }
-        class="button-secondary"
-      ><.icon name="hero-arrow-down-tray" class="size-4" /> Export JSONL</.link>
+      <div :if={"events.export" in @current_scope.grants.permissions} class="flex flex-wrap gap-2">
+        <button
+          id="events-background-export"
+          type="button"
+          phx-click="background_export"
+          phx-disable-with="Queuing…"
+          class="button-primary"
+        ><.icon name="hero-arrow-down-tray" class="size-4" /> Export in background</button>
+        <.link
+          :if={"events.export" in @current_scope.grants.permissions}
+          id="events-export"
+          href={
+            ~p"/organizations/#{@current_scope.organization.id}/events/export?#{ReportingHTML.filter_params(@filters)}"
+          }
+          class="button-secondary"
+        ><.icon name="hero-arrow-down-tray" class="size-4" /> Export JSONL</.link>
+      </div>
     </div>
     <ReportingHTML.filters form={@form} id="event-filters" detailed />
     <p class="report-range muted" id="event-time-range">
