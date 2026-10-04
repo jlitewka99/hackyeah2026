@@ -47,6 +47,37 @@ defmodule AiControl.TestingTest do
     assert {:error, :invalid_result} = Protocol.case_result(put_in(row, ["status"], "success"))
   end
 
+  test "closed child stdin returns a failure without killing its worker" do
+    scope = organization_fixture()
+    {:ok, run} = Background.enqueue(scope, "gateway_tests")
+    executable = Path.join(System.tmp_dir!(), "closed-runner-#{Ecto.UUID.generate()}")
+
+    File.write!(executable, """
+    #!/bin/sh
+    IFS= read -r command
+    exec 0<&-
+    printf 'AI_CONTROL_CASE {"case_id":"allow","status":"passed","duration_us":1,"evidence":{}}\\n'
+    sleep 3
+    """)
+
+    File.chmod!(executable, 0o700)
+    on_exit(fn -> File.rm(executable) end)
+
+    Application.put_env(:ai_control, ProcessExecutor,
+      database_url: "ecto://localhost/ai_control_closed_pipe_test",
+      executable: executable
+    )
+
+    supervisor = start_supervised!(Task.Supervisor)
+
+    task =
+      Task.Supervisor.async_nolink(supervisor, fn ->
+        ProcessExecutor.run(run, fn _ -> :ok end)
+      end)
+
+    assert {:error, :runner_failed} = Task.await(task, 10_000)
+  end
+
   @tag :runner
   @tag timeout: 180_000
   test "separate process executes real HTTP, audit, budgets and sandbox without writing primary fixtures",

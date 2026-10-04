@@ -181,13 +181,14 @@ application's normal database service.
 
 | Check | Result |
 | --- | --- |
-| `mix precommit` with dedicated runner URL | 612 passed, 11 excluded local-model tests after integrating current main; formatting, warning-free compilation, lockfile, Credo and JS checks passed |
+| `mix precommit` with dedicated runner URL | 648 passed, 13 excluded local-model tests after integrating current main; formatting, warning-free compilation, lockfile, Credo and JS checks passed |
 | `mix assets.build` | Passed |
 | `mix dialyzer` | Passed, zero type errors |
 | `mix security` | Passed configured medium threshold; dependency audit reports no vulnerabilities |
 | Production release build and child executor | Passed; 15/15 Controlled HTTP cases, real audit/accounting/sandbox, parent fixtures isolated |
 | Release child after parent input closes | Exit 5 after the first case; parent-loss termination observed |
 | Runner cancellation integration | Passed; stops after first validated case and does not publish an artifact |
+| Closed child stdin | Regression passed; a broken pipe returns `runner_failed` without killing the worker |
 | Gateway with Oban supervisor stopped | Allow and fail-closed decisions and synchronous audit still pass |
 | Concurrent equivalent submissions | Four committed concurrent callers share one run and one job |
 | Export/retry/access/expiry/feed tests | Passed; 503-event batching, manifest resume excluding later commits, checksums, revocation, tenant isolation, immutable feed, activation/rollback and bounded scanning |
@@ -202,11 +203,22 @@ benchmark output paths are operator CLI parameters and the dataset path is
 application-owned. Existing dashboard SQL, websocket configuration and policy
 upload path observations also remain. No medium/high finding was reported.
 
-The final branch integrates main `e072dd0`, including its MCP and buffered SSE
-work. The supervisor conflict was resolved by preserving both Oban and MCP
-sessions. The complete merged regression suite includes those existing tests;
-the closed `gateway.v1` runner continues to cover its shipped chat/tool scenarios.
-This merge did not alter the reviewed Step 16 frontend.
+The final branch integrates main `6366bd9`, including MCP, buffered SSE and
+Knowledge. Oban and MCP sessions both remain supervised; grants and routes
+preserve Tests/Reports and Knowledge. Schema v5 combines imported signature
+selection with Knowledge/memory switches and the NER rule selector. An integration
+test verifies the Draft roundtrip, activation and request snapshot with both
+control sets present. Schemas v1–v4 retain their validation and checksum behavior.
+The merged policy controls passed a scoped independent UI review in both device
+classes and themes. The closed `gateway.v1` runner retains its shipped chat/tool
+scenarios; the full regression suite also includes incumbent MCP/SSE/Knowledge.
+
+[Linux CI 37175791514](https://github.com/jlitewka99/hackyeah2026/actions/runs/37175791514)
+on earlier commit `518a14b` passed Quality, Tests, Dialyzer and Security, but its
+container release runner failed with `epipe`. The child port is now unlinked and
+monitored, pending results are consumed before idle heartbeats, and closure
+handles a concurrent child exit. The regression and final macOS production
+release pass; the Linux rerun is pending.
 
 The UI uses the existing English workspace components, paired HEEx templates,
 streams and stable DOM IDs. Bounded visual verification and the independent
@@ -219,9 +231,10 @@ Impeccable review/documentation handoffs are recorded in
 - Successful Live gateway + Polish benchmark requires all pinned local models
   and sidecars. It was not observed here. Controlled success exercises synthetic
   policies and providers; it does not qualify model accuracy or complete Step 11B.
-- The extended `docker/smoke` now runs the isolated release suite against a second
-  PostgreSQL database. Its Linux container execution and new CI run have not yet
-  been observed locally; macOS production release execution was observed.
+- The extended `docker/smoke` runs the isolated release suite against a second
+  PostgreSQL database. Its first Linux run exposed the repaired `epipe` failure;
+  successful Linux acceptance awaits the rerun. The final macOS production
+  release passed. The local Docker daemon is unavailable.
 - Target-hardware latency/resource coexistence remains to be measured. Process
   isolation shares resources and is not a guarantee against resource contention.
 - `.impeccable/design.json` was already stale. The one detector pass produced

@@ -29,12 +29,22 @@ defmodule AiControl.Policies.Configuration do
     ]
 
   def default(version \\ 1)
-  def default(5), do: default(4) |> Map.put("schema_version", 5)
+  def default(5), do: upgrade(default(4), 5)
   def default(4), do: default(3) |> Map.put("schema_version", 4)
   def default(3), do: ConfigurationV2.default(2) |> Map.put("schema_version", 3)
   def default(version), do: ConfigurationV2.default(version)
   def upgrade(source, version \\ 3)
-  def upgrade(source, 5), do: upgrade(source, 4) |> Map.put("schema_version", 5)
+  def upgrade(%{"schema_version" => 5} = source, 5), do: source
+
+  def upgrade(source, 5),
+    do:
+      if(source["schema_version"] == 4, do: source, else: upgrade(source, 4))
+      |> Map.merge(%{
+        "schema_version" => 5,
+        "knowledge" => ConfigurationV5.defaults(),
+        "ner_model_set" => "pl-nkjp.v2"
+      })
+
   def upgrade(source, 4), do: upgrade(source, 3) |> Map.put("schema_version", 4)
   def upgrade(source, 2), do: ConfigurationV2.upgrade(source)
 

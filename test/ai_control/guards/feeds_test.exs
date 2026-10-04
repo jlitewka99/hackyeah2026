@@ -7,7 +7,7 @@ defmodule AiControl.Guards.FeedsTest do
   alias AiControl.Guards.{Feeds, Signatures}
   alias AiControl.Guards.Finding
   alias AiControl.{Policies, Repo}
-  alias AiControl.Policies.Configuration
+  alias AiControl.Policies.{Configuration, Draft}
 
   setup do
     config = Application.get_env(:ai_control, Feeds)
@@ -130,6 +130,49 @@ defmodule AiControl.Guards.FeedsTest do
                "exploit",
                detectors
              )
+  end
+
+  test "v5 retains Knowledge and NER controls alongside an imported signature snapshot" do
+    scope = organization_fixture()
+    agent = agent_fixture(scope)
+    configure(package())
+    {:ok, set} = Feeds.import_package(scope, "operator.v1")
+
+    source =
+      Configuration.default(5)
+      |> put_in(["detector_sets", "signatures"], set.set_id)
+      |> Map.put("ner_model_set", "pl-nkjp.v1")
+      |> Map.put("knowledge", %{
+        "enabled" => true,
+        "memory_write_enabled" => true,
+        "sources" => ["memory"],
+        "trust_levels" => ["internal"]
+      })
+
+    assert {:ok, config} =
+             source |> Draft.from_source() |> Draft.source() |> Configuration.validate()
+
+    assert config.settings["knowledge"] == source["knowledge"]
+    assert config.settings["ner_model_set"] == "pl-nkjp.v1"
+    assert config.settings["detector_sets"]["signatures"] == set.set_id
+    assert {:ok, version} = Policies.create_version(scope, config.source)
+    {:ok, current} = Policies.current(scope)
+    assert {:ok, _} = Policies.activate(scope, version.id, current.set.revision)
+    {:ok, {_key, token}} = AiControl.ApiKeys.create_key(scope, agent.id, %{label: "Synthetic v5"})
+    {:ok, principal} = AiControl.ApiKeys.authenticate(token)
+    assert {:ok, snapshot, _} = Policies.snapshot_for_models(principal, nil)
+    assert snapshot.settings["knowledge"] == source["knowledge"]
+    assert snapshot.settings["ner_model_set"] == "pl-nkjp.v1"
+
+    assert {:ok, result} =
+             Signatures.assess(
+               ["danger.literal"],
+               %{organization_id: scope.organization.id},
+               snapshot,
+               []
+             )
+
+    assert result.detections != []
   end
 
   defp package,

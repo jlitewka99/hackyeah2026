@@ -49,10 +49,17 @@ defmodule AiControl.Testing.ProcessExecutor do
           {:env, environment(run, url)}
         ])
 
+      # A closed child stdin can terminate the port with :epipe. Observe that
+      # failure as a result instead of letting its link terminate the worker.
+      Process.unlink(port)
+      monitor = :erlang.monitor(:port, port)
+
       try do
-        await(port, run, on_case, System.monotonic_time(:millisecond) + 7_200_000, 0)
+        ping(port)
+        await({port, monitor}, run, on_case, System.monotonic_time(:millisecond) + 7_200_000, 0)
       after
-        if Port.info(port), do: Port.close(port)
+        Process.demonitor(monitor, [:flush])
+        close(port)
       end
     end
   rescue
@@ -109,18 +116,16 @@ defmodule AiControl.Testing.ProcessExecutor do
     if Code.ensure_loaded?(Mix), do: to_string(Mix.env()), else: "prod"
   end
 
-  defp await(port, run, on_case, deadline, count) do
+  defp await({port, monitor} = session, run, on_case, deadline, count) do
     with {:ok, _, _} <- Background.authorized_run(run),
          true <- System.monotonic_time(:millisecond) < deadline do
-      ping(port)
-
       receive do
         {^port, {:data, {:eol, "AI_CONTROL_CASE " <> data}}} ->
           with true <- count < 1000,
                {:ok, row} <- Jason.decode(data),
                {:ok, safe} <- Protocol.case_result(row),
                :ok <- on_case.(safe) do
-            await(port, run, on_case, deadline, count + 1)
+            await(session, run, on_case, deadline, count + 1)
           else
             _ -> {:error, :invalid_result}
           end
@@ -134,10 +139,16 @@ defmodule AiControl.Testing.ProcessExecutor do
         {^port, {:exit_status, _}} ->
           {:error, :runner_failed}
 
+        {:DOWN, ^monitor, :port, ^port, _} ->
+          {:error, :runner_failed}
+
         {^port, {:data, _}} ->
-          await(port, run, on_case, deadline, count)
+          await(session, run, on_case, deadline, count)
       after
-        1000 -> await(port, run, on_case, deadline, count)
+        1000 ->
+          # Drain result lines before heartbeats, including DONE from an exiting child.
+          ping(port)
+          await(session, run, on_case, deadline, count)
       end
     else
       false -> {:error, :runner_timeout}
@@ -148,6 +159,12 @@ defmodule AiControl.Testing.ProcessExecutor do
   defp ping(port) do
     # The child may already have exited while its final IPC lines remain in our mailbox.
     Port.command(port, "ping\n")
+  rescue
+    ArgumentError -> :ok
+  end
+
+  defp close(port) do
+    Port.close(port)
   rescue
     ArgumentError -> :ok
   end

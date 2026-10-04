@@ -177,6 +177,15 @@ defmodule AiControlWeb.Layouts do
         <.icon name="hero-cpu-chip" class="size-4 shrink-0" /> Agents
       </.link>
       <.link
+        :if={@current_scope.organization && "knowledge.read" in @current_scope.grants.permissions}
+        navigate={~p"/organizations/#{@current_scope.organization.id}/knowledge"}
+        class="nav-link"
+        aria-current={@active_page == "knowledge" && "page"}
+        id={"#{@id}-knowledge"}
+      >
+        <.icon name="hero-book-open" class="size-4 shrink-0" /> Knowledge
+      </.link>
+      <.link
         :if={@current_scope.organization && "api_keys.read" in @current_scope.grants.permissions}
         navigate={~p"/organizations/#{@current_scope.organization.id}/api-keys"}
         class="nav-link"

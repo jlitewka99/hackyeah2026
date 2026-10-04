@@ -58,6 +58,19 @@ docker run --rm --entrypoint /opt/tokenizer/bin/python -e PYTHONPATH=/app/tokeni
   -v "$PWD/tests/tokenizer:/app/tests/tokenizer:ro" "$image" -m unittest discover -s /app/tests/tokenizer
 docker exec "$container" /opt/tokenizer/bin/python /app/tokenizer/models.py verify /app/tokenizer-models
 docker exec "$container" /opt/ner/bin/python /app/ner/benchmark.py | tee /tmp/step7-ner-benchmark.json
+docker exec "$container" /opt/ner/bin/python /app/ner/benchmark_v2.py | tee /tmp/step18-ner-benchmark.json
+docker exec "$container" /app/bin/ai_control rpc '
+  {:ok, %{settings: settings}} = AiControl.Policies.Configuration.validate(AiControl.Policies.Configuration.default(5))
+  config = AiControl.Gateway.Config.get() |> Keyword.put(:ner_model_set, "pl-nkjp.v2")
+  true = AiControl.Guards.Ner.ready?(config)
+  text = "😀 Adres: ulica Żółta 7 m. 4\n01-234 Łódź"
+  {:ok, result} = AiControl.Guards.Ner.assess([text], nil, %{settings: settings}, config)
+  true = Enum.any?(result.detections, &(&1.rule_id == "ner.address.v2"))
+  {:ok, safe} = AiControl.Gateway.Content.redact(text, Enum.map(result.detections, & &1.location))
+  false = String.contains?(safe, "Żółta")
+  true = String.valid?(safe)
+  IO.puts("NER v2 release transport and multiline UTF-8 redaction passed")'
+
 docker exec "$container" /app/bin/ai_control rpc '
   config = AiControl.Gateway.Config.get()
   true = AiControl.Guards.Semantic.ready?(config)

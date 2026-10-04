@@ -42,6 +42,14 @@ jobs:
           path: /tmp/step7-ner-benchmark.json
           if-no-files-found: warn
 
+      - name: Preserve Linux NER v2 measurements
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: step18-linux-ner-benchmark
+          path: /tmp/step18-ner-benchmark.json
+          if-no-files-found: warn
+
   prompt-guard:
     name: Gated Prompt Guard container acceptance
     if: github.event_name == 'workflow_dispatch' && inputs.prompt_guard

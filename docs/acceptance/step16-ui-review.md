@@ -66,3 +66,11 @@ Only one detector pass ran. Its five incumbent typography advisories and stale
 `.impeccable/design.json` were reported without an unrequested system refresh.
 The separate documenter compares this extension to existing PRODUCT.md/DESIGN.md
 in [step16-design-documentation.md](step16-design-documentation.md).
+
+The later merge with main `6366bd9` combines Knowledge/memory and pinned NER
+controls with the imported-signature selector in schema v5. Four fresh captures
+(`step16-step18-policy-{desktop,mobile}-{light,dark}.jpg`) and their manifest
+record document widths 1440/390, both control sets and the selected draft values.
+The same independent reviewer returned **ship**, with no requested fixes, for
+fidelity/persistence of these merged policy controls. This scoped verdict
+supplements the earlier fix review and does not reopen unrelated surfaces.
