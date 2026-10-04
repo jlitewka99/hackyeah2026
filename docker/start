@@ -2,6 +2,7 @@
 set -euo pipefail
 cd /app
 pids=()
+services=()
 cleanup() {
   trap '' TERM INT
   if ((${#pids[@]})); then
@@ -18,18 +19,41 @@ trap 'cleanup; exit 0' TERM INT
 ./bin/ai_control eval 'AiControl.Release.migrate()'
 /opt/ner/bin/python -m uvicorn service:app --app-dir /app/ner --host 127.0.0.1 --port 8001 --workers 1 --timeout-graceful-shutdown 10 --no-access-log --log-level critical &
 pids+=("$!")
+services+=(ner)
 /opt/semantic/bin/python -m uvicorn service:app --app-dir /app/semantic --host 127.0.0.1 --port 8003 --workers 1 --timeout-graceful-shutdown 10 --no-access-log --log-level critical &
 pids+=("$!")
+services+=(qwen)
 /opt/tokenizer/bin/python -m uvicorn service:app --app-dir /app/tokenizer --host 127.0.0.1 --port 8002 --workers 1 --timeout-graceful-shutdown 10 --no-access-log --log-level critical &
 pids+=("$!")
+services+=(tokenizer)
 if [[ "${PROMPT_GUARD_ENABLED:-0}" == 1 ]]; then
   /opt/semantic/bin/python -m uvicorn service:app --app-dir /app/prompt_guard --host 127.0.0.1 --port 8004 --workers 1 --timeout-graceful-shutdown 10 --no-access-log --log-level critical &
   pids+=("$!")
+  services+=(prompt_guard)
 fi
 ./bin/ai_control start &
 pids+=("$!")
+services+=(phoenix)
 status=0
-wait -n "${pids[@]}" || status=$?
+exited_pid=''
+wait -n -p exited_pid "${pids[@]}" || status=$?
+for index in "${!pids[@]}"; do
+  if [[ "${pids[$index]}" == "${exited_pid:-}" ]]; then
+    printf 'supervised_child_exit service=%s status=%s\n' "${services[$index]}" "$status" >&2
+    break
+  fi
+done
+if [[ -r /sys/fs/cgroup/memory.events ]]; then
+  while read -r event count; do
+    case "$event" in
+      low|high|max|oom|oom_kill|oom_group_kill)
+        if [[ "$count" =~ ^[0-9]+$ ]]; then
+          printf 'container_memory_event name=%s count=%s\n' "$event" "$count" >&2
+        fi
+        ;;
+    esac
+  done < /sys/fs/cgroup/memory.events
+fi
 cleanup
 # A clean but unexpected child exit also stops the container with a failure.
 if ((status == 0)); then status=1; fi

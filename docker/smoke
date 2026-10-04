@@ -1,6 +1,6 @@
 #!/bin/bash
 # Linux acceptance: real models, release transport, isolation and all child failures.
-set -euo pipefail
+set -Eeuo pipefail
 image=${1:-ai-control:step7}
 network="ai-control-smoke-$(date +%s)-$$"
 container="$network-app"
@@ -10,6 +10,15 @@ cleanup() {
   docker network rm "$network" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
+report_failure() {
+  local code="$1" line="$2"
+  trap - ERR
+  printf 'Smoke failed: line=%s exit=%s\n' "$line" "$code" >&2
+  docker inspect -f 'container_state={{.State.Status}} exit={{.State.ExitCode}} oom_killed={{.State.OOMKilled}}' "$container" >&2 || true
+  docker logs --tail 80 "$container" >&2 || true
+  return "$code"
+}
+trap 'report_failure "$?" "$LINENO"' ERR
 docker network create "$network" >/dev/null
 docker run -d --name "$postgres" --network "$network" --network-alias ai-control-step7-postgres \
   -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=ai_control_ci \
@@ -27,11 +36,11 @@ start_app() {
   for _ in $(seq 1 180); do
     if docker exec "$container" /app/docker/healthcheck >/dev/null 2>&1; then return; fi
     if [[ $(docker inspect -f '{{.State.Running}}' "$container") != true ]]; then
-      docker logs "$container"; return 1
+      return 1
     fi
     sleep 1
   done
-  docker logs "$container"; return 1
+  return 1
 }
 wait_for_exit() {
   local running
