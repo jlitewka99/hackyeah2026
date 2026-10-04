@@ -26,6 +26,8 @@ defmodule AiControlWeb.PolicyHTML do
   def severities, do: Configuration.severities()
   def safety_categories, do: Configuration.safety_categories()
 
+  def workflow_budget_fields(form), do: Configuration.budget_fields(schema_version(form))
+
   def tool_catalog, do: Catalog.all()
 
   def tool_label(tool),
@@ -54,7 +56,7 @@ defmodule AiControlWeb.PolicyHTML do
 
   def label_rule?(form, category),
     do:
-      schema_version(form) in [3, 4] &&
+      schema_version(form) in [3, 4, 5] &&
         (category == "content_safety" ||
            (category == "prompt_injection" && injection_provider(form) == "qwen"))
 
@@ -88,13 +90,13 @@ defmodule AiControlWeb.PolicyHTML do
 
   def label_rule_settings?(settings, category),
     do:
-      settings["schema_version"] in [3, 4] &&
+      settings["schema_version"] in [3, 4, 5] &&
         (category == "content_safety" ||
            (category == "prompt_injection" &&
               get_in(settings, ["guards", "semantic", "provider"]) != "prompt_guard"))
 
   def rule_actions(form, category) do
-    if category in ~w(prompt_injection content_safety) && schema_version(form) in [3, 4],
+    if category in ~w(prompt_injection content_safety) && schema_version(form) in [3, 4, 5],
       do: [{"Allow", "allow"}, {"Block", "block"}],
       else: [{"Allow", "allow"}, {"Redact", "redact"}, {"Block", "block"}]
   end

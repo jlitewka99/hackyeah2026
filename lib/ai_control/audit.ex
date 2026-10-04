@@ -2,7 +2,7 @@ defmodule AiControl.Audit do
   @moduledoc "Synchronous, tenant-scoped audit writes with an explicit content-free serializer."
   import Ecto.Query
 
-  alias AiControl.Audit.{Event, Filters}
+  alias AiControl.Audit.{Event, Filters, WorkflowVisibility}
   alias AiControl.Budgets.Usage
   alias AiControl.Gateway.Measurements
   alias AiControl.Organizations
@@ -20,16 +20,20 @@ defmodule AiControl.Audit do
   }
 
   alias AiControl.Tools.Catalog
+  alias AiControl.Workflows
 
   @policy_events ~w(policy.version_created policy.activated policy.rolled_back policy.inheritance_restored)
   @admin_events ~w(organization.created organization.status_changed member.access_changed member.removed superadmin.transferred invitation.issued invitation.revoked invitation.accepted invitation.delivery_failed) ++
                   @policy_events
   @snapshot_fields ~w(status role permissions agent_count model_count grants_fingerprint grants_fingerprint_key_id user_id previous_superadmin_id next_superadmin_id membership_id invitation_id policy_version_id policy_checksum policy_profile policy_source)a
 
-  @gateway_codes ~w(completed invalid_request input_too_large forbidden agent_not_allowed model_not_allowed policy_unavailable rate_limited capacity_exceeded guard_unavailable policy_blocked redaction_unavailable audit_unavailable upstream_timeout upstream_unavailable upstream_rejected upstream_invalid_response response_too_large model_unavailable model_digest_mismatch request_budget_exceeded token_budget_exceeded budget_unavailable budget_conflict tokenizer_unavailable)
+  @workflow_codes ~w(workflow_context_required workflow_terminal workflow_conflict workflow_limit_exceeded workflow_unavailable)
+  @gateway_codes @workflow_codes ++
+                   ~w(completed invalid_request input_too_large forbidden agent_not_allowed model_not_allowed policy_unavailable rate_limited capacity_exceeded guard_unavailable policy_blocked redaction_unavailable audit_unavailable upstream_timeout upstream_unavailable upstream_rejected upstream_invalid_response response_too_large model_unavailable model_digest_mismatch request_budget_exceeded token_budget_exceeded budget_unavailable budget_conflict tokenizer_unavailable)
   def gateway_codes, do: @gateway_codes
 
-  @tool_codes ~w(completed dispatching invalid_request input_too_large forbidden agent_not_allowed tool_not_allowed invalid_tool_request invalid_tool_arguments tool_request_too_large tool_resource_not_allowed tool_resource_not_found tool_redirect_blocked tool_upstream_unavailable tool_invalid_result tool_unavailable tool_timeout tool_cancelled tool_interrupted tool_execution_exists idempotency_conflict tool_budget_exceeded budget_unavailable policy_unavailable guard_unavailable policy_blocked redaction_unavailable audit_unavailable capacity_exceeded rate_limited)
+  @tool_codes @workflow_codes ++
+                ~w(completed dispatching invalid_request input_too_large forbidden agent_not_allowed tool_not_allowed invalid_tool_request invalid_tool_arguments tool_request_too_large tool_resource_not_allowed tool_resource_not_found tool_redirect_blocked tool_upstream_unavailable tool_invalid_result tool_unavailable tool_timeout tool_cancelled tool_interrupted tool_execution_exists idempotency_conflict tool_budget_exceeded budget_unavailable policy_unavailable guard_unavailable policy_blocked redaction_unavailable audit_unavailable capacity_exceeded rate_limited)
 
   def record_tool(identity, request_id, type, code, duration, policy, evidence) do
     with true <-
@@ -42,7 +46,7 @@ defmodule AiControl.Audit do
       event =
         struct!(
           Event,
-          Map.merge(attrs, %{
+          Map.merge(Map.merge(attrs, Workflows.audit_reference(identity, request_id)), %{
             request_id: request_id,
             kind: :gateway,
             event_type: type,
@@ -58,6 +62,37 @@ defmodule AiControl.Audit do
         )
 
       persist(event)
+    else
+      _ -> {:error, :invalid_audit_data}
+    end
+  end
+
+  def record_workflow(identity, run_id, participant_id, event, reason) do
+    with true <- event in ~w(created delegated completed stopped limit_exceeded interrupted),
+         true <-
+           Validation.uuid?(run_id) &&
+             (is_nil(participant_id) || Validation.uuid?(participant_id)),
+         true <-
+           is_nil(reason) ||
+             reason in ~w(max_duration_seconds max_calls max_tokens tool_calls max_delegation_depth max_repeated_actions process_interrupted),
+         {:ok, attrs} <- gateway_identity(identity) do
+      persist(
+        struct!(
+          Event,
+          Map.merge(attrs, %{
+            request_id: Ecto.UUID.generate(),
+            run_id: run_id,
+            participant_id: participant_id,
+            kind: :gateway,
+            event_type: "workflow." <> event,
+            target_id: run_id,
+            stage: :input,
+            reason_codes: if(reason, do: [reason], else: []),
+            occurred_at: DateTime.utc_now(),
+            data: %{}
+          })
+        )
+      )
     else
       _ -> {:error, :invalid_audit_data}
     end
@@ -105,7 +140,7 @@ defmodule AiControl.Audit do
       event =
         struct!(
           Event,
-          Map.merge(attrs, %{
+          Map.merge(Map.merge(attrs, Workflows.audit_reference(identity, request_id)), %{
             request_id: request_id,
             kind: :gateway,
             event_type: gateway_event_type(code),
@@ -129,7 +164,7 @@ defmodule AiControl.Audit do
   defp observation?(nil), do: true
 
   defp observation?(%{operation: operation, timings: timings} = value),
-    do: map_size(value) == 2 && operation in ~w(chat models) && Measurements.valid?(timings)
+    do: map_size(value) == 2 && operation in ~w(chat models runs) && Measurements.valid?(timings)
 
   defp observation?(_), do: false
 
@@ -291,6 +326,8 @@ defmodule AiControl.Audit do
         agent_id: context.agent_id,
         api_key_id: context.api_key_id,
         request_id: context.request_id,
+        run_id: context.run_id,
+        participant_id: context.participant_id,
         kind: :decision,
         event_type: "security.decision",
         target_id: assessment.id,
@@ -367,15 +404,14 @@ defmodule AiControl.Audit do
          offset = Keyword.get(opts, :offset, 0),
          true <- is_integer(limit) && limit in 1..200 && is_integer(offset) && offset >= 0 do
       {:ok,
-       Repo.all(
-         from(e in Event,
-           where: e.organization_id == ^current.organization.id,
-           order_by: [desc: e.occurred_at, desc: e.id],
-           limit: ^limit,
-           offset: ^offset
-         ),
-         log: false
-       )}
+       from(e in Event,
+         where: e.organization_id == ^current.organization.id,
+         order_by: [desc: e.occurred_at, desc: e.id],
+         limit: ^limit,
+         offset: ^offset
+       )
+       |> WorkflowVisibility.query(current)
+       |> Repo.all(log: false)}
     else
       {:error, _} -> {:error, :forbidden}
       _ -> {:error, :invalid_audit_data}
@@ -386,7 +422,15 @@ defmodule AiControl.Audit do
     with {:ok, current} <- Access.authorize(scope, "events.read"),
          {:ok, id} <- Ecto.UUID.cast(id),
          %Event{} = event <-
-           Repo.get_by(Event, [id: id, organization_id: current.organization.id], log: false) do
+           Repo.one(
+             WorkflowVisibility.query(
+               from(e in Event,
+                 where: e.id == ^id and e.organization_id == ^current.organization.id
+               ),
+               current
+             ),
+             log: false
+           ) do
       {:ok, event}
     else
       {:error, :forbidden} -> {:error, :forbidden}
@@ -398,6 +442,7 @@ defmodule AiControl.Audit do
     with {:ok, current} <- Access.authorize(scope, "events.read") do
       events =
         Filters.query(current.organization.id, filters)
+        |> WorkflowVisibility.query(current)
         |> Filters.after_cursor(filters.cursor)
         |> order_by([e], desc: e.occurred_at, desc: e.id)
         |> limit(51)
@@ -417,13 +462,12 @@ defmodule AiControl.Audit do
     with {:ok, current} <- Access.authorize(scope, "events.read"),
          {:ok, id} <- Ecto.UUID.cast(request_id) do
       {:ok,
-       Repo.all(
-         from(e in Event,
-           where: e.organization_id == ^current.organization.id and e.request_id == ^id,
-           order_by: [asc: e.occurred_at, asc: e.id]
-         ),
-         log: false
-       )}
+       from(e in Event,
+         where: e.organization_id == ^current.organization.id and e.request_id == ^id,
+         order_by: [asc: e.occurred_at, asc: e.id]
+       )
+       |> WorkflowVisibility.query(current)
+       |> Repo.all(log: false)}
     else
       _ -> {:error, :forbidden}
     end

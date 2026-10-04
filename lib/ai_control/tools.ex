@@ -1,17 +1,21 @@
 defmodule AiControl.Tools do
   @moduledoc "Verified-agent tool firewall with durable, audited sandbox execution."
   alias AiControl.ApiKeys.Principal
-  alias AiControl.Policies
+  alias AiControl.{Policies, Workflows}
   alias AiControl.Policy.Snapshot
   alias AiControl.Security.Validation
   alias AiControl.Tools.{Executor, ToolRequest}
 
   def execute(identity, params, opts \\ []), do: Executor.execute(identity, params, opts)
 
-  def prepare(%Principal{} = identity, params) do
+  def prepare(identity, params, opts \\ [])
+
+  def prepare(%Principal{} = identity, params, opts) do
     with true <- identity_valid?(identity),
          {:ok, policy, current} <- Policies.snapshot_for_models(identity, nil),
          {:ok, request} <- ToolRequest.new(current, params, policy),
+         {:ok, context} <- Workflows.resolve(current, policy, opts[:run_context]),
+         request = %{request | run_context: context},
          :ok <- authorize(request) do
       {:ok, request}
     else
@@ -20,12 +24,14 @@ defmodule AiControl.Tools do
     end
   end
 
-  def prepare(_, _), do: {:error, :forbidden}
+  def prepare(_, _, _), do: {:error, :forbidden}
 
   @doc "Recheck live identity before effects, retaining the request's policy snapshot."
   def authorize(%ToolRequest{} = request) do
     with true <- identifiers?(request) && Snapshot.valid?(request.policy),
          {:ok, _} <- Policies.refresh_identity(ToolRequest.principal(request)),
+         {:ok, _} <-
+           Workflows.resolve(ToolRequest.principal(request), request.policy, request.run_context),
          :ok <- ToolRequest.validate_arguments(request.tool, request.arguments) do
       settings = request.policy.settings || %{}
       agents = Map.get(settings, "allowed_agents", [])

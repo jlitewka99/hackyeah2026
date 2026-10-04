@@ -9,7 +9,8 @@ defmodule AiControlWeb.GatewayBody do
   def init(opts), do: opts
 
   def call(%{method: "POST", request_path: path} = conn, _)
-      when path in ["/v1/chat/completions", "/v1/tool_calls"] do
+      when path in ["/v1/chat/completions", "/v1/tool_calls", "/v1/runs"] or
+             (is_binary(path) and binary_part(path, 0, min(byte_size(path), 9)) == "/v1/runs/") do
     conn = ApiKeyAuth.call(conn, [])
 
     if conn.halted do
@@ -59,6 +60,7 @@ defmodule AiControlWeb.GatewayBody do
   end
 
   defp input_limit(%{request_path: "/v1/tool_calls"}), do: 65_536
+  defp input_limit(%{request_path: "/v1/runs" <> _}), do: 4096
   defp input_limit(_), do: Config.get(:input_bytes)
 
   defp reject(conn, code, retry \\ nil) do
@@ -82,7 +84,11 @@ defmodule AiControlWeb.GatewayBody do
           nil,
           :input,
           nil,
-          %{operation: "chat", timings: %{}}
+          %{
+            operation:
+              if(String.starts_with?(conn.request_path, "/v1/runs"), do: "runs", else: "chat"),
+            timings: %{}
+          }
         )
       end
 

@@ -45,6 +45,17 @@ defmodule AiControlWeb.GatewayError do
     )
   end
 
+  defp classify(:workflow_context_required),
+    do: {400, "A workflow run and participant are required."}
+
+  defp classify(code) when code in [:workflow_terminal, :workflow_conflict],
+    do: {409, "The workflow cannot accept this operation."}
+
+  defp classify(:workflow_limit_exceeded),
+    do: {429, "Workflow limit exceeded; the run has ended."}
+
+  defp classify(:workflow_unavailable), do: {503, "Workflow state is temporarily unavailable."}
+
   defp classify(:invalid_request), do: {400, "Unsupported or invalid request."}
 
   defp classify(code) when code in [:invalid_tool_request, :invalid_tool_arguments],

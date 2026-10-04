@@ -1,0 +1,41 @@
+# Step 15 — Impeccable finish review
+
+The fresh reviewer ran a FULL review against PRODUCT.md, DESIGN.md, design.json, the workflow surface contract, the craft floor, source and all fourteen valid desktop/mobile/light/dark captures. This is a code-led Operate extension of the incumbent reporting workspace. No separate Operate QUALITY BAR card was available; no comp applies to the confirmed list/detail extension.
+
+## FULL review disposition: fix
+
+### persistence
+
+Pass. Product/system/sidecar/surface artifacts exist. Historical reporting, identifier and type-ramp drift remains disclosed within preservation scope. FORM records the confirmed list/detail extension and exemption from a concept roll.
+
+### fidelity
+
+All fourteen required captures were valid. Incumbent system sans hierarchy, identifier-only monospace, neutral light/dark fields, flat surfaces/rules/controls, shared root usage, participant ancestry, filters→detail→audit→inline-stop flow and first viewport matched. Policy v5 fields and consequences were visible. Synthetic labels and retained uncertain usage matched product truth.
+
+Two findings: an error could also display the ordinary empty-result message, and disappearing stop/confirmation buttons did not transfer focus.
+
+### ceiling
+
+Incumbent restraint was retained. No primary detector findings or new visible floor refusal. Five pre-existing typography advisories remain. Missing QUALITY BAR limits independent ceiling qualification.
+
+### material_fixes
+
+1. Suppress `runs-empty` when `report_error` exists.
+2. Move focus to confirmation after keyboard activation, restore Stop workflow after cancellation and focus the announced terminal status after commitment.
+
+### keep
+
+Preserve neutral surfaces, flat rows, responsive limits, labeled synthetic evidence, own-key explanations and the inline stop flow.
+
+## Fix batch and verdict evidence
+
+Both findings were addressed in one source batch. Empty/error content now lives outside streamed collections with an explicit empty assign. Fixed-target focus events run after LiveView updates; terminal status is focusable and announced. The same list/detail/stop capture paths were replaced with valid final captures. Policy captures remain unchanged. Supplemental desktop/mobile errors and mobile empty-result images were supplied. Browser observations and LiveView assertions are recorded in [Step 15 acceptance](step15.md).
+
+## Verdict pass disposition: ship
+
+The same reviewer scored both listed fixes:
+
+1. **Resolved** — error captures suppress the no-match message; the genuine empty capture retains it. Source guards both states separately.
+2. **Resolved** — confirmation and stopped captures show visible focus on the intended targets. Source transfers focus on request, restores Stop workflow on cancellation and focuses the announced terminal status after commitment.
+
+Remaining: clear for this fix batch; no regression from the batch was visible. **Ship covers the two scored fixes, not whole-surface approval.** It does not certify backend, security, performance or real-model qualification. The separate documenter report preserves the existing system and records historical drift.

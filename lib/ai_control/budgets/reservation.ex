@@ -7,6 +7,8 @@ defmodule AiControl.Budgets.Reservation do
     field :organization_id, :binary_id
     field :agent_id, :binary_id
     field :request_id, :binary_id
+    field :run_id, :binary_id
+    field :participant_id, :binary_id
     field :actor_type, :string
     field :user_id, :binary_id
     field :api_key_id, :binary_id

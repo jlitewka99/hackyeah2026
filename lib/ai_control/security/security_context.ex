@@ -15,7 +15,9 @@ defmodule AiControl.Security.SecurityContext do
     :policy_version,
     :policy_checksum,
     :occurred_at,
-    :fingerprint
+    :fingerprint,
+    :run_id,
+    :participant_id
   ]
   @request_fields [:stage, :policy_version, :policy_checksum, :fingerprint]
   @derive {Inspect, only: [:organization_id, :assessment_id, :stage]}
@@ -69,10 +71,15 @@ defmodule AiControl.Security.SecurityContext do
   def valid?(%__MODULE__{} = context) do
     identifiers?(context) && identity?(context) && context.stage in [:input, :output] &&
       Validation.code?(context.policy_version) && Validation.checksum?(context.policy_checksum) &&
-      Validation.utc?(context.occurred_at) && fingerprint?(context)
+      Validation.utc?(context.occurred_at) && fingerprint?(context) && workflow?(context)
   end
 
   def valid?(_), do: false
+
+  defp workflow?(%{run_id: nil, participant_id: nil}), do: true
+
+  defp workflow?(context),
+    do: Validation.uuid?(context.run_id) && Validation.uuid?(context.participant_id)
 
   defp identifiers?(context),
     do:

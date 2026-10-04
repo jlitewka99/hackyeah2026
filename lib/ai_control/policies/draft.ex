@@ -92,7 +92,7 @@ defmodule AiControl.Policies.Draft do
       "budgets" => mapping(draft.budgets, &limits/1)
     }
 
-    if draft.schema_version in [2, 3, 4] do
+    if draft.schema_version in [2, 3, 4, 5] do
       Map.merge(source, %{
         "detector_sets" => draft.detector_sets,
         "tools" => selected_tools(draft)

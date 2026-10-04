@@ -42,6 +42,10 @@ defmodule AiControlWeb.Router do
     plug :require_permission, "events.read"
   end
 
+  pipeline :workflows_read do
+    plug :require_permission, "workflows.read"
+  end
+
   pipeline :budgets_read do
     plug :require_permission, "budgets.read"
   end
@@ -56,6 +60,12 @@ defmodule AiControlWeb.Router do
     get "/models", GatewayController, :models, log: false
     post "/chat/completions", GatewayController, :chat, log: false
     post "/tool_calls", ToolController, :create, log: false
+    post "/runs", RunController, :create, log: false
+    get "/runs", RunController, :index, log: false
+    get "/runs/:id", RunController, :show, log: false
+    post "/runs/:id/delegations", RunController, :delegate, log: false
+    post "/runs/:id/complete", RunController, :complete, log: false
+    post "/runs/:id/stop", RunController, :stop, log: false
   end
 
   scope "/", AiControlWeb do
@@ -99,6 +109,19 @@ defmodule AiControlWeb.Router do
     end
 
     post "/users/update-password", UserSessionController, :update_password
+  end
+
+  scope "/organizations/:organization_id", AiControlWeb do
+    pipe_through [:browser, :require_authenticated_user, :require_organization, :workflows_read]
+
+    live_session :workflows,
+      on_mount: [
+        {AiControlWeb.OrganizationAuth, :require_organization},
+        {AiControlWeb.WorkspaceNavigation, :default}
+      ] do
+      live "/runs", OrganizationRunsLive, :index
+      live "/runs/:run_id", OrganizationRunLive, :show
+    end
   end
 
   scope "/organizations/:organization_id", AiControlWeb do

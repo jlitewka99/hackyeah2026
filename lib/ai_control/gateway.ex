@@ -2,7 +2,7 @@ defmodule AiControl.Gateway do
   @moduledoc "Verified identity → one policy → audited input → pinned backend → audited output."
   alias AiControl.Accounts.Scope
   alias AiControl.ApiKeys.Principal
-  alias AiControl.{Audit, Budgets, Policies}
+  alias AiControl.{Audit, Budgets, Policies, Workflows}
   alias AiControl.Budgets.Usage
   alias AiControl.Gateway.{Config, Limiter, Models, Request, Response, Slots, Stages, ToolSchemas}
   alias AiControl.Gateway.Measurements
@@ -12,14 +12,35 @@ defmodule AiControl.Gateway do
     execute(identity, Keyword.put(opts, :operation, "chat"), fn current, request_id, opts ->
       with :ok <- input_size(params),
            {:ok, params} <- Request.validate(params),
-           {:ok, policy, current} <- Policies.snapshot_for_models(current, opts[:agent_id]) do
-        {result, stage} = process_chat(current, params, policy, request_id, opts)
-        {result, policy, stage}
+           {:ok, policy, current} <- Policies.snapshot_for_models(current, opts[:agent_id]),
+           {:ok, context} <- Workflows.resolve(current, policy, opts[:run_context]),
+           {:ok, context} <- Workflows.admit(context, policy, "chat", params, request_id) do
+        workflow_chat(context, current, params, policy, request_id, opts)
       else
         error -> {error, nil, :input}
       end
     end)
   end
+
+  defp workflow_chat(context, current, params, policy, request_id, opts) do
+    outcome =
+      Workflows.run(context, fn ->
+        process_chat(
+          current,
+          params,
+          policy,
+          request_id,
+          Keyword.put(opts, :run_context, context)
+        )
+      end)
+
+    workflow_outcome(outcome, policy)
+  end
+
+  defp workflow_outcome({result, stage}, policy) when stage in [:input, :output],
+    do: {result, policy, stage}
+
+  defp workflow_outcome(error, policy), do: {error, policy, :input}
 
   defp process_chat(current, params, policy, request_id, opts) do
     with :ok <- Policies.model_access(current, policy, opts[:agent_id], params["model"]),
@@ -27,7 +48,15 @@ defmodule AiControl.Gateway do
            measure(
              :budget_admission,
              fn ->
-               Budgets.admit(current, opts[:agent_id], params["model"], policy, request_id)
+               Budgets.admit(
+                 current,
+                 opts[:agent_id],
+                 params["model"],
+                 policy,
+                 request_id,
+                 DateTime.utc_now(),
+                 opts[:run_context]
+               )
              end,
              opts
            ) do
@@ -232,7 +261,7 @@ defmodule AiControl.Gateway do
   end
 
   defp prepare_budget(params, receipt, policy, provider, config) do
-    if Budgets.hard_limit?(policy) do
+    if Budgets.hard_limit?(policy) || receipt.run_id do
       params = Map.put_new(params, "max_tokens", config[:default_max_tokens])
       tokenizer = config[:tokenizer]
 
@@ -297,7 +326,7 @@ defmodule AiControl.Gateway do
       end
 
     SecurityContext.new(
-      Map.merge(attrs, %{
+      Map.merge(Map.merge(attrs, Workflows.audit_reference(identity, request_id)), %{
         request_id: request_id,
         stage: stage,
         policy_version: policy.version,

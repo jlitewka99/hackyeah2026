@@ -8,7 +8,8 @@ defmodule AiControlWeb.GatewayIngress do
   def init(opts), do: opts
 
   def call(%{request_path: path} = conn, _)
-      when path in ["/v1/models", "/v1/chat/completions", "/v1/tool_calls"] do
+      when path in ["/v1/models", "/v1/chat/completions", "/v1/tool_calls", "/v1/runs"] or
+             (is_binary(path) and binary_part(path, 0, min(byte_size(path), 9)) == "/v1/runs/") do
     case Limiter.check_ip(conn.remote_ip) do
       :ok -> conn
       error -> conn |> GatewayError.respond(error) |> halt()

@@ -10,6 +10,8 @@ defmodule AiControl.Tools.Execution do
     field :api_key_id, :binary_id
     field :request_id, :binary_id
     field :workflow_id, :binary_id
+    field :run_id, :binary_id
+    field :participant_id, :binary_id
     field :idempotency_key, :binary_id
     field :fingerprint_digest, :string
     field :fingerprint_key_id, :string

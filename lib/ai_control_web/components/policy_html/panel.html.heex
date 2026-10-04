@@ -290,18 +290,18 @@
       <div class="policy-heading mb-6">
         <p id="policy-draft-schema" class="font-medium">Schema v{schema_version(@form)}</p>
         <button
-          :if={schema_version(@form) < 4}
+          :if={schema_version(@form) < 5}
           id="policy-upgrade"
           type="button"
           class="button-secondary"
           phx-click="upgrade"
           phx-disable-with="Upgrading…"
-        >Upgrade to v4</button>
+        >Upgrade to v5</button>
       </div>
-      <p :if={schema_version(@form) < 4} class="muted mb-6">
-        Upgrade this draft to choose an injection provider and configure response moderation. Saving and activation remain separate steps.
+      <p :if={schema_version(@form) < 5} class="muted mb-6">
+        Upgrade this draft to require workflow context and add finite shared limits for chats, tools, and delegation. Existing explicit tool limits are preserved. Saving and activation remain separate steps.
       </p>
-      <section :if={schema_version(@form) in [2, 3, 4]} id="policy-detector-sets" class="mb-6">
+      <section :if={schema_version(@form) in [2, 3, 4, 5]} id="policy-detector-sets" class="mb-6">
         <h3 class="font-medium">Detector sets</h3>
         <p class="muted mt-2">
           Immutable sets keep detection reproducible.
@@ -380,7 +380,7 @@
           An unavailable required guard blocks the request. Select Profile default to remove an override.
         </p>
         <p
-          :if={schema_version(@form) in [2, 3, 4]}
+          :if={schema_version(@form) in [2, 3, 4, 5]}
           id="policy-phase-order"
           class="muted text-sm mt-2"
         >
@@ -420,7 +420,7 @@
             Output only. Disabled by default.
           </p>
           <div
-            :if={schema_version(@form) == 4 && guard == "semantic"}
+            :if={schema_version(@form) in [4, 5] && guard == "semantic"}
             class="md:col-start-2 md:col-span-2"
           >
             <.input
@@ -449,7 +449,7 @@
           </div>
           <div
             :if={
-              schema_version(@form) in [3, 4] &&
+              schema_version(@form) in [3, 4, 5] &&
                 (guard == "moderation" ||
                    (guard == "semantic" && injection_provider(@form) == "qwen"))
             }
@@ -584,7 +584,7 @@
         </div>
       </details>
       <details
-        :if={schema_version(@form) in [2, 3, 4]}
+        :if={schema_version(@form) in [2, 3, 4, 5]}
         class="policy-details"
         id="policy-tools"
         open={MapSet.member?(@open_sections, "tools")}
@@ -637,9 +637,15 @@
       >
         <summary phx-click="toggle_section" phx-value-section="budgets">Budget limits</summary>
         <p id="policy-budget-help" class="muted mt-3">
-          Request and token limits are enforced per UTC hour. An empty limit (null in YAML) is not configured; zero denies new requests or token reservations. Activating a policy does not reset usage or existing reservations. Tool calls are limited per operator-assigned agent context, not per hour. A new policy or restart does not reset this count. Zero denies execution; an empty limit is not configured. Started calls count even when their result is blocked.
+          Request and token limits are enforced per UTC hour. An empty hourly limit (null in YAML) is not configured; zero denies new requests or token reservations. Activating a policy does not reset usage or existing reservations. Started tool calls count even when their result is blocked.
         </p>
-        <fieldset :for={{scope, fields} <- @budget_fields} class="mt-4">
+        <p :if={schema_version(@form) != 5} class="muted mt-2">
+          Tool calls are limited per operator-assigned agent context, not per hour. A new policy or restart does not reset this count. Zero denies execution; an empty tool limit is not configured.
+        </p>
+        <p :if={schema_version(@form) == 5} id="policy-workflow-required" class="mt-3 notice-info">
+          Activating v5 requires a run and participant for every chat or tool call. Workflow limits are shared by all delegates for the entire run. All workflow limits must be finite; duration is in seconds and root delegation depth is zero.
+        </p>
+        <fieldset :for={{scope, fields} <- workflow_budget_fields(@form)} class="mt-4">
           <legend class="font-medium">{label(scope)}</legend>
           <div class="policy-budget-grid mt-3">
             <.input
@@ -651,7 +657,12 @@
               min="0"
               step="1"
               label={label(field)}
-              placeholder="Not configured"
+              placeholder={
+                if scope == "workflow" && schema_version(@form) == 5,
+                  do: "Finite limit required",
+                  else: "Not configured"
+              }
+              required={scope == "workflow" && schema_version(@form) == 5}
               errors={field_errors(@errors, "budgets.#{scope}.#{field}")}
             />
           </div>
