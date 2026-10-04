@@ -32,6 +32,19 @@ start_app() {
   done
   docker logs "$container"; return 1
 }
+wait_for_exit() {
+  local running
+  for _ in $(seq 1 30); do
+    running=$(docker inspect -f '{{.State.Running}}' "$container") || return 1
+    if [[ "$running" == false ]]; then
+      docker inspect -f '{{.State.ExitCode}}' "$container"
+      return
+    fi
+    sleep 1
+  done
+  echo 'Container did not exit within 30 seconds' >&2
+  return 1
+}
 start_app
 [[ $(docker exec "$container" id -u) == 10001 ]]
 [[ $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4017/health) == 200 ]]
@@ -135,7 +148,7 @@ for path in Path("/proc").glob("[0-9]*/cmdline"):
         break
 else:
     raise SystemExit("child not found")' "$child"
-  code=$(timeout 30 docker wait "$container")
+  code=$(wait_for_exit)
   [[ $code != 0 ]]
   [[ $(docker inspect -f '{{.State.Running}}' "$container") == false ]]
   docker rm "$container" >/dev/null
@@ -143,4 +156,4 @@ else:
 done
 docker stop --time 25 "$container" >/dev/null
 [[ $(docker inspect -f '{{.State.ExitCode}}' "$container") == 0 ]]
-echo 'Container health, offline NER, Qwen and tokenizer, release tasks, four child failures and SIGTERM passed'
+printf 'Container health, offline models, release tasks, %s child failures and SIGTERM passed\n' "${#children[@]}"
