@@ -118,7 +118,7 @@ Checkboxy oznaczają potwierdzone zakończenie kroku, a nie samą obecność kod
 - [x] Krok 10 — Semantyczne wykrywanie prompt injection
 - [ ] Krok 11 — Dashboard i zamknięcie wymaganego MVP
 - [x] Krok 12 — Tool firewall i ograniczenia zasobów
-- [ ] Krok 13 — MCP gateway
+- [x] Krok 13 — MCP gateway
 - [ ] Krok 14 — Głęboka analiza semantyczna
 - [ ] Krok 15 — Workflowy, runaway protection i wielu agentów
 - [ ] Krok 16 — Oban, raporty i testy w panelu
@@ -966,6 +966,42 @@ modeli/NER pozostają wyłączone. Granica 12B pozostaje bez zmian.
 **Gotowe, gdy:** agent może użyć dozwolonego narzędzia na dozwolonym zasobie, a zabroniony zasób zostaje zatrzymany przed wykonaniem.
 
 ### Krok 13. MCP gateway
+
+**Plan wdrożony — 2026-10-04, `JL/step-13-mcp-gateway`:** adapter nad
+istniejącym sandboxem kroku 12, MCP `2025-11-25`, Streamable HTTP z odpowiedziami
+JSON i sesjami przypiętymi do organizacji/agenta/klucza. Wspierane initialize,
+initialized, ping, tools/list i tools/call, resources/list i resources/read oraz
+pusta lista templates. Origin, limity i uwierzytelnianie przed parserem. Katalog
+przecina bieżącą politykę z przydziałami operatora; odczyt wirtualnego pliku
+przechodzi przez `file.read` i zużywa jedno wywołanie. Idempotencja automatyczna
+z sesji i typowanego ID JSON-RPC, bez dodatkowego nagłówka klienta. Panel kluczy
+otrzymuje instrukcję i kopiowanie endpointu według impeccable, bez kopiowania
+sekretu do instrukcji. Odbiór obejmuje protokół, sesje, ACL, budżety, guardy,
+redakcję, audyt, duplikaty, aktualizację polityki i klienta HTTP; wymagane
+precommit, assets, Dialyzer, security i PR do main z angielskim opisem.
+
+**Zastrzeżenia 13:** jedna instancja i sesje w pamięci; restart wymaga ponownej
+inicjalizacji. Trwałe receipts nie odtwarzają wyników i nie gwarantują exactly-once
+dla zewnętrznych efektów. Nowe ID lub nowa sesja mogą ponownie wykonać tę samą
+intencję. Blokada wyjścia nie cofa efektu ani naliczenia. Klient musi wspierać
+Bearer headers; bez OAuth, zewnętrznych upstreamów MCP, SSE i subskrypcji.
+Otwarta kwalifikacja rzeczywistych modeli kroku 11 pozostaje osobnym odbiorem.
+Nie zmieniamy checkboxa 11 ani historycznych wyników. Szczegóły:
+[instrukcja MCP](docs/mcp.md).
+
+**Odbiór 13:** `mix precommit` — 559 testów ExUnit i 5 JS zaliczonych, 10
+testów live wyłączonych z kontraktowego zestawu; `mix assets.build`,
+`mix dialyzer` (0 błędów), `mix security` i `git diff --check` zaliczone.
+Klient HTTP oraz oficjalny SDK MCP 1.32.0 wykonały handshake, listowanie,
+wywołanie i odczyt przez Streamable HTTP bez dodatkowego nagłówka idempotencji.
+Odmowa ACL nie uruchamia adaptera; duplikaty równoczesne dają jeden efekt.
+Przegląd impeccable desktop/mobile, light/dark i klawiatury: `ship`, detektor
+`[]`, istniejący system zachowany. Osobna próba rzeczywistych modeli: NER
+zaliczony, Qwen niezaliczony na `Semantic.ready?/1` — usługa niegotowa; nie
+jest to pomiar jakości i nie zamyka kroku 11. Lokalna baza QA odzyskała działanie
+po chwilowym braku miejsca na dysku. Raport: [odbiór 13](docs/acceptance/step13.md),
+[UI](docs/acceptance/step13-ui-review.md). Kryterium adaptera zostało spełnione;
+checkbox 13 zaznaczony, checkbox 11 pozostaje otwarty.
 
 - Dodać `/mcp` jako adapter do istniejącego pipeline’u.
 - Przypiąć wspieraną wersję protokołu `2025-11-25` i transport Streamable HTTP; zaimplementować inicjalizację, ping, listowanie i wywoływanie narzędzi oraz odczyt zasobów. [Specyfikacja transportu](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports).

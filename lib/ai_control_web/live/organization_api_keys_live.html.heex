@@ -114,6 +114,49 @@
         </div>
       </.form>
     </section>
+    <section id="mcp-connection" class="list-section" aria-labelledby="mcp-connection-heading">
+      <h2 id="mcp-connection-heading">Connect with MCP</h2>
+      <p class="muted text-sm mt-2 max-w-prose">
+        Choose a client that supports Streamable HTTP and Bearer headers. Its API key selects one agent;
+        your active policy and the agent's resource grants determine which tools and files it can access.
+      </p>
+      <div id="mcp-endpoint-copy" phx-hook="CopyText" phx-update="ignore" class="mt-6">
+        <.input
+          id="mcp-endpoint"
+          name="mcp_endpoint"
+          label="MCP endpoint"
+          value={@mcp_endpoint}
+          readonly
+          spellcheck="false"
+          data-copy-value
+        />
+        <div class="row-actions mt-3">
+          <button id="copy-mcp-endpoint" type="button" class="button-secondary" data-copy-text>
+            Copy endpoint <.icon name="hero-clipboard-document" class="size-4" />
+          </button>
+          <span
+            id="copy-mcp-status"
+            class="muted text-sm"
+            role="status"
+            aria-live="polite"
+            data-copy-status
+          ></span>
+        </div>
+      </div>
+      <dl
+        id="mcp-connection-details"
+        class="mt-6 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[auto_1fr]"
+      >
+        <dt class="muted">Transport</dt><dd>Streamable HTTP · JSON responses</dd>
+        <dt class="muted">Protocol version</dt><dd>2025-11-25</dd>
+        <dt class="muted">Authorization header</dt>
+        <dd class="break-words"><code>Authorization: Bearer &lt;API_KEY&gt;</code></dd>
+      </dl>
+      <p id="mcp-key-guidance" class="muted text-sm mt-4 max-w-prose">
+        Replace &lt;API_KEY&gt; in your client with the secret you saved when creating the key.
+        The client manages initialization and session headers. File reads share the agent's tool call limit.
+      </p>
+    </section>
     <section class="list-section" aria-labelledby="keys-heading">
       <div class="list-heading">
         <h2 id="keys-heading">Issued keys</h2><.form

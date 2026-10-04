@@ -862,6 +862,15 @@ keys return 409 with ID/state without replaying effects or results. See the
 [Step 12B acceptance](docs/acceptance/step12b.md) for verification and limits.
 
 
+## MCP gateway (step 13)
+
+`/mcp` exposes the governed sandbox through MCP 2025-11-25 Streamable HTTP with
+JSON responses and existing Bearer agent keys. **API keys → Connect with MCP**
+shows the public endpoint and connection headers. Tools and authorized virtual
+files use the existing execution firewall, output filtering, durable tool-call
+budget and audit. Clients manage key-bound sessions and need no extra idempotency
+header. See [MCP setup, limits and smoke test](docs/mcp.md).
+
 ## Tests and quality checks
 
 ```sh
