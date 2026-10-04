@@ -184,6 +184,18 @@ The same 9/9 tests also pass in the Linux container after a fresh real download
 through the repaired helper and pinned verification. `mix precommit` passes
 690 ExUnit tests (16 opt-in excluded) and 5 JavaScript tests after this repair.
 
+The repaired build passes in PR #27, then startup exposes a permission regression:
+the root-owned temporary artifact kept mode 0600 after publication, preventing
+UID 10001 from reading it. [Diagnostic run 37182388483](https://github.com/jlitewka99/hackyeah2026/actions/runs/37182388483)
+records `service=tokenizer status=3`, with no OOM events. Publish verified public
+tokenizer bytes with mode 0644; temporary download files remain private until
+verification. A fresh real download as root followed by all nine contracts as
+UID 10001 passes in Linux. The supervisor now emits only fixed service names,
+exit codes and a closed projection of cgroup memory counters; smoke preserves
+container state and a bounded log tail before cleanup on failure. A separate
+controlled 6-GiB/no-swap startup and SIGTERM check passes locally. The current
+fix is [PR #27](https://github.com/jlitewka99/hackyeah2026/pull/27).
+
 ## Shared integration matrix
 
 The security runner executes the full suite together, including previously

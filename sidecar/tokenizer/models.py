@@ -38,6 +38,8 @@ def download_file(path, entry):
                     while chunk := response.read(1024 * 1024):
                         target.write(chunk)
             verify_file(temporary, entry)
+            # Build runs as root; the offline service runs as UID 10001.
+            temporary.chmod(0o644)
             temporary.replace(path)
             return
         except urllib.error.HTTPError as error:

@@ -979,6 +979,15 @@ przechodzi: 690 ExUnit (16 opt-in excluded) i 5 JS.
 PR #26 został scalony przed poprawką; naprawę wydzielono na branch
 `JL/fix-tokenizer-ci-download` z `main` (`6f00150`) do osobnego PR. Polityki,
 przypięte bajty, offline runtime i zakaz retry w enforcement nie zmieniły się.
+W PR #27 build po tej zmianie przechodzi, lecz start tokenizera ujawnił błąd
+uprawnień pliku tymczasowego: `0600`, właściciel root, runtime UID 10001.
+[Diagnostyka 37182388483](https://github.com/jlitewka99/hackyeah2026/actions/runs/37182388483)
+potwierdza `service=tokenizer status=3`, bez OOM. Zweryfikowany publiczny artefakt
+otrzymuje teraz `0644` przed atomową publikacją; plik tymczasowy pozostaje prywatny
+podczas pobierania. Rzeczywiste pobranie jako root i 9 testów jako UID 10001
+przechodzą w Linux. Supervisor loguje wyłącznie stałą nazwę usługi, kod wyjścia
+i zamknięte liczniki pamięci; smoke zachowuje stan kontenera przy błędzie przed
+sprzątaniem. Kontrolowany start z limitem 6 GiB bez swapu i SIGTERM przechodzą.
 
 ### Krok 12. Tool firewall i ograniczenia zasobów
 

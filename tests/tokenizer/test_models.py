@@ -1,6 +1,7 @@
 """Build downloads retry transient failures without accepting unverified bytes."""
 import hashlib
 import io
+import stat
 import tempfile
 import unittest
 import urllib.error
@@ -33,6 +34,7 @@ class DownloadTest(unittest.TestCase):
                            side_effect=[self.error(status), io.BytesIO(self.data)]) as request:
                     download(directory)
                 self.assertEqual(Path(directory, "tokenizer.json").read_bytes(), self.data)
+                self.assertEqual(stat.S_IMODE(Path(directory, "tokenizer.json").stat().st_mode), 0o644)
                 self.assertEqual(len(list(Path(directory).iterdir())), 1)
                 self.assertEqual(request.call_count, 2)
                 self.sleep.assert_called_once_with(1)
