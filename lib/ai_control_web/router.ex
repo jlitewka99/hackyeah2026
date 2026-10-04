@@ -59,6 +59,10 @@ defmodule AiControlWeb.Router do
   end
 
   scope "/", AiControlWeb do
+    post "/mcp", MCPController, :create, log: false
+  end
+
+  scope "/", AiControlWeb do
     pipe_through :api
     get "/health", HealthController, :health, log: false
     get "/ready", HealthController, :ready, log: false
