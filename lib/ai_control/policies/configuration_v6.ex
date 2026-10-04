@@ -1,5 +1,5 @@
 defmodule AiControl.Policies.ConfigurationV6 do
-  @moduledoc "Opt-in, selectively mandatory Granite analysis; legacy policy versions stay frozen."
+  @moduledoc "Opt-in Granite and human review; existing v6 snapshots retain their shape."
   alias AiControl.Guards.Granite.Criteria
   alias AiControl.Policies.ConfigurationV5
   alias AiControl.Security.Validation
@@ -19,6 +19,9 @@ defmodule AiControl.Policies.ConfigurationV6 do
 
   def resource_kinds, do: @resources
 
+  def review_defaults,
+    do: %{"enabled" => false, "tools" => [], "llm_models" => [], "delegation_agents" => []}
+
   def validate(source) do
     granite = Map.get(source, "granite", %{})
 
@@ -26,21 +29,37 @@ defmodule AiControl.Policies.ConfigurationV6 do
          settings = Map.merge(defaults(), granite),
          :ok <- validate_granite(settings),
          :ok <- derived_fields(source, settings),
+         {:ok, review} <- review_settings(source),
          base = legacy(source),
          {:ok, config} <- ConfigurationV5.validate(base) do
-      guard = guard(settings)
-      rule = rule()
+      config = %{
+        source: Map.put(config.source, "schema_version", 6),
+        settings: Map.put(config.settings, "schema_version", 6)
+      }
 
-      {:ok,
-       %{
-         source: config.source |> Map.put("schema_version", 6) |> Map.put("granite", settings),
-         settings:
-           config.settings
-           |> Map.put("schema_version", 6)
-           |> Map.put("granite", settings)
-           |> put_in(["guards", "granite"], guard)
-           |> put_in(["rules", "granite_violation"], rule)
-       }}
+      config =
+        if Map.has_key?(source, "granite") do
+          %{
+            source: Map.put(config.source, "granite", settings),
+            settings:
+              config.settings
+              |> Map.put("granite", settings)
+              |> put_in(["guards", "granite"], guard(settings))
+              |> put_in(["rules", "granite_violation"], rule())
+          }
+        else
+          config
+        end
+
+      config =
+        if Map.has_key?(source, "review"),
+          do: %{
+            source: Map.put(config.source, "review", review),
+            settings: Map.put(config.settings, "review", review)
+          },
+          else: config
+
+      {:ok, config}
     else
       {:error, _} = error -> error
       _ -> {:error, [{"granite", "use valid deep analysis settings"}]}
@@ -49,7 +68,7 @@ defmodule AiControl.Policies.ConfigurationV6 do
 
   defp legacy(source) do
     source
-    |> Map.delete("granite")
+    |> Map.drop(["granite", "review"])
     |> Map.put("schema_version", 5)
     |> Map.update("guards", %{}, fn
       value when is_map(value) -> Map.delete(value, "granite")
@@ -61,6 +80,40 @@ defmodule AiControl.Policies.ConfigurationV6 do
     end)
   end
 
+  defp review_settings(source) do
+    review = Map.get(source, "review", %{})
+
+    with true <- is_map(review) and not is_struct(review),
+         true <- Enum.all?(Map.keys(review), &(&1 in Map.keys(review_defaults()))),
+         settings = Map.merge(review_defaults(), review),
+         true <- is_boolean(settings["enabled"]),
+         true <- review_tools?(settings["tools"]),
+         true <- review_names?(settings["llm_models"]),
+         true <- review_agents?(settings["delegation_agents"]) do
+      {:ok, settings}
+    else
+      _ ->
+        {:error,
+         [{"review", "choose an explicit switch and valid tool, model and agent selectors"}]}
+    end
+  end
+
+  defp review_tools?(items),
+    do:
+      is_list(items) and Enum.uniq(items) == items and
+        Enum.all?(items, &(&1 in Enum.map(Catalog.all(), fn tool -> tool["name"] end)))
+
+  defp review_names?(items),
+    do:
+      is_list(items) and length(items) <= 500 and Enum.uniq(items) == items and
+        ("*" not in items or items == ["*"]) and
+        Enum.all?(items, &(is_binary(&1) and byte_size(&1) in 1..200))
+
+  defp review_agents?(items),
+    do:
+      review_names?(items) and
+        (items == ["*"] or Enum.all?(items, &match?({:ok, _}, Ecto.UUID.cast(&1))))
+
   defp guard(settings),
     do: %{"enabled" => settings["enabled"], "required" => false, "stages" => ~w(input output)}
 
@@ -71,6 +124,9 @@ defmodule AiControl.Policies.ConfigurationV6 do
     rules = Map.get(source, "rules", %{})
 
     if is_map(guards) and is_map(rules) and
+         (Map.has_key?(source, "granite") or
+            (not Map.has_key?(guards, "granite") and
+               not Map.has_key?(rules, "granite_violation"))) and
          Map.get(guards, "granite", guard(settings)) == guard(settings) and
          Map.get(rules, "granite_violation", rule()) == rule(),
        do: :ok,

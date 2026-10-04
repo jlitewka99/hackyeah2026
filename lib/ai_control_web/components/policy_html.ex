@@ -2,7 +2,7 @@ defmodule AiControlWeb.PolicyHTML do
   @moduledoc "Shared policy editor markup, rendered from a HEEx template."
   use AiControlWeb, :html
 
-  alias AiControl.Policies.Configuration
+  alias AiControl.Policies.{Configuration, ConfigurationV6}
   alias AiControl.Tools.Catalog
 
   embed_templates "policy_html/*"
@@ -19,6 +19,10 @@ defmodule AiControlWeb.PolicyHTML do
     settings
   end
 
+  def review_lines(nil), do: ""
+  def review_lines(value) when is_binary(value), do: value
+  def review_lines(value), do: Enum.join(value, "\n")
+
   def schema_version(form), do: Ecto.Changeset.get_field(form.source, :schema_version)
   def guard_catalog(form), do: Configuration.guards(schema_version(form)) -- ["granite"]
   def entity_types, do: Configuration.ner_entities()
@@ -32,14 +36,14 @@ defmodule AiControlWeb.PolicyHTML do
   def workflow_budget_fields(form), do: Configuration.budget_fields(schema_version(form))
 
   def upgrade_available?(form) do
-    schema_version(form) < 5 ||
+    schema_version(form) < 6 ||
       Enum.any?(Configuration.budget_fields(5)["workflow"], fn field ->
         nested(form, :budgets, "workflow", field, nil) in [nil, ""]
       end)
   end
 
   def tool_catalog, do: Catalog.all()
-  def granite(form), do: form[:granite].value || %{}
+  def granite(form), do: form[:granite].value || ConfigurationV6.defaults()
   def granite_id(id), do: "policy-granite-criterion-" <> Base.url_encode64(id, padding: false)
 
   def granite_tasks,

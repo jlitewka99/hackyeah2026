@@ -65,6 +65,7 @@ COPY --from=semantic-builder --chown=app:app /prompt-guard-models /app/prompt-gu
 COPY --chown=app:app sidecar/prompt_guard /app/prompt_guard
 COPY --chown=app:app sidecar/semantic /app/semantic
 COPY --chmod=755 docker/start docker/healthcheck /app/docker/
+COPY --chown=app:app scripts/approval_release_smoke.exs /app/scripts/approval_release_smoke.exs
 ENV LANG=C.UTF-8 PHX_SERVER=true PORT=4000 NER_BASE_URL=http://127.0.0.1:8001 SEMANTIC_BASE_URL=http://127.0.0.1:8003 TOKENIZER_BASE_URL=http://127.0.0.1:8002 TOKENIZER_MODELS_DIR=/app/tokenizer-models STANZA_RESOURCES_DIR=/app/models SEMANTIC_MODELS_DIR=/app/semantic-models HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 PYTHONDONTWRITEBYTECODE=1
 USER app
 EXPOSE 4000

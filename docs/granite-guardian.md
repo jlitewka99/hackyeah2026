@@ -39,7 +39,7 @@ These fall back to `OLLAMA_BASE_URL` and `TOKENIZER_BASE_URL`. The container inc
 
 ## Policy activation and criteria
 
-Create a draft from the current policy and select **Upgrade to v6 for Granite**. v6 retains workflow requirements, finite workflow limits and Knowledge settings from v5. Legacy v1–v5 policies keep their validation and checksums.
+Create a draft from the current policy and select **Upgrade to v6**. v6 retains workflow requirements, finite workflow limits and Knowledge settings from v5 and supports both Granite and human approval independently. Both controls start disabled. Existing review-only and Granite-only v6 snapshots retain their settings and checksums; editing a missing control presents disabled defaults for the next version. Legacy v1–v5 policies keep their validation and checksums.
 
 Enable Granite in **Deep semantic analysis**, configure selectors and criteria, save, inspect the version comparison, then activate. YAML import/export and rollback use the existing version workflow. Rolling back to a policy without Granite removes its checks for subsequent requests; current requests still undergo the existing authorization checks before effects or delivery.
 

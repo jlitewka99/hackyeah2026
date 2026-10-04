@@ -52,7 +52,7 @@ defmodule AiControlWeb.OrganizationPoliciesLiveTest do
     assert current.snapshot.settings["budgets"]["workflow"]["tool_calls"] == 3
   end
 
-  test "v5 upgrade keeps the active v1 policy until deliberate activation", %{
+  test "v6 upgrade keeps the active v1 policy until deliberate activation", %{
     conn: conn,
     scope: scope
   } do
@@ -60,7 +60,7 @@ defmodule AiControlWeb.OrganizationPoliciesLiveTest do
     assert has_element?(view, "#policy-schema", "v1")
     view |> element("#policy-new") |> render_click()
     view |> element("#policy-upgrade") |> render_click()
-    assert has_element?(view, "#policy-draft-schema", "v5")
+    assert has_element?(view, "#policy-draft-schema", "v6")
     assert has_element?(view, "#policy-detector-sets")
     assert has_element?(view, "#policy-signature-selector")
     assert has_element?(view, "#policy-knowledge-enabled")
@@ -82,7 +82,7 @@ defmodule AiControlWeb.OrganizationPoliciesLiveTest do
     assert {:ok, current} = Policies.current(scope)
     assert current.version.settings["schema_version"] == 1
     view |> element("#policy-activate") |> render_click()
-    assert has_element?(view, "#policy-schema", "v5")
+    assert has_element?(view, "#policy-schema", "v6")
     assert {:ok, active} = Policies.current(scope)
 
     assert active.version.settings["guards"]["ner"]["entities"] == [
@@ -98,15 +98,18 @@ defmodule AiControlWeb.OrganizationPoliciesLiveTest do
   } do
     {:ok, view, _} = live(conn, ~p"/organizations/#{scope.organization.id}/policies")
     view |> element("#policy-new") |> render_click()
-    view |> element("#policy-upgrade-granite") |> render_click()
+    view |> element("#policy-upgrade") |> render_click()
     assert has_element?(view, "#policy-granite")
+    assert has_element?(view, "#policy-review-enabled")
     refute has_element?(view, "#policy-granite-enabled[checked]")
+    refute has_element?(view, "#policy-review-enabled[checked]")
     view |> element("#policy-granite-add-criterion") |> render_click()
     assert has_element?(view, "##{PolicyHTML.granite_id("custom.1")}-text")
 
     view
     |> form("#policy-form",
       policy: %{
+        review: %{enabled: "true", tools: ["file.write"]},
         granite: %{
           enabled: "true",
           criteria: %{
@@ -123,11 +126,34 @@ defmodule AiControlWeb.OrganizationPoliciesLiveTest do
     view |> element("#policy-activate") |> render_click()
     {:ok, active} = Policies.current(scope)
     assert active.version.settings["granite"]["enabled"]
+    assert active.version.settings["review"]["enabled"]
+    assert active.version.settings["review"]["tools"] == ["file.write"]
     assert active.version.settings["granite"]["criteria"]["custom.1"]["block_on"] == "yes"
     assert has_element?(view, "#policy-granite-active")
   end
 
-  test "filling a v5 draft preserves Knowledge, NER and explicit tool limits until activation", %{
+  test "existing review-only v6 policy opens with editable Granite defaults", %{
+    conn: conn,
+    scope: scope
+  } do
+    source = Configuration.default(6) |> Map.delete("granite")
+    {:ok, version} = Policies.create_version(scope, source)
+    {:ok, current} = Policies.current(scope)
+    {:ok, _} = Policies.activate(scope, version.id, current.set.revision)
+    {:ok, view, _} = live(conn, ~p"/organizations/#{scope.organization.id}/policies")
+    refute has_element?(view, "#policy-granite-active")
+    view |> element("#policy-new") |> render_click()
+    assert has_element?(view, "#policy-review")
+    assert has_element?(view, "#policy-granite")
+    assert has_element?(view, "##{PolicyHTML.granite_id("tool_alignment.v1")}-text")
+    refute has_element?(view, "#policy-granite-enabled[checked]")
+    view |> form("#policy-form") |> render_submit()
+    assert has_element?(view, "#policy-activate")
+    {:ok, unchanged} = Policies.current(scope)
+    refute Map.has_key?(unchanged.version.settings, "granite")
+  end
+
+  test "filling a v6 draft preserves Knowledge, NER and explicit tool limits until activation", %{
     conn: conn,
     scope: scope
   } do

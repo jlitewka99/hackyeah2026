@@ -16,6 +16,24 @@ defmodule AiControl.Budgets do
 
   def hard_limit?(policy), do: configured_tokens?(policy.settings["budgets"])
 
+  @doc "Charge a review-only HTTP attempt without reserving tokens or dispatching."
+  def charge_review_request(identity, policy) do
+    with {:ok, current} <- Policies.refresh_identity(identity) do
+      {org, agent} = resources(current, nil)
+
+      transaction(
+        fn ->
+          lock_org(org)
+          buckets = buckets(org, agent, window(DateTime.utc_now()))
+          check!(buckets, policy.settings["budgets"], "requests_per_hour", 1, DateTime.utc_now())
+          increment(buckets, requests: 1)
+          :ok
+        end,
+        org
+      )
+    end
+  end
+
   def admit(
         identity,
         agent_id,
@@ -98,7 +116,7 @@ defmodule AiControl.Budgets do
     end)
   end
 
-  def dispatch(%Reservation{} = receipt) do
+  def dispatch(%Reservation{} = receipt, approval \\ nil) do
     mutate(receipt, fn current, buckets ->
       if current.status not in ~w(admitted reserved), do: Repo.rollback(:budget_conflict)
 
@@ -110,6 +128,8 @@ defmodule AiControl.Budgets do
 
       case Workflows.dispatch!(workflow_context(current)) do
         :ok ->
+          :ok = AiControl.Approvals.consume_receipt!(approval, current)
+
           update_record(current,
             status: "dispatching",
             unbounded: unbounded,
@@ -398,7 +418,7 @@ defmodule AiControl.Budgets do
         [
           organization_id: receipt.organization_id,
           run_id: receipt.run_id,
-          request_id: receipt.request_id
+          request_id: approval_operation_request_id(receipt)
         ],
         log: false
       )
@@ -411,6 +431,17 @@ defmodule AiControl.Budgets do
       api_key_id: receipt.api_key_id,
       operation_id: if(operation, do: operation.id)
     }
+  end
+
+  defp approval_operation_request_id(receipt) do
+    case Repo.get_by(
+           AiControl.Approvals.Approval,
+           [organization_id: receipt.organization_id, claim_request_id: receipt.request_id],
+           log: false
+         ) do
+      nil -> receipt.request_id
+      approval -> approval.operation_request_id
+    end
   end
 
   defp mutate(receipt, callback) do
@@ -437,7 +468,9 @@ defmodule AiControl.Budgets do
   defp transaction(callback, organization_id) do
     result = Repo.transaction(callback, log: false)
     Cache.clear()
-    if match?({:ok, _}, result) && !Repo.in_transaction?(), do: Audit.notify(organization_id)
+
+    if match?({:ok, _}, result) && !Repo.in_transaction?(),
+      do: AiControl.Approvals.notify(organization_id)
 
     case result do
       {:ok, {:error, _} = error} -> error

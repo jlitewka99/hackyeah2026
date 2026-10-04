@@ -23,7 +23,7 @@ defmodule AiControl.Dashboard do
       {sql, params} = Repo.to_sql(:all, query)
 
       prefix =
-        "WITH events AS (#{sql}), terminal AS (SELECT DISTINCT ON (request_id) * FROM events WHERE kind = 'gateway' AND event_type NOT IN ('tool.dispatching', 'gateway.stream_ready') AND event_type NOT LIKE 'workflow.%' ORDER BY request_id, occurred_at DESC, id DESC) "
+        "WITH events AS (#{sql}), terminal AS (SELECT DISTINCT ON (request_id) * FROM events WHERE kind = 'gateway' AND event_type NOT IN ('tool.dispatching', 'gateway.stream_ready') AND event_type NOT LIKE 'workflow.%' AND event_type NOT LIKE 'approval.%' AND NOT (reason_codes::text[] @> ARRAY['approval_required']::text[]) ORDER BY request_id, occurred_at DESC, id DESC) "
 
       outcomes =
         Repo.query!(
@@ -35,6 +35,7 @@ defmodule AiControl.Dashboard do
             FROM audit_events d
             WHERE d.organization_id = t.organization_id AND d.request_id = t.request_id AND d.action = 'redact') THEN 'redact'
             ELSE 'allow' END
+            WHEN reason_codes::text[] @> ARRAY['approval_required']::text[] THEN 'review'
             WHEN reason_codes::text[] @> ARRAY['policy_blocked']::text[] THEN 'block'
             WHEN reason_codes::text[] && ARRAY['request_budget_exceeded','token_budget_exceeded','tool_budget_exceeded']::text[] THEN 'budget_denied'
             WHEN event_type IN ('gateway.failed', 'tool.failed', 'tool.uncertain') OR reason_codes::text[] && ARRAY['budget_unavailable','tokenizer_unavailable','budget_conflict','guard_unavailable','audit_unavailable']::text[] THEN 'service_error'
@@ -49,9 +50,12 @@ defmodule AiControl.Dashboard do
 
       counts =
         Map.merge(
-          Map.new(~w(allow redact block budget_denied service_error rejected), &{&1, 0}),
+          Map.new(~w(allow redact block review budget_denied service_error rejected), &{&1, 0}),
           Map.new(outcomes.rows, fn [key, count] -> {key, count} end)
         )
+
+      reviews = Repo.aggregate(where(query, [e], e.action == :review), :count)
+      counts = Map.put(counts, "review", reviews)
 
       operations =
         Repo.query!(

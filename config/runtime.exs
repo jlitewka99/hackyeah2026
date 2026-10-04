@@ -268,3 +268,16 @@ if System.get_env("AI_CONTROL_ISOLATED_RUNNER") == "1" do
   config :ai_control, :dns_cluster_query, nil
   config :logger, level: :error
 end
+
+# A separate operator key is required only for policies with human review enabled.
+if encoded = System.get_env("APPROVAL_ENCRYPTION_KEY") do
+  case Base.decode64(encoded) do
+    {:ok, key} when byte_size(key) == 32 ->
+      config :ai_control, AiControl.Approvals.Cipher,
+        key: key,
+        key_id: System.get_env("APPROVAL_ENCRYPTION_KEY_ID", "v1")
+
+    _ ->
+      raise "APPROVAL_ENCRYPTION_KEY must be a base64 encoded 32-byte key"
+  end
+end

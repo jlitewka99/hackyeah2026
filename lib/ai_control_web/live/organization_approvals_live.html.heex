@@ -1,0 +1,85 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} active_page="approvals">
+  <div class="page-content" id="organization-approvals">
+    <h1>Approvals</h1>
+    <p class="page-description">
+      Review the exact operation before a client resumes it. Approval permits one attempt; it does not execute the operation.
+    </p>
+    <.form for={@form} id="approval-filters" phx-submit="filter" class="workflow-filters">
+      <.input
+        field={@form[:status]}
+        type="select"
+        label="Status"
+        prompt="All statuses"
+        options={
+          Enum.map(AiControl.Approvals.statuses(), &{AiControlWeb.ReportingHTML.label(&1), &1})
+        }
+      />
+      <.input
+        field={@form[:kind]}
+        type="select"
+        label="Operation type"
+        prompt="All types"
+        options={[{"Tool", "tool"}, {"LLM generation", "chat"}, {"Delegation", "delegation"}]}
+      />
+      <.input
+        field={@form[:agent_id]}
+        type="text"
+        label="Requesting agent UUID"
+        placeholder="All assigned agents"
+      />
+      <.input
+        field={@form[:run_id]}
+        type="text"
+        label="Workflow UUID"
+        placeholder="All assigned workflows"
+      />
+      <button
+        id="approvals-filter-submit"
+        class="button-secondary"
+        phx-disable-with="Filtering…"
+      >Filter approvals</button>
+    </.form>
+    <p :if={@error} id="approvals-error" role="alert" class="report-error">{@error}</p>
+    <div :if={@empty? && !@error} id="approvals-empty" class="py-8">
+      <p class="font-medium">No approvals match these filters.</p>
+      <p class="muted mt-2">
+        Review rules are configured in policy v6. Requests appear here after passing the required controls.
+      </p>
+    </div>
+    <div id="approval-list" phx-update="stream" class="report-list">
+      <div :for={{id, approval} <- @streams.approvals} id={id} class="resource-row workflow-row">
+        <div class="min-w-0">
+          <.link
+            navigate={
+              ~p"/organizations/#{@current_scope.organization.id}/approvals/#{approval.id}"
+            }
+            class="text-link"
+          >{AiControlWeb.ReportingHTML.label(approval.kind)} · {approval.operation}</.link>
+          <p class="resource-identifier muted">{approval.id}</p>
+          <p class="muted text-sm mt-1">
+            Valid until {AiControlWeb.ReportingHTML.time(approval.expires_at)}
+          </p>
+        </div>
+        <span class="workflow-state">{AiControlWeb.ReportingHTML.label(approval.status)}</span>
+      </div>
+    </div>
+    <nav class="report-links" aria-label="Approval pages">
+      <.link
+        :if={@filters["page"]}
+        id="approvals-first"
+        patch={
+          ~p"/organizations/#{@current_scope.organization.id}/approvals?#{Map.delete(@filters, "page")}"
+        }
+        class="button-secondary"
+      >Newest approvals</.link>
+      <.link
+        :if={@next_page}
+        id="approvals-next"
+        patch={
+          ~p"/organizations/#{@current_scope.organization.id}/approvals?#{Map.put(@filters, "page", @next_page)}"
+        }
+        class="button-secondary"
+      >Older approvals <.icon name="hero-arrow-right" class="size-4" /></.link>
+    </nav>
+  </div>
+</Layouts.app>

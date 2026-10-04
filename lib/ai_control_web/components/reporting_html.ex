@@ -66,7 +66,7 @@ defmodule AiControlWeb.ReportingHTML do
           type="select"
           label="Decision action"
           prompt="All actions"
-          options={~w(allow redact block)}
+          options={~w(allow redact block review)}
         />
         <.input
           field={@form[:stage]}

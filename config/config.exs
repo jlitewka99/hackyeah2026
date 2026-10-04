@@ -97,7 +97,12 @@ config :ai_control, Oban,
   queues: [reports: 2, tests: 1, maintenance: 1],
   lifeline: [rescue_after: 10_800],
   pruner: [max_age: 2_592_000],
-  cron: [crontab: [{"0 * * * *", AiControl.Background.Workers.Cleanup}]]
+  cron: [
+    crontab: [
+      {"0 * * * *", AiControl.Background.Workers.Cleanup},
+      {"* * * * *", AiControl.Approvals.Cleanup}
+    ]
+  ]
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.

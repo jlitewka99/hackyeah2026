@@ -52,8 +52,11 @@ defmodule AiControl.Policies.Configuration do
   def upgrade(source, version \\ 3)
 
   def upgrade(source, 6) do
-    source = if source["schema_version"] in [5, 6], do: source, else: upgrade(source, 5)
-    source |> Map.put("schema_version", 6) |> Map.put_new("granite", ConfigurationV6.defaults())
+    source
+    |> upgrade(5)
+    |> Map.put("schema_version", 6)
+    |> Map.put_new("granite", ConfigurationV6.defaults())
+    |> Map.put_new("review", ConfigurationV6.review_defaults())
   end
 
   def upgrade(source, 5) do

@@ -1,5 +1,9 @@
 import Config
 
+config :ai_control, AiControl.Approvals.Cipher,
+  key: String.duplicate("a", 32),
+  key_id: "test-v1"
+
 config :ai_control, AiControl.Gateway.Config,
   guards: %{},
   models: %{

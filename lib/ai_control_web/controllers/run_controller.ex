@@ -3,7 +3,7 @@ defmodule AiControlWeb.RunController do
 
   alias AiControl.{Audit, Workflows}
   alias AiControl.Gateway.Limiter
-  alias AiControlWeb.GatewayError
+  alias AiControlWeb.{ApprovalContext, GatewayError}
 
   plug :check_ingress
 
@@ -56,12 +56,20 @@ defmodule AiControlWeb.RunController do
   end
 
   def delegate(conn, %{"id" => id}) do
+    case ApprovalContext.parse(conn) do
+      {:ok, opts} -> delegate_with_approval(conn, id, opts)
+      error -> reject(conn, error)
+    end
+  end
+
+  defp delegate_with_approval(conn, id, opts) do
     case Workflows.delegate(
            conn.assigns.api_principal,
            id,
            header(conn, "x-run-participant-id"),
            conn.body_params,
-           header(conn, "idempotency-key")
+           header(conn, "idempotency-key"),
+           Keyword.put(opts, :request_id, conn.assigns.request_id)
          ) do
       {:ok, participant} ->
         json(conn, %{

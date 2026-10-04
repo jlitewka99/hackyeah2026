@@ -8,7 +8,7 @@ defmodule AiControlWeb.PolicyLive do
   alias AiControl.Guards.Feeds
   alias AiControl.Organizations.Access
   alias AiControl.{Policies, Repo}
-  alias AiControl.Policies.{Activation, Configuration, Draft}
+  alias AiControl.Policies.{Activation, Configuration, ConfigurationV6, Draft}
 
   defp available_criterion_id(criteria),
     do:
@@ -92,8 +92,7 @@ defmodule AiControlWeb.PolicyLive do
   end
 
   def event(event, _, socket) when event in ["upgrade", "upgrade_granite"] do
-    version = if event == "upgrade_granite", do: 6, else: 5
-    source = socket.assigns.form.source |> Draft.source() |> Configuration.upgrade(version)
+    source = socket.assigns.form.source |> Draft.source() |> Configuration.upgrade(6)
 
     {:noreply,
      assign(socket,
@@ -104,7 +103,10 @@ defmodule AiControlWeb.PolicyLive do
   end
 
   def event("granite_add_criterion", _, socket) do
-    granite = Ecto.Changeset.get_field(socket.assigns.form.source, :granite)
+    granite =
+      Ecto.Changeset.get_field(socket.assigns.form.source, :granite) ||
+        ConfigurationV6.defaults()
+
     criteria = Map.get(granite, "criteria", %{})
 
     if map_size(criteria) < 8 do
@@ -125,7 +127,10 @@ defmodule AiControlWeb.PolicyLive do
   end
 
   def event("granite_remove_criterion", %{"id" => id}, socket) do
-    granite = Ecto.Changeset.get_field(socket.assigns.form.source, :granite)
+    granite =
+      Ecto.Changeset.get_field(socket.assigns.form.source, :granite) ||
+        ConfigurationV6.defaults()
+
     update_granite(socket, Map.update!(granite, "criteria", &Map.delete(&1, id)))
   end
 

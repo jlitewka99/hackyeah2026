@@ -229,7 +229,7 @@ defmodule AiControl.MCP do
   defp execution_opts(opts, session, id),
     do:
       Keyword.put(
-        Keyword.take(opts, [:request_id, :ingress_checked?, :run_context]),
+        Keyword.take(opts, [:request_id, :ingress_checked?, :run_context, :approval_id]),
         :idempotency_key,
         idempotency_key(session, id)
       )
@@ -261,9 +261,21 @@ defmodule AiControl.MCP do
 
   defp safe_evidence(data),
     do:
-      Map.new(Map.take(data, [:execution_id, :execution_status]), fn {k, v} ->
-        {Atom.to_string(k), v}
-      end)
+      Map.new(
+        Map.take(data, [
+          :execution_id,
+          :execution_status,
+          :approval_id,
+          :approval_status,
+          :expires_at,
+          :revision,
+          :kind,
+          :operation_request_id,
+          :run_id,
+          :participant_id
+        ]),
+        fn {k, v} -> {Atom.to_string(k), v} end
+      )
 
   defp failure(rpc, code, data \\ %{}),
     do: reply(200, RPC.error(rpc.id, -32_000, code, safe_evidence(data)))

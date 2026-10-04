@@ -14,7 +14,7 @@ defmodule AiControl.Audit.Filters do
     field :from, :utc_datetime_usec
     field :to, :utc_datetime_usec
     field :kind, Ecto.Enum, values: [:decision, :gateway, :administrative]
-    field :action, Ecto.Enum, values: [:allow, :redact, :block]
+    field :action, Ecto.Enum, values: [:allow, :redact, :block, :review]
     field :stage, Ecto.Enum, values: [:input, :output, :administrative]
     field :guard, :string
     field :agent_id, :binary_id

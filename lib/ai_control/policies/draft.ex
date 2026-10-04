@@ -19,18 +19,20 @@ defmodule AiControl.Policies.Draft do
     field :rules, :map, default: %{}
     field :guards, :map, default: %{}
     field :budgets, :map, default: %{}
+    field :review, :map, default: %{}
     field :knowledge, :map, default: %{}
     field :granite, :map, default: %{}
     field :ner_model_set, :string, default: "pl-nkjp.v2"
   end
 
-  @fields ~w(schema_version detector_sets tools tool_selection profile allowed_models allowed_agents agent_models rules guards budgets knowledge granite ner_model_set)a
+  @fields ~w(schema_version detector_sets tools tool_selection profile allowed_models allowed_agents agent_models rules guards budgets knowledge granite ner_model_set review)a
 
   def from_source(source) do
     %__MODULE__{
       schema_version: source["schema_version"],
+      review: source["review"],
       knowledge: Map.get(source, "knowledge", %{}),
-      granite: granite_form(Map.get(source, "granite", %{})),
+      granite: granite_form(source["granite"]),
       ner_model_set: Map.get(source, "ner_model_set", "pl-nkjp.v2"),
       detector_sets: Map.get(source, "detector_sets", %{}),
       tools: Map.get(source, "tools", %{}),
@@ -121,7 +123,12 @@ defmodule AiControl.Policies.Draft do
         source
       end
 
-    if draft.schema_version == 6,
+    source =
+      if draft.schema_version == 6 and not is_nil(draft.review),
+        do: Map.put(source, "review", normalize_review(draft.review)),
+        else: source
+
+    if draft.schema_version == 6 and not is_nil(draft.granite),
       do: Map.put(source, "granite", granite_source(draft.granite)),
       else: source
   end
@@ -149,6 +156,18 @@ defmodule AiControl.Policies.Draft do
   end
 
   defp granite_source(value), do: value
+
+  defp normalize_review(review) do
+    review
+    |> Map.update("enabled", false, &(&1 in [true, "true"]))
+    |> Map.new(fn {key, value} ->
+      {key,
+       if(key in ~w(llm_models delegation_agents) and is_binary(value),
+         do: lines(value),
+         else: value
+       )}
+    end)
+  end
 
   defp normalize_granite(settings) do
     criteria =

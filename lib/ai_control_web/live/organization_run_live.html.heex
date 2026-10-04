@@ -49,6 +49,14 @@
           <button id="run-stop-cancel" class="button-secondary" phx-click="cancel_stop">Keep running</button>
         </div>
       </div>
+      <.link
+        :if={"approvals.read" in @current_scope.grants.permissions}
+        id="run-approvals"
+        navigate={
+          ~p"/organizations/#{@current_scope.organization.id}/approvals?#{%{run_id: @run.id}}"
+        }
+        class="text-link"
+      >Review requested operations</.link>
       <section class="list-section" aria-labelledby="run-usage-heading">
         <h2 id="run-usage-heading">Shared root limits</h2>
         <p class="muted mt-2">

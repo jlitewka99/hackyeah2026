@@ -161,3 +161,7 @@ if (process.env.NODE_ENV === "development") {
     window.liveReloader = reloader
   })
 }
+
+window.addEventListener("phx:approval-focus", event => {
+  requestAnimationFrame(() => document.getElementById(event.detail.id)?.focus())
+})
